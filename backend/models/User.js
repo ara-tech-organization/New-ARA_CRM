@@ -57,17 +57,28 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    team: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Generate userID before validation
+// Generate unique userID before validation
 userSchema.pre('validate', async function () {
   if (this.isNew && !this.userID) {
-    const count = await mongoose.model('User').countDocuments();
-    this.userID = `USR${String(count + 1).padStart(3, '0')}`;
+    // Find the highest existing userID number to avoid duplicates
+    const lastUser = await mongoose.model('User').findOne({}, { userID: 1 }).sort({ userID: -1 }).lean();
+    let nextNum = 1;
+    if (lastUser?.userID) {
+      const match = lastUser.userID.match(/USR(\d+)/);
+      if (match) nextNum = parseInt(match[1], 10) + 1;
+    }
+    this.userID = `USR${String(nextNum).padStart(3, '0')}`;
   }
 });
 
@@ -96,12 +107,11 @@ userSchema.methods.updateLastLogin = async function () {
   await this.save({ validateBeforeSave: false });
 };
 
-// Indexes for better query performance
-userSchema.index({ email: 1 });
+// Indexes for better query performance (email and userID already indexed via unique: true)
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
-userSchema.index({ userID: 1 });
-userSchema.index({ role: 1, isActive: 1 }); // Compound index for common queries
+userSchema.index({ role: 1, isActive: 1 });
+userSchema.index({ team: 1 });
 
 const User = mongoose.model('User', userSchema);
 

@@ -55,6 +55,41 @@ const clientSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    assignedSMM: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    assignedSME: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    team: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    creativeCommitment: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    staticCommitment: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    motionCreative: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
   {
     timestamps: true,

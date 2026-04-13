@@ -53,7 +53,7 @@ const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
 };
 
 // Main API base URL for fetching synced data
-const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net';
+const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api';
 
 // Helper function to get client name from main API
 const getClientNameFromMainApi = async (clientId) => {

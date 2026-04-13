@@ -37,8 +37,13 @@ import {
   CloudDownload as CloudDownloadIcon,
   CloudQueue as CloudQueueIcon,
   Refresh as RefreshIcon,
+  Payment as PaymentIcon,
+  Download as DownloadIcon,
 } from '@mui/icons-material';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 import api from '../api/axios';
+import { useDataCache } from '../contexts/DataCacheContext';
 
 const META_SYNC_API_URL = 'https://crmasdmanager-amh2amgzd3e6dzc8.canadacentral-01.azurewebsites.net';
 
@@ -85,17 +90,27 @@ const FundEntry = () => {
   const [summaryData, setSummaryData] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
+  // Payment History tab state
+  const [historyClient, setHistoryClient] = useState('');
+  const [historyPlatform, setHistoryPlatform] = useState('all'); // 'all', 'meta', 'google'
+  const [historyDateFrom, setHistoryDateFrom] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [historyDateTo, setHistoryDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   // Meta sync state
   const [fetchingBalances, setFetchingBalances] = useState(false);
 
-  // Fetch clients from main API
-  const fetchClients = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/clients');
-      const data = response.data.data || response.data;
-      // Transform to match expected format
-      const transformedClients = data.map(client => ({
+  // Use cached clients
+  const { clients: cachedClients, clientsLoading } = useDataCache();
+
+  useEffect(() => {
+    if (cachedClients.length > 0) {
+      const transformedClients = cachedClients.map(client => ({
         _id: client._id,
         clientID: client.clientID || client._id.slice(-8).toUpperCase(),
         name: client.clientName,
@@ -107,43 +122,68 @@ const FundEntry = () => {
         status: client.status || 'active',
       }));
       setClients(transformedClients);
-    } catch (error) {
-      console.error('Error fetching clients from main API:', error);
-      setSnackbar({ open: true, message: 'Failed to fetch clients from Main API', severity: 'error' });
-    } finally {
       setLoading(false);
     }
-  };
+  }, [cachedClients]);
 
-  // Fetch clients on mount
+  // Load existing fund entries for the selected date and initialize empty clients
   useEffect(() => {
-    fetchClients();
-  }, []);
+    if (clients.length === 0) return;
 
-  // Initialize fund data when clients load
-  useEffect(() => {
-    if (clients.length > 0) {
+    const loadExistingEntries = async () => {
+      // Initialize all clients with empty data first
       const initialData = {};
       clients.forEach(client => {
-        if (!fundData[client._id]) {
-          initialData[client._id] = {
-            metaBalance: 0,
-            googleBalance: 0,
-            fundAdded: 0,
-            metaAmount: 0,
-            googleAmount: 0,
-            metaPaymentMode: '',
-            metaPaymentDetails: '',
-            googlePaymentMode: '',
-            googlePaymentDetails: '',
-          };
-        }
+        initialData[client._id] = {
+          metaBalance: 0,
+          googleBalance: 0,
+          fundAdded: 0,
+          metaAmount: 0,
+          googleAmount: 0,
+          metaPaymentMode: '',
+          metaPaymentDetails: '',
+          metaFundDate: '',
+          googlePaymentMode: '',
+          googlePaymentDetails: '',
+          googleFundDate: '',
+        };
       });
-      if (Object.keys(initialData).length > 0) {
-        setFundData(prev => ({ ...prev, ...initialData }));
+
+      try {
+        // Fetch existing entries for this date
+        const response = await api.get('/funds', {
+          params: { dateFrom: selectedDate, dateTo: selectedDate, entryType: 'daily_fund' },
+        });
+        const entries = response.data?.data || response.data || [];
+
+        // Populate saved data
+        entries.forEach(entry => {
+          const cId = entry.clientId;
+          if (cId && initialData[cId]) {
+            initialData[cId] = {
+              metaBalance: entry.metaBalance || 0,
+              googleBalance: entry.googleBalance || 0,
+              fundAdded: entry.fundAdded ? 1 : 0,
+              metaAmount: entry.metaAmount || 0,
+              googleAmount: entry.googleAmount || 0,
+              metaPaymentMode: entry.metaPaymentMode || '',
+              metaPaymentDetails: entry.metaPaymentDetails || '',
+              metaFundDate: entry.metaFundDate || '',
+              googlePaymentMode: entry.googlePaymentMode || '',
+              googlePaymentDetails: entry.googlePaymentDetails || '',
+              googleFundDate: entry.googleFundDate || '',
+            };
+          }
+        });
+      } catch (error) {
+        console.error('Error loading existing fund entries:', error);
       }
-    }
-  }, [clients]);
+
+      setFundData(initialData);
+    };
+
+    loadExistingEntries();
+  }, [clients, selectedDate]);
 
   // Fetch summary data from main API when client/dates change
   useEffect(() => {
@@ -173,8 +213,10 @@ const FundEntry = () => {
           googleAmount: fund.googleAmount || 0,
           metaPaymentMode: fund.metaPaymentMode || '',
           metaPaymentDetails: fund.metaPaymentDetails || '',
+          metaFundDate: fund.metaFundDate || '',
           googlePaymentMode: fund.googlePaymentMode || '',
           googlePaymentDetails: fund.googlePaymentDetails || '',
+          googleFundDate: fund.googleFundDate || '',
           fundAdded: (fund.metaAmount || 0) + (fund.googleAmount || 0),
         }));
 
@@ -189,6 +231,91 @@ const FundEntry = () => {
 
     fetchSummaryData();
   }, [summaryClient, dateFrom, dateTo]);
+
+  // Fetch payment history data
+  useEffect(() => {
+    const fetchHistoryData = async () => {
+      if (!historyClient || !historyDateFrom || !historyDateTo) {
+        setHistoryData([]);
+        return;
+      }
+
+      setHistoryLoading(true);
+      try {
+        const response = await api.get('/funds', {
+          params: { dateFrom: historyDateFrom, dateTo: historyDateTo, entryType: 'daily_fund' },
+        });
+        const funds = response.data?.data || response.data || [];
+
+        // Filter: only entries that have a fund date timestamp (actually saved to DB)
+        let filtered = funds.filter(fund => fund.metaFundDate || fund.googleFundDate);
+
+        // Filter by client if selected
+        if (historyClient) {
+          filtered = filtered.filter(fund => {
+            const fClientId = fund.clientId?._id || fund.clientId;
+            return fClientId === historyClient;
+          });
+        }
+
+        // Build flat rows — one row per confirmed payment (only where fundDate exists)
+        const rows = [];
+        filtered.forEach(fund => {
+          if ((historyPlatform === 'all' || historyPlatform === 'meta') && fund.metaFundDate && fund.metaAmount > 0) {
+            rows.push({
+              _id: fund._id + '-meta',
+              clientName: fund.clientName || '',
+              date: fund.date,
+              platform: 'Meta',
+              balance: fund.metaBalance || 0,
+              amount: fund.metaAmount,
+              paymentMode: fund.metaPaymentMode || '',
+              paymentDetails: fund.metaPaymentDetails || '',
+              fundAddedOn: fund.metaFundDate,
+            });
+          }
+          if ((historyPlatform === 'all' || historyPlatform === 'google') && fund.googleFundDate && fund.googleAmount > 0) {
+            rows.push({
+              _id: fund._id + '-google',
+              clientName: fund.clientName || '',
+              date: fund.date,
+              platform: 'Google',
+              balance: fund.googleBalance || 0,
+              amount: fund.googleAmount,
+              paymentMode: fund.googlePaymentMode || '',
+              paymentDetails: fund.googlePaymentDetails || '',
+              fundAddedOn: fund.googleFundDate,
+            });
+          }
+        });
+
+        // Sort by date ascending to calculate cumulative totals
+        rows.sort((a, b) => (a.date > b.date ? 1 : -1));
+        // Day 1: Total = balance + amount. Day 2+: balance = prev total, total = balance + amount
+        const prevTotals = {};
+        rows.forEach(row => {
+          const key = row.platform;
+          if (prevTotals[key] !== undefined) {
+            // Day 2+: carry forward previous total as balance
+            row.balance = prevTotals[key];
+          }
+          // balance is from DB for day 1, or previous total for day 2+
+          row.totalAmount = row.balance + row.amount;
+          prevTotals[key] = row.totalAmount;
+        });
+        // Sort by date descending for display
+        rows.sort((a, b) => (b.date > a.date ? 1 : -1));
+        setHistoryData(rows);
+      } catch (error) {
+        console.error('Failed to fetch payment history:', error);
+        setSnackbar({ open: true, message: 'Failed to fetch payment history', severity: 'error' });
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    fetchHistoryData();
+  }, [historyClient, historyDateFrom, historyDateTo, historyPlatform]);
 
   // Fetch Meta balances by triggering MetaSync API, then auto-populate from synced data
   const handleFetchBalances = async () => {
@@ -334,6 +461,36 @@ const FundEntry = () => {
     }
   };
 
+  // Download payment history as Excel
+  const handleDownloadHistory = () => {
+    if (historyData.length === 0) return;
+    const clientName = clients.find(c => c._id === historyClient)?.name || 'All';
+    const rows = historyData.map(row => ({
+      'Entry Date': new Date(row.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      'Client': row.clientName,
+      'Platform': row.platform,
+      'Balance (₹)': row.balance,
+      'Amount Added (₹)': row.amount,
+      'Total Amount (₹)': row.totalAmount,
+      'Payment Mode': row.paymentMode || '-',
+      'Payment Details': row.paymentDetails || '-',
+      'Fund Added On': row.fundAddedOn
+        ? new Date(row.fundAddedOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + new Date(row.fundAddedOn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        : '-',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Auto-size columns
+    const colWidths = Object.keys(rows[0]).map(key => ({
+      wch: Math.max(key.length, ...rows.map(r => String(r[key]).length)) + 2,
+    }));
+    ws['!cols'] = colWidths;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payment History');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Payment_History_${clientName}_${historyDateFrom}_to_${historyDateTo}.xlsx`);
+  };
+
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
@@ -341,9 +498,9 @@ const FundEntry = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1.5 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
             Fund Entry
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -353,7 +510,7 @@ const FundEntry = () => {
         <Button
           variant="outlined"
           startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
-          onClick={fetchClients}
+          onClick={() => window.location.reload()}
           disabled={loading}
         >
           Refresh
@@ -361,7 +518,7 @@ const FundEntry = () => {
       </Box>
 
       {/* Tabs */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
+      <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
         <Tabs
           value={activeTab}
           onChange={handleTabChange}
@@ -372,8 +529,8 @@ const FundEntry = () => {
             '& .MuiTab-root': {
               fontWeight: 600,
               textTransform: 'none',
-              minHeight: 56,
-              fontSize: '1rem',
+              minHeight: 40,
+              fontSize: '0.85rem',
             },
           }}
         >
@@ -389,6 +546,12 @@ const FundEntry = () => {
             label="Fund Summary"
             sx={{ gap: 1 }}
           />
+          <Tab
+            icon={<PaymentIcon sx={{ fontSize: 20 }} />}
+            iconPosition="start"
+            label="Payment History"
+            sx={{ gap: 1 }}
+          />
         </Tabs>
       </Card>
 
@@ -396,7 +559,7 @@ const FundEntry = () => {
       {activeTab === 0 && (
         <>
           {/* Controls */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3, gap: 2, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 1.5, flexWrap: 'wrap' }}>
             <TextField
               size="small"
               type="date"
@@ -430,7 +593,7 @@ const FundEntry = () => {
           {/* Editable Table */}
           <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <CardContent sx={{ p: 0 }}>
-              <Box sx={{ px: 3, py: 2, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box sx={{ px: 2, py: 1.5, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   Client Fund Entries
                   <Chip
@@ -471,7 +634,7 @@ const FundEntry = () => {
                 </Tabs>
               </Box>
               {loading || fetchingBalances ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 5 }}>
                   <CircularProgress size={40} sx={{ color: primaryColor, mb: 2 }} />
                   <Typography color="text.secondary">
                     {fetchingBalances ? 'Fetching balances from Meta & Google...' : 'Loading fund entries...'}
@@ -579,6 +742,12 @@ const FundEntry = () => {
                                     }}
                                     sx={{ width: 110 }}
                                   />
+                                  {data.metaFundDate && (
+                                    <Typography sx={{ fontSize: '0.65rem', color: '#1877f2', mt: 0.5 }}>
+                                      Added: {new Date(data.metaFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}{' '}
+                                      {new Date(data.metaFundDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                    </Typography>
+                                  )}
                                 </TableCell>
 
                                 <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
@@ -658,6 +827,12 @@ const FundEntry = () => {
                                     }}
                                     sx={{ width: 110 }}
                                   />
+                                  {data.googleFundDate && (
+                                    <Typography sx={{ fontSize: '0.65rem', color: '#34a853', mt: 0.5 }}>
+                                      Added: {new Date(data.googleFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}{' '}
+                                      {new Date(data.googleFundDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                    </Typography>
+                                  )}
                                 </TableCell>
 
                                 <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
@@ -714,7 +889,7 @@ const FundEntry = () => {
                       })}
                       {clients.length === 0 && !loading && (
                         <TableRow>
-                          <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                          <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                             <Typography color="text.secondary">
                               No clients found. Click "Refresh" to fetch from Main API.
                             </Typography>
@@ -734,9 +909,9 @@ const FundEntry = () => {
       {activeTab === 1 && (
         <>
           {/* Filters */}
-          <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
+          <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
             <CardContent>
-              <Grid container spacing={2} alignItems="center">
+              <Grid container spacing={1.5} alignItems="center">
                 <Grid size={{ xs: 12, sm: 4 }}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Select Client</InputLabel>
@@ -792,7 +967,7 @@ const FundEntry = () => {
           </Card>
 
           {!summaryClient ? (
-            <Card sx={{ p: 4, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
+            <Card sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
               <Typography color="text.secondary">Please select a client to view fund summary</Typography>
             </Card>
           ) : (
@@ -800,7 +975,7 @@ const FundEntry = () => {
               {/* Summary Table */}
               <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
                 <CardContent sx={{ p: 0 }}>
-                  <Box sx={{ px: 3, py: 2, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box sx={{ px: 2, py: 1.5, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="h6" sx={{ fontWeight: 600 }}>
                       Fund History
                       <Chip
@@ -847,7 +1022,7 @@ const FundEntry = () => {
                     </Tabs>
                   </Box>
                   {summaryLoading ? (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 5 }}>
                       <CircularProgress size={40} sx={{ color: primaryColor, mb: 2 }} />
                       <Typography color="text.secondary">Loading fund summary...</Typography>
                     </Box>
@@ -872,6 +1047,9 @@ const FundEntry = () => {
                               <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
                                 Meta Details
                               </TableCell>
+                              <TableCell sx={{ fontWeight: 700, minWidth: 140, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                                Fund Added On
+                              </TableCell>
                             </>
                           ) : (
                             <>
@@ -887,6 +1065,9 @@ const FundEntry = () => {
                               </TableCell>
                               <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#34a853', bgcolor: '#34a85310' }} align="center">
                                 Google Details
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 700, minWidth: 140, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                                Fund Added On
                               </TableCell>
                             </>
                           )}
@@ -925,6 +1106,17 @@ const FundEntry = () => {
                                 <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
                                   {row.metaPaymentDetails || '-'}
                                 </TableCell>
+                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                  {row.metaFundDate ? (
+                                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                                      {new Date(row.metaFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                      {' '}
+                                      <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                                        {new Date(row.metaFundDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                      </Typography>
+                                    </Typography>
+                                  ) : '-'}
+                                </TableCell>
                               </>
                             ) : (
                               <>
@@ -940,6 +1132,17 @@ const FundEntry = () => {
                                 <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
                                   {row.googlePaymentDetails || '-'}
                                 </TableCell>
+                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                  {row.googleFundDate ? (
+                                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                                      {new Date(row.googleFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                      {' '}
+                                      <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                                        {new Date(row.googleFundDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                      </Typography>
+                                    </Typography>
+                                  ) : '-'}
+                                </TableCell>
                               </>
                             )}
                           </TableRow>
@@ -947,7 +1150,7 @@ const FundEntry = () => {
                         })}
                         {summaryData.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                            <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                               <Typography color="text.secondary">
                                 No fund entries found for the selected date range.
                               </Typography>
@@ -961,6 +1164,228 @@ const FundEntry = () => {
                 </CardContent>
               </Card>
             </>
+          )}
+        </>
+      )}
+
+      {/* Payment History Tab */}
+      {activeTab === 2 && (
+        <>
+          {/* Filters */}
+          <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
+            <CardContent>
+              <Grid container spacing={1.5} alignItems="center">
+                <Grid size={{ xs: 12, sm: 3 }}>
+                  <FormControl fullWidth size="small" required>
+                    <InputLabel>Select Client</InputLabel>
+                    <Select
+                      value={historyClient}
+                      onChange={(e) => setHistoryClient(e.target.value)}
+                      label="Select Client"
+                    >
+                      {clients.map(client => (
+                        <MenuItem key={client._id} value={client._id}>{client.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid size={{ xs: 12, sm: 2 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Platform</InputLabel>
+                    <Select
+                      value={historyPlatform}
+                      onChange={(e) => setHistoryPlatform(e.target.value)}
+                      label="Platform"
+                    >
+                      <MenuItem value="all">All Platforms</MenuItem>
+                      <MenuItem value="meta">Meta</MenuItem>
+                      <MenuItem value="google">Google</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid size={{ xs: 12, sm: 3 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="date"
+                    label="From Date"
+                    value={historyDateFrom}
+                    onChange={(e) => setHistoryDateFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <CalendarMonth sx={{ fontSize: 20, color: primaryColor }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 3 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="date"
+                    label="To Date"
+                    value={historyDateTo}
+                    onChange={(e) => setHistoryDateTo(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <CalendarMonth sx={{ fontSize: 20, color: primaryColor }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 1 }} sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <Tooltip title="Download as Excel">
+                    <span>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={handleDownloadHistory}
+                        disabled={historyData.length === 0}
+                        sx={{ textTransform: 'none', color: primaryColor, borderColor: primaryColor }}
+                      >
+                        Excel
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          {!historyClient ? (
+            <Card sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider' }}>
+              <Typography color="text.secondary">Please select a client to view payment history</Typography>
+            </Card>
+          ) : (
+            /* Payment History Table */
+            <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+              <CardContent sx={{ p: 0 }}>
+                <Box sx={{ px: 2, py: 1.5, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Payment History
+                    <Chip
+                      label={clients.find(c => c._id === historyClient)?.name || ''}
+                      size="small"
+                      color="primary"
+                      sx={{ ml: 2 }}
+                    />
+                    <Chip
+                      label={`${historyData.length} records`}
+                      size="small"
+                      variant="outlined"
+                      sx={{ ml: 1 }}
+                    />
+                  </Typography>
+                </Box>
+                {historyLoading ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 5 }}>
+                    <CircularProgress size={40} sx={{ color: primaryColor, mb: 2 }} />
+                    <Typography color="text.secondary">Loading payment history...</Typography>
+                  </Box>
+                ) : (
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 120 }}>Entry Date</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 150 }}>Client Name</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 100 }} align="center">Platform</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 120 }} align="right">Balance</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 120 }} align="right">Amount Added</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 130 }} align="right">Total Amount</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 130 }} align="center">Payment Mode</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 150 }} align="center">Payment Details</TableCell>
+                          <TableCell sx={{ fontWeight: 700, minWidth: 160 }} align="center">Fund Added On</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {historyData.map((row) => {
+                          const platformColor = row.platform === 'Meta' ? '#1877f2' : '#34a853';
+                          return (
+                            <TableRow key={row._id} hover>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                  {new Date(row.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                  {row.clientName || '-'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={row.platform}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: `${platformColor}15`,
+                                    color: platformColor,
+                                    fontWeight: 600,
+                                    fontSize: '0.75rem',
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                  ₹{row.balance.toLocaleString()}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" sx={{ fontWeight: 600, color: platformColor }}>
+                                  ₹{row.amount.toLocaleString()}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                                  ₹{row.totalAmount.toLocaleString()}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                {row.paymentMode ? (
+                                  <Chip label={row.paymentMode} size="small" variant="outlined" />
+                                ) : '-'}
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2" color="text.secondary">
+                                  {row.paymentDetails || '-'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                {row.fundAddedOn ? (
+                                  <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                                    {new Date(row.fundAddedOn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                    {' '}
+                                    <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                                      {new Date(row.fundAddedOn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                    </Typography>
+                                  </Typography>
+                                ) : '-'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        {historyData.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                              <Typography color="text.secondary">
+                                No payment records found for the selected filters.
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </CardContent>
+            </Card>
           )}
         </>
       )}

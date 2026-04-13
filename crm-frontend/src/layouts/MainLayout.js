@@ -1,7 +1,8 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { logout } from '../store/slices/authSlice';
+import { logout, loadUserFromStorage } from '../store/slices/authSlice';
+import api from '../api/axios';
 import { ThemeContext } from '../contexts/ThemeContext';
 import {
   Box,
@@ -51,6 +52,8 @@ import {
   AccountBalance as AccountBalanceIcon,
   Shield as ShieldIcon,
   Leaderboard as LeaderboardIcon,
+  Lock as LockIcon,
+  Article as ArticleIcon,
 } from '@mui/icons-material';
 
 // Map routes to permission IDs for access control
@@ -65,11 +68,13 @@ const routePermissions = {
   '/reports': 'reports',
   '/settings': 'settings',
   '/access-management': 'access-management',
+  '/personal-vault': 'personal-vault',
+  '/content-management': 'content-management',
 };
 
 
-const drawerWidth = 280;
-const collapsedDrawerWidth = 100;
+const drawerWidth = 260;
+const collapsedDrawerWidth = 72;
 
 const MainLayout = () => {
   const navigate = useNavigate();
@@ -95,6 +100,23 @@ const MainLayout = () => {
   const isSuperAdmin = user?.role === 'superadmin' || user?.role === 'Super Admin';
   const isAdmin = user?.role === 'admin';
   const hasFullAccess = isSuperAdmin || isAdmin;
+
+  // Silently refresh user permissions from server on mount
+  useEffect(() => {
+    const refreshUser = async () => {
+      try {
+        const response = await api.get('/auth/me');
+        const freshUser = response.data.data;
+        if (freshUser) {
+          localStorage.setItem('user', JSON.stringify(freshUser));
+          dispatch(loadUserFromStorage());
+        }
+      } catch {
+        // Silently ignore - don't log out on failure
+      }
+    };
+    refreshUser();
+  }, [dispatch]);
 
   // Check permission on route change and redirect if not allowed
   useEffect(() => {
@@ -197,6 +219,13 @@ const MainLayout = () => {
       permissionId: 'client-vault'
     },
     {
+      text: 'Content',
+      icon: <ArticleIcon />,
+      path: '/content-management',
+      badge: null,
+      permissionId: 'content-management'
+    },
+    {
       text: 'Fund Entry',
       icon: <AccountBalanceIcon />,
       path: '/fund-entry',
@@ -216,6 +245,13 @@ const MainLayout = () => {
       path: '/settings',
       badge: null,
       permissionId: 'settings'
+    },
+    {
+      text: 'Personal Vault',
+      icon: <LockIcon />,
+      path: '/personal-vault',
+      badge: null,
+      permissionId: 'personal-vault'
     },
     {
       text: 'Access Management',
@@ -249,11 +285,15 @@ const MainLayout = () => {
       display: 'flex',
       flexDirection: 'column',
       background: isDarkMode
-        ? 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)'
-        : `linear-gradient(180deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+        ? `linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(10, 15, 30, 0.92) 100%)`
+        : `linear-gradient(180deg, ${primaryColor}E8 0%, ${primaryColor}D0 40%, ${secondaryColor}C8 100%)`,
+      backdropFilter: 'blur(24px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(24px) saturate(180%)',
       position: 'relative',
       overflow: 'hidden',
-      borderRight: isDarkMode ? '1px solid rgba(255,255,255,0.05)' : 'none',
+      borderRight: isDarkMode
+        ? '1px solid rgba(255,255,255,0.06)'
+        : '1px solid rgba(255,255,255,0.2)',
       '&::before': {
         content: '""',
         position: 'absolute',
@@ -262,31 +302,34 @@ const MainLayout = () => {
         right: 0,
         bottom: 0,
         background: isDarkMode
-          ? `radial-gradient(circle at top right, ${primaryColor}15 0%, transparent 60%)`
-          : 'radial-gradient(circle at top right, rgba(255,255,255,0.1) 0%, transparent 60%)',
+          ? `radial-gradient(ellipse at top left, ${primaryColor}20 0%, transparent 50%), radial-gradient(ellipse at bottom right, ${secondaryColor}15 0%, transparent 50%)`
+          : 'radial-gradient(ellipse at top left, rgba(255,255,255,0.15) 0%, transparent 50%), radial-gradient(ellipse at bottom right, rgba(255,255,255,0.08) 0%, transparent 50%)',
         pointerEvents: 'none',
       }
     }}>
       {/* Header with Logo and Collapse Button */}
-      <Box sx={{ p: sidebarCollapsed ? 2 : 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+      <Box sx={{ p: sidebarCollapsed ? 1.5 : 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, overflow: 'hidden' }}>
           <Box
             sx={{
-              width: 40,
-              height: 40,
+              width: 38,
+              height: 38,
               borderRadius: 2,
               background: isDarkMode
                 ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-                : 'linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%)',
+                : 'rgba(255, 255, 255, 0.9)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 700,
-              fontSize: '1.5rem',
+              fontSize: '1.3rem',
               color: isDarkMode ? '#fff' : primaryColor,
               boxShadow: isDarkMode
-                ? `0 4px 12px ${primaryColor}50`
-                : '0 4px 12px rgba(0,0,0,0.15)',
+                ? `0 4px 16px ${primaryColor}40`
+                : '0 4px 16px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.8)',
+              border: isDarkMode
+                ? `1px solid ${primaryColor}40`
+                : '1px solid rgba(255,255,255,0.5)',
               flexShrink: 0,
             }}
           >
@@ -294,10 +337,10 @@ const MainLayout = () => {
           </Box>
           {!sidebarCollapsed && (
             <Box sx={{ overflow: 'hidden' }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: 'white', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+              <Typography sx={{ fontWeight: 700, color: 'white', lineHeight: 1.2, whiteSpace: 'nowrap', fontSize: '0.95rem' }}>
                 CRM Pro
               </Typography>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap' }}>
+              <Typography sx={{ color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', fontSize: '0.7rem' }}>
                 ARA discover Pvt.Ltd
               </Typography>
             </Box>
@@ -342,39 +385,40 @@ const MainLayout = () => {
 
       {/* User Profile Card */}
       {!sidebarCollapsed && (
-        <Box sx={{ px: 2, pb: 2, position: 'relative', zIndex: 1 }}>
+        <Box sx={{ px: 1.5, pb: 1.5, position: 'relative', zIndex: 1 }}>
           <Box
             sx={{
               background: isDarkMode
-                ? `${primaryColor}20`
-                : 'rgba(255,255,255,0.15)',
-              backdropFilter: 'blur(10px)',
+                ? 'rgba(255, 255, 255, 0.06)'
+                : 'rgba(255, 255, 255, 0.18)',
+              backdropFilter: 'blur(12px)',
               borderRadius: 2,
-              p: 2,
+              p: 1.5,
               border: isDarkMode
-                ? `1px solid ${primaryColor}30`
-                : '1px solid rgba(255,255,255,0.2)',
+                ? '1px solid rgba(255, 255, 255, 0.08)'
+                : '1px solid rgba(255, 255, 255, 0.3)',
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1)',
               transition: 'all 0.3s ease',
               '&:hover': {
                 background: isDarkMode
-                  ? `${primaryColor}30`
-                  : 'rgba(255,255,255,0.2)',
+                  ? 'rgba(255, 255, 255, 0.1)'
+                  : 'rgba(255, 255, 255, 0.25)',
                 transform: 'translateY(-2px)',
                 boxShadow: isDarkMode
-                  ? '0 8px 16px rgba(0,0,0,0.4)'
-                  : '0 8px 16px rgba(0,0,0,0.2)',
+                  ? '0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+                  : '0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.2)',
               }
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
               <Avatar
                 sx={{
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   bgcolor: isDarkMode ? primaryColor : 'white',
                   color: isDarkMode ? 'white' : primaryColor,
                   fontWeight: 600,
-                  fontSize: '1.25rem',
+                  fontSize: '1rem',
                   border: isDarkMode
                     ? `2px solid ${primaryColor}80`
                     : '2px solid rgba(255,255,255,0.3)',
@@ -383,10 +427,10 @@ const MainLayout = () => {
                 {user?.name?.[0] || 'A'}
               </Avatar>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body1" sx={{ fontWeight: 600, color: 'white', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Typography sx={{ fontWeight: 600, color: 'white', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.88rem' }}>
                   {user?.name || 'Admin User'}
                 </Typography>
-                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+                <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.72rem' }}>
                   {user?.role || 'Administrator'}
                 </Typography>
               </Box>
@@ -396,13 +440,13 @@ const MainLayout = () => {
         </Box>
       )}
 
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mx: 2 }} />
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.12)', mx: 1.5 }} />
 
       {/* Navigation Menu */}
       <List sx={{
         flex: 1,
-        px: 2,
-        py: 2,
+        px: 1.5,
+        py: 1,
         overflow: 'auto',
         position: 'relative',
         zIndex: 1,
@@ -424,7 +468,7 @@ const MainLayout = () => {
       }}>
         {filteredMenuItems.map((item) => (
           <React.Fragment key={item.text}>
-            <ListItem disablePadding sx={{ mb: 0.5 }}>
+            <ListItem disablePadding sx={{ mb: 0.25 }}>
               <Tooltip title={sidebarCollapsed ? item.text : ''} placement="right">
                 <ListItemButton
                   selected={location.pathname === item.path}
@@ -437,29 +481,31 @@ const MainLayout = () => {
                   }}
                   sx={{
                     borderRadius: 2,
-                    py: 1.5,
-                    px: sidebarCollapsed ? 1.5 : 2,
+                    py: 1,
+                    px: sidebarCollapsed ? 1.2 : 1.5,
                     justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
                     transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     '&:hover': {
                       background: isDarkMode
-                        ? `${primaryColor}25`
-                        : 'rgba(255,255,255,0.15)',
+                        ? 'rgba(255, 255, 255, 0.08)'
+                        : 'rgba(255, 255, 255, 0.18)',
                       transform: sidebarCollapsed ? 'scale(1.05)' : 'translateX(4px)',
                     },
                     '&.Mui-selected': {
                       background: isDarkMode
-                        ? `${primaryColor}35`
-                        : 'rgba(255,255,255,0.25)',
-                      backdropFilter: 'blur(10px)',
+                        ? 'rgba(255, 255, 255, 0.12)'
+                        : 'rgba(255, 255, 255, 0.28)',
+                      backdropFilter: 'blur(12px)',
                       boxShadow: isDarkMode
-                        ? '0 4px 12px rgba(0,0,0,0.3)'
-                        : '0 4px 12px rgba(0,0,0,0.15)',
-                      borderLeft: isDarkMode ? `3px solid ${secondaryColor}` : '3px solid rgba(255,255,255,0.5)',
+                        ? '0 4px 16px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)'
+                        : '0 4px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.3)',
+                      borderLeft: isDarkMode
+                        ? '3px solid rgba(255,255,255,0.4)'
+                        : '3px solid rgba(255,255,255,0.6)',
                       '&:hover': {
                         background: isDarkMode
-                          ? `${primaryColor}45`
-                          : 'rgba(255,255,255,0.3)',
+                          ? 'rgba(255, 255, 255, 0.16)'
+                          : 'rgba(255, 255, 255, 0.35)',
                       },
                     },
                   }}
@@ -467,10 +513,10 @@ const MainLayout = () => {
                   <ListItemIcon sx={{
                     color: location.pathname === item.path
                       ? 'white'
-                      : 'rgba(255,255,255,0.85)',
-                    minWidth: sidebarCollapsed ? 0 : 40,
+                      : 'rgba(255,255,255,0.8)',
+                    minWidth: sidebarCollapsed ? 0 : 36,
                     '& .MuiSvgIcon-root': {
-                      fontSize: '1.4rem',
+                      fontSize: '1.25rem',
                     }
                   }}>
                     {item.badge && !sidebarCollapsed ? (
@@ -489,7 +535,7 @@ const MainLayout = () => {
                         primary={item.text}
                         primaryTypographyProps={{
                           fontWeight: location.pathname === item.path ? 600 : 500,
-                          fontSize: '0.95rem',
+                          fontSize: '0.88rem',
                           color: 'white',
                         }}
                       />
@@ -557,26 +603,22 @@ const MainLayout = () => {
   return (
     <Box sx={{
       display: 'flex',
-      // Global scrollbar styling with accent color
       '& *::-webkit-scrollbar': {
-        width: '8px',
-        height: '8px',
+        width: '6px',
+        height: '6px',
       },
       '& *::-webkit-scrollbar-track': {
-        background: isDarkMode
-          ? 'rgba(30, 41, 59, 0.3)'
-          : 'rgba(241, 245, 249, 0.6)',
-        borderRadius: '10px',
+        background: 'transparent',
       },
       '& *::-webkit-scrollbar-thumb': {
         background: isDarkMode
-          ? `linear-gradient(180deg, ${primaryColor}99 0%, ${secondaryColor}99 100%)`
-          : `linear-gradient(180deg, ${primaryColor}B3 0%, ${secondaryColor}B3 100%)`,
+          ? 'rgba(255, 255, 255, 0.12)'
+          : `${primaryColor}25`,
         borderRadius: '10px',
         '&:hover': {
           background: isDarkMode
-            ? `linear-gradient(180deg, ${primaryColor}CC 0%, ${secondaryColor}CC 100%)`
-            : `linear-gradient(180deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+            ? 'rgba(255, 255, 255, 0.22)'
+            : `${primaryColor}40`,
         },
       },
     }}>
@@ -586,13 +628,18 @@ const MainLayout = () => {
         sx={{
           width: { sm: `calc(100% - ${currentDrawerWidth}px)` },
           ml: { sm: `${currentDrawerWidth}px` },
-          bgcolor: 'background.paper',
+          bgcolor: isDarkMode
+            ? 'rgba(15, 23, 42, 0.65)'
+            : 'rgba(255, 255, 255, 0.55)',
           borderBottom: '1px solid',
-          borderColor: 'divider',
-          backdropFilter: 'blur(8px)',
+          borderColor: isDarkMode
+            ? 'rgba(255, 255, 255, 0.06)'
+            : 'rgba(255, 255, 255, 0.4)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
           boxShadow: isDarkMode
-            ? '0 1px 3px rgba(0,0,0,0.4)'
-            : '0 1px 3px rgba(0,0,0,0.05)',
+            ? '0 4px 24px rgba(0, 0, 0, 0.2)'
+            : '0 4px 24px rgba(0, 0, 0, 0.04), inset 0 -1px 0 rgba(255,255,255,0.3)',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
@@ -608,7 +655,7 @@ const MainLayout = () => {
           </IconButton>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
-            <Box
+            {/* <Box
               sx={{
                 display: { xs: 'none', md: 'flex' },
                 alignItems: 'center',
@@ -633,12 +680,12 @@ const MainLayout = () => {
                     : `${primaryColor}30`,
                 },
               }}
-            >
-              <SearchIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+            > */}
+              {/* <SearchIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
               <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
                 Search clients, leads...
-              </Typography>
-            </Box>
+              </Typography> */}
+            {/* </Box> */}
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -801,35 +848,27 @@ const MainLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 2, sm: 3 },
+          p: { xs: 1.5, sm: 2 },
           width: { sm: `calc(100% - ${currentDrawerWidth}px)` },
-          backgroundColor: 'background.default',
           minHeight: '100vh',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           overflow: 'auto',
-          // Custom scrollbar styling for main content
           '&::-webkit-scrollbar': {
-            width: '10px',
-            height: '10px',
+            width: '8px',
+            height: '8px',
           },
           '&::-webkit-scrollbar-track': {
-            background: isDarkMode
-              ? 'rgba(30, 41, 59, 0.5)'
-              : 'rgba(241, 245, 249, 0.8)',
-            borderRadius: '10px',
+            background: 'transparent',
           },
           '&::-webkit-scrollbar-thumb': {
             background: isDarkMode
-              ? `linear-gradient(180deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
-              : `linear-gradient(180deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              ? 'rgba(255, 255, 255, 0.15)'
+              : `${primaryColor}30`,
             borderRadius: '10px',
-            border: isDarkMode
-              ? '2px solid rgba(30, 41, 59, 0.5)'
-              : '2px solid rgba(241, 245, 249, 0.8)',
             '&:hover': {
               background: isDarkMode
-                ? `linear-gradient(180deg, ${secondaryColor} 0%, ${primaryColor} 100%)`
-                : `linear-gradient(180deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                ? 'rgba(255, 255, 255, 0.25)'
+                : `${primaryColor}50`,
             },
           },
           '&::-webkit-scrollbar-corner': {

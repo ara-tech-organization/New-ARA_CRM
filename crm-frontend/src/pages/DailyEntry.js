@@ -78,11 +78,11 @@ const validationSchema = Yup.object({
 const StatCard = ({ title, value, icon, color, loading }) => (
   <Card sx={{ height: '100%', border: '1px solid', borderColor: 'divider' }}>
     <CardContent>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <Box
           sx={{
-            width: 48,
-            height: 48,
+            width: 36,
+            height: 36,
             borderRadius: 2,
             bgcolor: `${color}15`,
             display: 'flex',
@@ -359,8 +359,8 @@ const DailyEntry = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
           Daily Entry Management
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -369,19 +369,19 @@ const DailyEntry = () => {
       </Box>
 
       {showSuccess && (
-        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setShowSuccess(false)}>
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setShowSuccess(false)}>
           {successMessage}
         </Alert>
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => dispatch(clearError())}>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => dispatch(clearError())}>
           {error}
         </Alert>
       )}
 
       {/* Quick Stats for Selected Date */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid size={{xs: 12, sm: 6, md: 3}}>
           <StatCard
             title="Total Leads"
@@ -421,10 +421,10 @@ const DailyEntry = () => {
       </Grid>
 
       {/* Filter and Add Entry Section */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
+      <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ py: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 Daily Entries
               </Typography>
@@ -494,7 +494,7 @@ const DailyEntry = () => {
               <TableBody>
                 {filteredEntries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} align="center" sx={{ py: 4 }}>
+                    <TableCell colSpan={11} align="center" sx={{ py: 3 }}>
                       <Typography color="text.secondary">
                         No entries found for {new Date(filterDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                       </Typography>
@@ -599,7 +599,7 @@ const DailyEntry = () => {
 
       {/* Add/Edit Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.5rem', borderBottom: 'none', pb: 0 }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', borderBottom: 'none', pb: 0 }}>
           {editingEntry ? 'Edit Lead Entry' : 'Add Lead Entry'}
         </DialogTitle>
 
@@ -615,7 +615,7 @@ const DailyEntry = () => {
               '& .MuiTab-root': {
                 fontWeight: 600,
                 textTransform: 'none',
-                minHeight: 48,
+                minHeight: 40,
               },
             }}
           >
@@ -635,8 +635,8 @@ const DailyEntry = () => {
         )}
 
         <form onSubmit={formik.handleSubmit}>
-          <DialogContent sx={{ pt: 3 }}>
-            <Grid container spacing={3}>
+          <DialogContent sx={{ pt: 2 }}>
+            <Grid container spacing={1.5}>
               {/* Client and Date Row */}
               <Grid size={{xs: 12, sm: 6}}>
                 <FormControl
@@ -884,7 +884,7 @@ const DailyEntry = () => {
               </Grid>
             </Grid>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, borderTop: '1px solid', borderColor: 'divider', pt: 2 }}>
+          <DialogActions sx={{ px: 2, pb: 2, borderTop: '1px solid', borderColor: 'divider', pt: 2 }}>
             <Button
               onClick={handleCloseDialog}
               variant="outlined"

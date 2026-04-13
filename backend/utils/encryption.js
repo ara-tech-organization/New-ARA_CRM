@@ -2,8 +2,19 @@ import crypto from 'crypto';
 
 // Encryption algorithm
 const ALGORITHM = 'aes-256-cbc';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32);
 const IV_LENGTH = 16;
+
+// Lazy getter — reads the key at call time (after dotenv has loaded)
+// Always returns exactly 32 bytes (pads with zeros or truncates)
+const getEncryptionKey = () => {
+  const key = process.env.ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error('ENCRYPTION_KEY is not set in environment variables');
+  }
+  const buf = Buffer.alloc(32, 0);
+  Buffer.from(key, 'utf-8').copy(buf, 0, 0, 32);
+  return buf;
+};
 
 /**
  * Encrypt sensitive data
@@ -17,7 +28,7 @@ export const encrypt = (text) => {
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv(
       ALGORITHM,
-      Buffer.from(ENCRYPTION_KEY, 'utf-8').slice(0, 32),
+      getEncryptionKey(),
       iv
     );
     let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -43,7 +54,7 @@ export const decrypt = (text) => {
     const encryptedText = textParts.join(':');
     const decipher = crypto.createDecipheriv(
       ALGORITHM,
-      Buffer.from(ENCRYPTION_KEY, 'utf-8').slice(0, 32),
+      getEncryptionKey(),
       iv
     );
     let decrypted = decipher.update(encryptedText, 'hex', 'utf8');

@@ -27,7 +27,7 @@ import {
   CalendarMonth as CalendarMonthIcon,
 } from '@mui/icons-material';
 import { PageLoader } from '../components/Loading';
-import api from '../api/axios';
+import { useDataCache } from '../contexts/DataCacheContext';
 
 const Leads = () => {
   const { accentColor } = useContext(ThemeContext);
@@ -35,28 +35,10 @@ const Leads = () => {
   const secondaryColor = accentColor?.secondary || '#818CF8';
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [leads, setLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(null);
+  const { leads, leadsLoading: loading, fetchLeads: refreshLeads } = useDataCache();
 
-  // Fetch leads from main API
-  const fetchLeads = async () => {
-    setLoading(true);
-    try {
-      // Request more leads with higher limit
-      const response = await api.get('/leads?limit=10000');
-      setLeads(response.data.data || response.data);
-    } catch (error) {
-      console.error('Error fetching leads from main API:', error);
-      setSnackbar({ open: true, message: 'Failed to fetch leads from Main API', severity: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchLeads();
-  }, []);
+  const fetchLeads = () => refreshLeads(true);
 
   // Get unique clients, dates, and months for the pivot table
   const { clients, dates, pivotData, months } = useMemo(() => {
@@ -183,15 +165,19 @@ const Leads = () => {
           <tr>
             <th>Client</th>
             ${filteredDates.map(date => `<th>${formatDate(date)}</th>`).join('')}
+            <th style="background-color: #059669;">Total</th>
           </tr>
         </thead>
         <tbody>
-          ${clients.map(client => `
+          ${clients.map(client => {
+            const rowTotal = filteredDates.reduce((sum, date) => sum + (pivotData[client.id]?.[date] || 0), 0);
+            return `
             <tr>
               <td class="client-cell">${client.name}</td>
               ${filteredDates.map(date => `<td>${pivotData[client.id]?.[date] || '-'}</td>`).join('')}
+              <td style="font-weight: bold; background-color: #ecfdf5;">${rowTotal > 0 ? rowTotal : '-'}</td>
             </tr>
-          `).join('')}
+          `}).join('')}
         </tbody>
       </table>
     `;
@@ -210,12 +196,13 @@ const Leads = () => {
 
   // Export to Excel (CSV) - exports current month's data
   const handleExportExcel = () => {
-    const headers = ['Client', ...filteredDates.map(formatDate)];
+    const headers = ['Client', ...filteredDates.map(formatDate), 'Total'];
 
-    const rows = clients.map(client => [
-      client.name,
-      ...filteredDates.map(date => pivotData[client.id]?.[date] || 0),
-    ]);
+    const rows = clients.map(client => {
+      const dailyValues = filteredDates.map(date => pivotData[client.id]?.[date] || 0);
+      const rowTotal = dailyValues.reduce((sum, val) => sum + val, 0);
+      return [client.name, ...dailyValues, rowTotal];
+    });
 
     const csvContent = [
       `Total Leads Report - ${formatMonth(selectedMonth)}`,
@@ -244,11 +231,11 @@ const Leads = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
-            <LeaderboardIcon sx={{ fontSize: 32, color: primaryColor }} />
-            <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <LeaderboardIcon sx={{ fontSize: 22, color: primaryColor }} />
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
               Total Leads
             </Typography>
           </Box>
@@ -351,7 +338,7 @@ const Leads = () => {
 
         <CardContent sx={{ p: 0 }}>
           {clients.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
+            <Box sx={{ textAlign: 'center', py: 5 }}>
               <Typography variant="h6" color="text.secondary">
                 No leads data found
               </Typography>
@@ -360,21 +347,21 @@ const Leads = () => {
               </Typography>
             </Box>
           ) : filteredDates.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
+            <Box sx={{ textAlign: 'center', py: 5 }}>
               <Typography variant="h6" color="text.secondary">
                 No data for {selectedMonth ? formatMonth(selectedMonth) : 'selected month'}
               </Typography>
             </Box>
           ) : (
             <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 220px)' }}>
-              <Table stickyHeader size="small" sx={{ minWidth: filteredDates.length * 70 + 200 }}>
+              <Table stickyHeader size="small" sx={{ minWidth: filteredDates.length * 70 + 270 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell
                       sx={{
                         fontWeight: 700,
-                        bgcolor: primaryColor,
-                        color: 'white',
+                        background: `${primaryColor} !important`,
+                        color: 'white !important',
                         position: 'sticky',
                         left: 0,
                         zIndex: 3,
@@ -384,23 +371,39 @@ const Leads = () => {
                     >
                       Client
                     </TableCell>
-                    {filteredDates.map((date, index) => (
+                    {filteredDates.map((date) => (
                       <TableCell
                         key={date}
                         align="center"
                         sx={{
                           fontWeight: 600,
-                          bgcolor: primaryColor,
-                          color: 'white',
+                          background: `${primaryColor} !important`,
+                          color: 'white !important',
                           minWidth: 60,
                           fontSize: '0.75rem',
                           py: 1,
-                          borderRight: index === filteredDates.length - 1 ? 'none' : `1px solid ${secondaryColor}`,
+                          borderRight: `1px solid ${secondaryColor}`,
                         }}
                       >
                         {formatDate(date)}
                       </TableCell>
                     ))}
+                    <TableCell
+                      align="center"
+                      sx={{
+                        fontWeight: 700,
+                        background: '#059669 !important',
+                        color: 'white !important',
+                        minWidth: 70,
+                        fontSize: '0.8rem',
+                        py: 1,
+                        position: 'sticky',
+                        right: 0,
+                        zIndex: 3,
+                      }}
+                    >
+                      Total
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -424,7 +427,7 @@ const Leads = () => {
                       >
                         {client.name}
                       </TableCell>
-                      {filteredDates.map((date, colIndex) => {
+                      {filteredDates.map((date) => {
                         const value = pivotData[client.id]?.[date] || 0;
                         return (
                           <TableCell
@@ -434,7 +437,7 @@ const Leads = () => {
                               fontWeight: value > 0 ? 600 : 400,
                               color: value > 0 ? '#1e293b' : '#94a3b8',
                               fontSize: '0.85rem',
-                              borderRight: colIndex === filteredDates.length - 1 ? 'none' : '1px solid #f1f5f9',
+                              borderRight: '1px solid #f1f5f9',
                               bgcolor: value > 10 ? 'rgba(16, 185, 129, 0.1)' : value > 5 ? `${primaryColor}14` : 'inherit',
                             }}
                           >
@@ -442,6 +445,26 @@ const Leads = () => {
                           </TableCell>
                         );
                       })}
+                      {(() => {
+                        const rowTotal = filteredDates.reduce((sum, date) => sum + (pivotData[client.id]?.[date] || 0), 0);
+                        return (
+                          <TableCell
+                            align="center"
+                            sx={{
+                              fontWeight: 700,
+                              fontSize: '0.9rem',
+                              color: '#059669',
+                              bgcolor: rowIndex % 2 === 0 ? '#ecfdf5' : '#d1fae5',
+                              position: 'sticky',
+                              right: 0,
+                              zIndex: 1,
+                              borderLeft: '2px solid #e2e8f0',
+                            }}
+                          >
+                            {rowTotal > 0 ? rowTotal : '-'}
+                          </TableCell>
+                        );
+                      })()}
                     </TableRow>
                   ))}
                 </TableBody>

@@ -31,6 +31,11 @@ const API_TO_PAGE_PERMISSIONS = {
   // Report permissions -> reports page
   'report:view': ['reports', 'dashboard'],
   'report:export': ['reports'],
+  // Content permissions -> content-management page
+  'content:create': ['content-management'],
+  'content:read': ['content-management', 'dashboard'],
+  'content:update': ['content-management'],
+  'content:delete': ['content-management'],
   // Settings permissions -> settings page
   'settings:update': ['settings'],
   // User permissions -> access-management page
@@ -132,6 +137,12 @@ export const PERMISSIONS = {
   REPORT_VIEW: 'report:view',
   REPORT_EXPORT: 'report:export',
 
+  // Content management
+  CONTENT_CREATE: 'content:create',
+  CONTENT_READ: 'content:read',
+  CONTENT_UPDATE: 'content:update',
+  CONTENT_DELETE: 'content:delete',
+
   // Settings
   SETTINGS_UPDATE: 'settings:update',
 };
@@ -152,6 +163,9 @@ export const DEFAULT_PERMISSIONS = {
     PERMISSIONS.ENTRY_CREATE,
     PERMISSIONS.ENTRY_READ,
     PERMISSIONS.ENTRY_UPDATE,
+    PERMISSIONS.CONTENT_CREATE,
+    PERMISSIONS.CONTENT_READ,
+    PERMISSIONS.CONTENT_UPDATE,
     PERMISSIONS.REPORT_VIEW,
   ],
   PMM: [
@@ -168,6 +182,7 @@ export const DEFAULT_PERMISSIONS = {
     PERMISSIONS.ENTRY_CREATE,
     PERMISSIONS.ENTRY_READ,
     PERMISSIONS.ENTRY_UPDATE,
+    PERMISSIONS.CONTENT_READ,
     PERMISSIONS.REPORT_VIEW,
     PERMISSIONS.REPORT_EXPORT,
   ],

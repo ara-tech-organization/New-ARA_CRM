@@ -25,6 +25,7 @@ import {
   MenuItem,
   IconButton,
   Snackbar,
+  Tooltip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -36,6 +37,9 @@ import {
   Delete as DeleteIcon,
   Visibility,
   VisibilityOff,
+  Lock as LockIcon,
+  Key as KeyIcon,
+  PowerSettingsNew as PowerIcon,
 } from '@mui/icons-material';
 import userApi from '../api/userApi';
 
@@ -47,6 +51,7 @@ const availablePages = [
   { id: 'leads', name: 'Leads Management', icon: '🎯' },
   { id: 'clients', name: 'Clients', icon: '👥' },
   { id: 'client-vault', name: 'Client Vault', icon: '🔐' },
+  { id: 'content-management', name: 'Content Management', icon: '📋' },
   { id: 'fund-entry', name: 'Fund Entry', icon: '💰' },
   // { id: 'tasks', name: 'Tasks', icon: '✅' },
   { id: 'reports', name: 'Reports', icon: '📄' },
@@ -80,6 +85,17 @@ const AccessManagement = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [actionLoading, setActionLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [teams, setTeams] = useState([]);
+
+  // Edit user state
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
+  const [editUserData, setEditUserData] = useState(null);
+
+  // Change password state
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordUser, setPasswordUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // New user form state
   const [newUser, setNewUser] = useState({
@@ -89,12 +105,14 @@ const AccessManagement = () => {
     role: 'SMM',
     phone: '',
     department: '',
+    team: '',
     permissions: ['dashboard'],
   });
 
-  // Fetch users on component mount
+  // Fetch users and teams on component mount
   useEffect(() => {
     fetchUsers();
+    fetchTeams();
   }, []);
 
   const fetchUsers = async () => {
@@ -107,6 +125,15 @@ const AccessManagement = () => {
       showSnackbar('Failed to fetch users', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const response = await userApi.getTeams();
+      setTeams(response.data || []);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
     }
   };
 
@@ -178,6 +205,27 @@ const AccessManagement = () => {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      showSnackbar('Password must be at least 6 characters', 'error');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const response = await userApi.changeUserPassword(passwordUser._id, newPassword);
+      showSnackbar(response.message || `Password changed for ${passwordUser.name}`);
+      setPasswordDialogOpen(false);
+      setPasswordUser(null);
+      setNewPassword('');
+      setShowNewPassword(false);
+    } catch (error) {
+      console.error('Error changing password:', error);
+      showSnackbar(error.response?.data?.message || 'Failed to change password', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleCreateUser = async () => {
     try {
       setActionLoading(true);
@@ -197,6 +245,7 @@ const AccessManagement = () => {
         role: 'SMM',
         phone: '',
         department: '',
+        team: '',
         permissions: ['dashboard'],
       });
     } catch (error) {
@@ -223,11 +272,56 @@ const AccessManagement = () => {
     }
   };
 
+  const handleOpenEditUser = (user) => {
+    setEditUserData({
+      _id: user._id,
+      name: user.name || '',
+      email: user.email || '',
+      role: user.role || 'SMM',
+      phone: user.phone || '',
+      department: user.department || '',
+      team: user.team || '',
+    });
+    setEditUserDialogOpen(true);
+  };
+
+  const handleEditUserChange = (field, value) => {
+    if (field === 'role') {
+      if (value !== 'SMM') {
+        setEditUserData((prev) => ({ ...prev, [field]: value, team: '' }));
+      } else {
+        setEditUserData((prev) => ({ ...prev, [field]: value }));
+      }
+    } else {
+      setEditUserData((prev) => ({ ...prev, [field]: value }));
+    }
+  };
+
+  const handleSaveEditUser = async () => {
+    try {
+      setActionLoading(true);
+      const { _id, ...updateData } = editUserData;
+      const response = await userApi.updateUser(_id, updateData);
+      setUsers((prev) =>
+        prev.map((u) => (u._id === _id ? { ...u, ...response.data } : u))
+      );
+      setEditUserDialogOpen(false);
+      showSnackbar('User updated successfully');
+    } catch (error) {
+      console.error('Error updating user:', error);
+      showSnackbar(error.response?.data?.message || 'Failed to update user', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleNewUserChange = (field, value) => {
     if (field === 'role') {
       // If Admin is selected, automatically give all permissions
       if (value === 'admin') {
-        setNewUser((prev) => ({ ...prev, [field]: value, permissions: allPageIds }));
+        setNewUser((prev) => ({ ...prev, [field]: value, permissions: allPageIds, team: '' }));
+      } else if (value !== 'SMM') {
+        setNewUser((prev) => ({ ...prev, [field]: value, team: '' }));
       } else {
         setNewUser((prev) => ({ ...prev, [field]: value }));
       }
@@ -272,9 +366,9 @@ const AccessManagement = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
             User Management
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -297,13 +391,14 @@ const AccessManagement = () => {
       </Box>
 
       {/* Search and Stats */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, md: 8 }}>
           <TextField
             fullWidth
             placeholder="Search by name, email, or User ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            autoComplete="off"
             slotProps={{
               input: {
                 startAdornment: (
@@ -323,7 +418,7 @@ const AccessManagement = () => {
         <Grid size={{ xs: 12, md: 4 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 <Box
                   sx={{
                     width: 48,
@@ -339,7 +434,7 @@ const AccessManagement = () => {
                   <ShieldIcon />
                 </Box>
                 <Box>
-                  <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
                     {users.filter((u) => u.isActive).length}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -353,11 +448,11 @@ const AccessManagement = () => {
       </Grid>
 
       {/* Users List */}
-      <Grid container spacing={3}>
+      <Grid container spacing={1.5}>
         {filteredUsers.length === 0 ? (
           <Grid size={{ xs: 12 }}>
             <Card>
-              <CardContent sx={{ textAlign: 'center', py: 4 }}>
+              <CardContent sx={{ textAlign: 'center', py: 3 }}>
                 <Typography color="text.secondary">
                   {searchQuery ? 'No users found matching your search' : 'No users found. Create your first user!'}
                 </Typography>
@@ -370,9 +465,11 @@ const AccessManagement = () => {
               <Card
                 sx={{
                   height: '100%',
+                  overflow: 'hidden',
                   transition: 'transform 0.2s, box-shadow 0.2s',
+                  opacity: user.isActive ? 1 : 0.7,
                   '&:hover': {
-                    transform: 'translateY(-4px)',
+                    transform: 'translateY(-3px)',
                     boxShadow: (theme) =>
                       theme.palette.mode === 'light'
                         ? '0px 8px 24px rgba(0,0,0,0.12)'
@@ -380,114 +477,194 @@ const AccessManagement = () => {
                   },
                 }}
               >
-                <CardContent>
-                  {/* User Header */}
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+                {/* Colored top accent bar */}
+                <Box
+                  sx={{
+                    height: 4,
+                    background: user.isActive
+                      ? `linear-gradient(90deg, ${primaryColor}, ${secondaryColor})`
+                      : 'grey.400',
+                  }}
+                />
+                <CardContent sx={{ p: 2 }}>
+                  {/* Top row: Avatar + Info + Status */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
                     <Avatar
                       sx={{
-                        width: 56,
-                        height: 56,
-                        bgcolor: 'primary.main',
-                        fontSize: '1.5rem',
-                        fontWeight: 600,
+                        width: 48,
+                        height: 48,
+                        background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
+                        fontSize: '1.2rem',
+                        fontWeight: 700,
                       }}
                     >
                       {user.name?.charAt(0) || 'U'}
                     </Avatar>
-                    <Box sx={{ flex: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {user.name}
                         </Typography>
                         {user.isActive ? (
-                          <CheckCircleIcon sx={{ fontSize: 18, color: 'success.main' }} />
+                          <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
                         ) : (
-                          <BlockIcon sx={{ fontSize: 18, color: 'error.main' }} />
+                          <BlockIcon sx={{ fontSize: 16, color: 'error.main', flexShrink: 0 }} />
                         )}
                       </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {user.email}
                       </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        <Chip label={`ID: ${user.userID}`} size="small" variant="outlined" />
-                        <Chip label={user.role} size="small" color={getRoleColor(user.role)} />
-                      </Box>
                     </Box>
                   </Box>
 
-                  <Divider sx={{ my: 2 }} />
-
-                  {/* Permissions Summary */}
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 1, color: 'text.secondary' }}
-                    >
-                      Page Access
-                    </Typography>
-                    {user.role === 'admin' ? (
+                  {/* Info chips */}
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 2 }}>
+                    <Chip
+                      label={user.userID}
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontSize: '0.7rem', height: 24 }}
+                    />
+                    <Chip
+                      label={user.role}
+                      size="small"
+                      color={getRoleColor(user.role)}
+                      sx={{ fontSize: '0.7rem', height: 24, fontWeight: 600 }}
+                    />
+                    {user.team && (
                       <Chip
-                        label="Full Access (All Pages)"
-                        color="error"
-                        sx={{ fontWeight: 600 }}
+                        label={user.team.replace('SMM ', '')}
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        sx={{ fontSize: '0.7rem', height: 24 }}
                       />
-                    ) : (
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {availablePages.slice(0, 5).map((page) => {
-                          const hasAccess = user.permissions?.includes(page.id);
-                          return (
-                            <Chip
-                              key={page.id}
-                              label={page.icon}
-                              size="small"
-                              sx={{
-                                opacity: hasAccess ? 1 : 0.3,
-                                bgcolor: hasAccess ? 'success.main' : 'action.disabledBackground',
-                                color: hasAccess ? 'white' : 'text.disabled',
-                              }}
-                            />
-                          );
-                        })}
-                        {(user.permissions?.length || 0) > 5 && (
-                          <Chip label={`+${user.permissions.length - 5}`} size="small" />
-                        )}
-                      </Box>
+                    )}
+                    {user.role === 'admin' && (
+                      <Chip
+                        label="Full Access"
+                        size="small"
+                        color="warning"
+                        sx={{ fontSize: '0.7rem', height: 24 }}
+                      />
+                    )}
+                    {!user.isActive && (
+                      <Chip
+                        label="Inactive"
+                        size="small"
+                        color="error"
+                        variant="outlined"
+                        sx={{ fontSize: '0.7rem', height: 24 }}
+                      />
                     )}
                   </Box>
 
-                  {/* Actions */}
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    {user.role !== 'admin' && (
-                      <Button
-                        fullWidth
-                        variant="contained"
-                        startIcon={<EditIcon />}
-                        onClick={() => handleEditAccess(user)}
+                  {/* Permissions bar (visual indicator) */}
+                  {user.role !== 'admin' && (
+                    <Box sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                          Access
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {user.permissions?.length || 0}/{availablePages.length}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ height: 4, bgcolor: 'action.hover', borderRadius: 2, overflow: 'hidden' }}>
+                        <Box
+                          sx={{
+                            height: '100%',
+                            width: `${((user.permissions?.length || 0) / availablePages.length) * 100}%`,
+                            background: `linear-gradient(90deg, ${primaryColor}, ${secondaryColor})`,
+                            borderRadius: 2,
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  )}
+
+                  <Divider sx={{ mb: 1.5 }} />
+
+                  {/* Action buttons - icon style */}
+                  <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                    <Tooltip title="Edit User">
+                      <IconButton
                         size="small"
+                        onClick={() => handleOpenEditUser(user)}
+                        sx={{
+                          bgcolor: `${primaryColor}14`,
+                          color: primaryColor,
+                          '&:hover': { bgcolor: `${primaryColor}28` },
+                        }}
                       >
-                        Edit Access
-                      </Button>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    {user.role !== 'admin' && (
+                      <Tooltip title="Edit Access">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditAccess(user)}
+                          sx={{
+                            bgcolor: 'info.main',
+                            color: 'white',
+                            '&:hover': { bgcolor: 'info.dark' },
+                          }}
+                        >
+                          <KeyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     )}
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => handleToggleUserStatus(user._id)}
-                      color={user.isActive ? 'error' : 'success'}
-                      disabled={actionLoading}
-                      fullWidth={user.role === 'admin'}
-                    >
-                      {user.isActive ? 'Deactivate' : 'Activate'}
-                    </Button>
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => {
-                        setUserToDelete(user);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
+                    <Tooltip title="Change Password">
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setPasswordUser(user);
+                          setNewPassword('');
+                          setShowNewPassword(false);
+                          setPasswordDialogOpen(true);
+                        }}
+                        sx={{
+                          bgcolor: 'warning.main',
+                          color: 'white',
+                          '&:hover': { bgcolor: 'warning.dark' },
+                        }}
+                      >
+                        <LockIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={user.isActive ? 'Deactivate' : 'Activate'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleToggleUserStatus(user._id)}
+                        disabled={actionLoading}
+                        sx={{
+                          bgcolor: user.isActive ? 'error.main' : 'success.main',
+                          color: 'white',
+                          '&:hover': { bgcolor: user.isActive ? 'error.dark' : 'success.dark' },
+                          '&.Mui-disabled': { bgcolor: 'action.disabledBackground' },
+                        }}
+                      >
+                        <PowerIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete User">
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setUserToDelete(user);
+                          setDeleteDialogOpen(true);
+                        }}
+                        sx={{
+                          bgcolor: 'grey.200',
+                          color: 'error.main',
+                          '&:hover': { bgcolor: 'error.main', color: 'white' },
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 </CardContent>
               </Card>
@@ -498,7 +675,7 @@ const AccessManagement = () => {
 
       {/* Create User Dialog */}
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.5rem' }}>
+        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           Create New User
         </DialogTitle>
         <DialogContent>
@@ -530,6 +707,7 @@ const AccessManagement = () => {
                 value={newUser.password}
                 onChange={(e) => handleNewUserChange('password', e.target.value)}
                 required
+                autoComplete="new-password"
                 slotProps={{
                   input: {
                     endAdornment: (
@@ -574,6 +752,22 @@ const AccessManagement = () => {
                 onChange={(e) => handleNewUserChange('department', e.target.value)}
               />
             </Grid>
+            {newUser.role === 'SMM' && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  select
+                  label="Team"
+                  value={newUser.team}
+                  onChange={(e) => handleNewUserChange('team', e.target.value)}
+                >
+                  <MenuItem value="">No Team</MenuItem>
+                  {teams.map((t) => (
+                    <MenuItem key={t} value={t}>{t}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            )}
             <Grid size={{ xs: 12 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, mt: 2 }}>
                 Page Access Permissions
@@ -599,7 +793,7 @@ const AccessManagement = () => {
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
+        <DialogActions sx={{ px: 2, pb: 1.5 }}>
           <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
@@ -619,7 +813,7 @@ const AccessManagement = () => {
 
       {/* Edit Permissions Dialog */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.5rem' }}>
+        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           Edit Access Permissions
         </DialogTitle>
         <DialogContent>
@@ -629,12 +823,12 @@ const AccessManagement = () => {
               <Box
                 sx={{
                   p: 2,
-                  mb: 3,
+                  mb: 2,
                   borderRadius: 2,
                   bgcolor: 'action.hover',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 2,
+                  gap: 1.5,
                 }}
               >
                 <Avatar sx={{ width: 48, height: 48, bgcolor: 'primary.main' }}>
@@ -688,7 +882,7 @@ const AccessManagement = () => {
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
+        <DialogActions sx={{ px: 2, pb: 1.5 }}>
           <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
@@ -702,6 +896,101 @@ const AccessManagement = () => {
             }}
           >
             {actionLoading ? <CircularProgress size={24} /> : 'Save Permissions'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editUserDialogOpen} onClose={() => setEditUserDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+          Edit User
+        </DialogTitle>
+        <DialogContent>
+          {editUserData && (
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Full Name"
+                  value={editUserData.name}
+                  onChange={(e) => handleEditUserChange('name', e.target.value)}
+                  required
+                />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Email"
+                  type="email"
+                  value={editUserData.email}
+                  onChange={(e) => handleEditUserChange('email', e.target.value)}
+                  required
+                />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  select
+                  label="Role"
+                  value={editUserData.role}
+                  onChange={(e) => handleEditUserChange('role', e.target.value)}
+                >
+                  {roles.map((role) => (
+                    <MenuItem key={role.value} value={role.value}>
+                      {role.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              {editUserData.role === 'SMM' && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="Team"
+                    value={editUserData.team}
+                    onChange={(e) => handleEditUserChange('team', e.target.value)}
+                  >
+                    <MenuItem value="">No Team</MenuItem>
+                    {teams.map((t) => (
+                      <MenuItem key={t} value={t}>{t}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+              )}
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Phone"
+                  value={editUserData.phone}
+                  onChange={(e) => handleEditUserChange('phone', e.target.value)}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Department"
+                  value={editUserData.department}
+                  onChange={(e) => handleEditUserChange('department', e.target.value)}
+                />
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 1.5 }}>
+          <Button onClick={() => setEditUserDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveEditUser}
+            disabled={!editUserData?.name || !editUserData?.email || actionLoading}
+            sx={{
+              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              '&:hover': {
+                background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+              },
+            }}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -723,6 +1012,48 @@ const AccessManagement = () => {
             disabled={actionLoading}
           >
             {actionLoading ? <CircularProgress size={24} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600 }}>
+          Change Password
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Set a new password for <strong>{passwordUser?.name}</strong> ({passwordUser?.email})
+          </Typography>
+          <TextField
+            fullWidth
+            label="New Password"
+            type={showNewPassword ? 'text' : 'password'}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            helperText="Minimum 6 characters"
+            autoComplete="new-password"
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowNewPassword(!showNewPassword)} edge="end">
+                      {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleChangePassword}
+            disabled={actionLoading || !newPassword || newPassword.length < 6}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Change Password'}
           </Button>
         </DialogActions>
       </Dialog>

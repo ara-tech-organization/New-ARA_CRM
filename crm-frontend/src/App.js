@@ -19,7 +19,10 @@ import EmailCampaigns from './pages/EmailCampaigns';
 import DailyLeadData from './pages/DailyLeadData';
 import ClientVault from './pages/ClientVault';
 import AccessManagement from './pages/AccessManagement';
+import PersonalVault from './pages/PersonalVault';
+import ContentManagement from './pages/ContentManagement';
 import Leads from './pages/Leads';
+import { DataCacheProvider } from './contexts/DataCacheContext';
 
 function App() {
   const dispatch = useDispatch();
@@ -36,14 +39,16 @@ function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <MainLayout />
+              <DataCacheProvider>
+                <MainLayout />
+              </DataCacheProvider>
             </ProtectedRoute>
           }
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPro />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="dashboard-v2" element={<DashboardEnhanced />} />
-          <Route path="dashboard-old" element={<Dashboard />} />
+          <Route path="dashboard-old" element={<DashboardPro />} />
           <Route path="daily-entry" element={<DailyEntry />} />
           <Route path="daily-lead-data" element={<DailyLeadData />} />
           <Route path="client-vault" element={<ClientVault />} />
@@ -61,6 +66,8 @@ function App() {
           <Route path="calendar" element={<Dashboard />} />
           <Route path="team" element={<Clients />} />
           <Route path="access-management" element={<AccessManagement />} />
+          <Route path="personal-vault" element={<PersonalVault />} />
+          <Route path="content-management" element={<ContentManagement />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

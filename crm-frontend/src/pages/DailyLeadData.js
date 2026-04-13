@@ -34,10 +34,9 @@ import {
   Storage as StorageIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import dailyEntryApi from '../api/dailyEntryApi';
 import { TableLoader, PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
-import api from '../api/axios';
+import { useDataCache } from '../contexts/DataCacheContext';
 
 const DailyLeadData = () => {
   const { accentColor } = useContext(ThemeContext);
@@ -51,58 +50,19 @@ const DailyLeadData = () => {
   const [selectedClient, setSelectedClient] = useState('all');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  // Main API state
-  const [mainApiLeads, setMainApiLeads] = useState([]);
-  const [mainApiClients, setMainApiClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [clientsLoading, setClientsLoading] = useState(true);
+  const { leads: allCachedLeads, clients: cachedClients, leadsLoading: loading, clientsLoading, fetchLeads } = useDataCache();
 
-  // Fetch clients from main API
-  useEffect(() => {
-    const fetchMainClients = async () => {
-      setClientsLoading(true);
-      try {
-        const response = await dailyEntryApi.getMainApiClients();
-        if (response.success) {
-          setMainApiClients(response.data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch main API clients:', error);
-        setSnackbar({ open: true, message: 'Failed to fetch clients', severity: 'error' });
-      } finally {
-        setClientsLoading(false);
-      }
-    };
-    fetchMainClients();
-  }, []);
+  // Filter leads by date range from cache (no API call)
+  const mainApiLeads = useMemo(() => {
+    return allCachedLeads.filter(lead => {
+      const leadDate = lead.date;
+      return leadDate >= dateFrom && leadDate <= dateTo;
+    });
+  }, [allCachedLeads, dateFrom, dateTo]);
 
-  // Fetch leads from main API when date range changes
-  const fetchLeadsForDateRange = async () => {
-    setLoading(true);
-    try {
-      // Fetch leads for the date range
-      const response = await api.get('/leads?limit=10000');
-      const leads = response.data.data || response.data;
+  const mainApiClients = cachedClients;
 
-      // Filter by date range
-      const filteredLeads = leads.filter(lead => {
-        const leadDate = lead.date;
-        return leadDate >= dateFrom && leadDate <= dateTo;
-      });
-
-      setMainApiLeads(filteredLeads);
-    } catch (error) {
-      console.error('Failed to fetch leads:', error);
-      setSnackbar({ open: true, message: 'Failed to fetch leads from API', severity: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch leads on mount and when date range changes
-  useEffect(() => {
-    fetchLeadsForDateRange();
-  }, [dateFrom, dateTo]);
+  const fetchLeadsForDateRange = () => fetchLeads(true);
 
   // Filter entries by client (date range already filtered from API)
   const filteredEntries = useMemo(() => {
@@ -286,10 +246,10 @@ const DailyLeadData = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 0.5 }}>
-            <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
               Daily Lead Data
             </Typography>
           </Box>
@@ -297,7 +257,7 @@ const DailyLeadData = () => {
             View daily lead data by date range
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
           <Button
             variant="outlined"
             startIcon={loading ? <CircularProgress size={18} /> : <RefreshIcon />}
@@ -325,9 +285,9 @@ const DailyLeadData = () => {
       </Box>
 
       {/* Filters */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 2 }}>
         <CardContent>
-          <Grid container spacing={2} alignItems="center">
+          <Grid container spacing={1.5} alignItems="center">
             <Grid size={{xs: 12, sm: 6, md: 3}}>
               <FormControl fullWidth>
                 <InputLabel id="client-filter-label">Select Client</InputLabel>
@@ -425,7 +385,7 @@ const DailyLeadData = () => {
           {loading ? (
             <TableLoader rows={6} message="Loading lead data..." />
           ) : filteredEntries.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
+            <Box sx={{ textAlign: 'center', py: 5 }}>
               <Typography variant="h6" color="text.secondary">
                 No entries found for the selected date range
                 {selectedClient !== 'all' && ` and client`}

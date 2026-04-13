@@ -7,7 +7,9 @@ import {
   deleteUser,
   toggleUserStatus,
   updateUserPermissions,
+  changeUserPassword,
   getUserStats,
+  getTeams,
 } from '../controllers/userController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -24,6 +26,7 @@ router.route('/')
   .post(registerValidation, validate, createUser);
 
 router.get('/stats', getUserStats);
+router.get('/teams', getTeams);
 
 router.route('/:id')
   .get(idValidation, validate, getUser)
@@ -31,6 +34,7 @@ router.route('/:id')
   .delete(authorize('superadmin'), idValidation, validate, deleteUser);
 
 router.patch('/:id/toggle-status', idValidation, validate, toggleUserStatus);
+router.patch('/:id/change-password', idValidation, validate, changeUserPassword);
 router.patch('/:id/permissions', authorize('superadmin'), idValidation, validate, updateUserPermissions);
 
 export default router;

@@ -38,7 +38,7 @@ ENCRYPTION_KEY=your_32_character_encryption_key
 # Other settings
 NODE_ENV=production
 PORT=5000
-CLIENT_URL=https://crm.aradiscoveries.com
+CLIENT_URL=http://localhost:3000
 ```
 
 **Important:** Generate secure random strings for JWT secrets and encryption key. You can use:

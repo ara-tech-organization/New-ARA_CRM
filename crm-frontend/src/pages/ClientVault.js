@@ -297,11 +297,11 @@ const ClientVault = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <ShieldIcon sx={{ fontSize: 32, color: primaryColor }} />
-            <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            <ShieldIcon sx={{ fontSize: 22, color: primaryColor }} />
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
               Client Vault
             </Typography>
           </Box>
@@ -340,7 +340,7 @@ const ClientVault = () => {
         <Alert
           severity="warning"
           icon={<WarningIcon />}
-          sx={{ mb: 3 }}
+          sx={{ mb: 2 }}
           action={
             <Button color="inherit" size="small" sx={{ fontWeight: 600 }}>
               Review
@@ -352,7 +352,7 @@ const ClientVault = () => {
       )}
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid size={{xs: 12, sm: 6, md: 3}}>
           <Card sx={{ background: `linear-gradient(135deg, ${primaryColor}15 0%, ${primaryColor}05 100%)` }}>
             <CardContent>
@@ -365,8 +365,8 @@ const ClientVault = () => {
                     {stats.totalCredentials}
                   </Typography>
                 </Box>
-                <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: `${primaryColor}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LockIcon sx={{ fontSize: 28, color: primaryColor }} />
+                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: `${primaryColor}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <LockIcon sx={{ fontSize: 22, color: primaryColor }} />
                 </Box>
               </Box>
             </CardContent>
@@ -385,8 +385,8 @@ const ClientVault = () => {
                     {stats.totalClients}
                   </Typography>
                 </Box>
-                <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: '#10b98120', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <SecurityIcon sx={{ fontSize: 28, color: '#10b981' }} />
+                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#10b98120', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SecurityIcon sx={{ fontSize: 22, color: '#10b981' }} />
                 </Box>
               </Box>
             </CardContent>
@@ -405,8 +405,8 @@ const ClientVault = () => {
                     {stats.weakPasswords}
                   </Typography>
                 </Box>
-                <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: '#ef444420', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <WarningIcon sx={{ fontSize: 28, color: '#ef4444' }} />
+                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#ef444420', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <WarningIcon sx={{ fontSize: 22, color: '#ef4444' }} />
                 </Box>
               </Box>
             </CardContent>
@@ -425,8 +425,8 @@ const ClientVault = () => {
                     {stats.recentlyUpdated}
                   </Typography>
                 </Box>
-                <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: '#f59e0b20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <EditIcon sx={{ fontSize: 28, color: '#f59e0b' }} />
+                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#f59e0b20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <EditIcon sx={{ fontSize: 22, color: '#f59e0b' }} />
                 </Box>
               </Box>
             </CardContent>
@@ -435,7 +435,7 @@ const ClientVault = () => {
       </Grid>
 
       {/* Filters */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 2 }}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
             <Grid size={{xs: 12, sm: 6, md: 5}}>
@@ -496,10 +496,10 @@ const ClientVault = () => {
       {loading ? (
         <CardLoader count={4} message="Loading clients..." />
       ) : (
-      <Grid container spacing={3}>
+      <Grid container spacing={1.5}>
         {Object.keys(groupedCredentials).length === 0 ? (
           <Grid size={{xs: 12}}>
-            <Paper sx={{ p: 6, textAlign: 'center' }}>
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
               <LockIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
               <Typography variant="h6" color="text.secondary" gutterBottom>
                 No credentials found
@@ -531,7 +531,7 @@ const ClientVault = () => {
                     },
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
                     <ShieldIcon sx={{ color: primaryColor }} />
                     <Box>
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -730,7 +730,7 @@ const ClientVault = () => {
 
       {/* Add/Edit Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.5rem' }}>
+        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           {editingCredential ? 'Edit Credential' : 'Add New Credential'}
         </DialogTitle>
         <form onSubmit={handleSubmit}>

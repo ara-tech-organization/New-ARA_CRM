@@ -1,628 +1,360 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState, useContext } from 'react';
 import {
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  Box,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  Avatar,
-  FormControl,
-  Select,
-  MenuItem,
-  InputLabel,
+  Grid, Card, CardContent, Typography, Box, CircularProgress,
+  Chip, Avatar, Button, Divider,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
 import {
-  People as PeopleIcon,
-  TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon,
-  AttachMoney as MoneyIcon,
-  Facebook,
-  Google,
-  Language,
-  Phone,
-  WhatsApp,
-  Campaign,
+  Facebook, Google, People, Refresh as RefreshIcon,
+  TrendingUp as TrendingUpIcon, Circle as CircleIcon,
 } from '@mui/icons-material';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-} from 'recharts';
-import { fetchClients } from '../store/slices/clientSlice';
 import { PageLoader } from '../components/Loading';
+import { ThemeContext } from '../contexts/ThemeContext';
+import { useDataCache } from '../contexts/DataCacheContext';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
+} from 'recharts';
+const CLIENT_COLORS = ['#4A7CC9', '#3D8B8B', '#6E5BA7', '#B06882', '#4E8A6E', '#5A6B82', '#A07D4F', '#3E4A5C', '#3A7AB5', '#9A7083'];
 
-// Stats Card with comparison
-const StatsCard = ({ title, value, icon, color, bgColor, comparison, comparisonLabel }) => (
-  <Card
-    sx={{
-      height: '100%',
-      border: '1px solid',
-      borderColor: 'divider',
-      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-      '&:hover': {
-        transform: 'translateY(-2px)',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-      },
-    }}
-  >
-    <CardContent sx={{ p: 2.5 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {title}
+// --- Custom Tooltip (shows full client name from payload) ---
+const GlassTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  // Get the full client name from the data payload
+  const fullName = payload[0]?.payload?.name || '';
+  return (
+    <Box sx={{ bgcolor: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(16px)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 2, px: 1.5, py: 1, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 160 }}>
+      <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, mb: 0.5, color: 'text.primary' }}>{fullName}</Typography>
+      {payload.map((entry, i) => (
+        <Box key={i} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 0.3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <CircleIcon sx={{ fontSize: 8, color: entry.color }} />
+            <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{entry.name}</Typography>
+          </Box>
+          <Typography sx={{ fontSize: '0.82rem', fontWeight: 700 }}>
+            {typeof entry.value === 'number' && entry.name?.includes('Fund') ? `₹${entry.value.toLocaleString()}` : entry.value}
           </Typography>
-          <Typography variant="h4" sx={{ fontWeight: 700, color, my: 1 }}>
-            {value}
-          </Typography>
-          {comparison !== undefined && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {comparison >= 0 ? (
-                <TrendingUpIcon sx={{ fontSize: 16, color: 'success.main' }} />
-              ) : (
-                <TrendingDownIcon sx={{ fontSize: 16, color: 'error.main' }} />
-              )}
-              <Typography variant="caption" sx={{ color: comparison >= 0 ? 'success.main' : 'error.main', fontWeight: 600 }}>
-                {comparison >= 0 ? '+' : ''}{comparison} {comparisonLabel || 'vs yesterday'}
-              </Typography>
-            </Box>
-          )}
         </Box>
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: 2,
-            bgcolor: bgColor || `${color}15`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {React.cloneElement(icon, { sx: { color, fontSize: 24 } })}
-        </Box>
-      </Box>
-    </CardContent>
-  </Card>
-);
+      ))}
+    </Box>
+  );
+};
 
-// Client Card for displaying individual client data
-const ClientCard = ({ client, data }) => (
-  <Card sx={{ height: '100%', border: '1px solid', borderColor: 'divider' }}>
-    <CardContent sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-        <Avatar sx={{ bgcolor: '#667eea', width: 36, height: 36, fontSize: '0.9rem' }}>
-          {client.name?.charAt(0) || 'C'}
-        </Avatar>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-          {client.name}
-        </Typography>
+// --- Client Performance Card (clean horizontal layout like DashboardPro but with glass) ---
+const ClientCard = ({ client, data, color, todayStr }) => {
+  const metaLeads = (data.metaForm || 0) + (data.metaWhatsapp || 0);
+  const googleLeads = (data.googleCall || 0) + (data.googleWebsite || 0);
+  const totalLeads = metaLeads + googleLeads;
+
+  const MetricBox = ({ value, label }) => (
+    <Box sx={{ flex: 1, textAlign: 'center', py: 0.8, px: 1, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1.5 }}>
+      <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: 'text.primary', lineHeight: 1.2 }}>
+        {value}
+      </Typography>
+      <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', fontWeight: 500 }}>
+        {label}
+      </Typography>
+    </Box>
+  );
+
+  return (
+    <Card sx={{ height: '100%', overflow: 'hidden' }}>
+      {/* Colored header with client name */}
+      <Box sx={{
+        background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`,
+        px: 2, py: 1.2,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Avatar sx={{ width: 30, height: 30, bgcolor: 'rgba(255,255,255,0.25)', fontSize: '0.8rem', fontWeight: 700, color: 'white' }}>
+            {client.name?.charAt(0)}
+          </Avatar>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: 'white' }}>
+            {client.name}
+          </Typography>
+        </Box>
+        <Chip label={todayStr} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontSize: '0.68rem', height: 22 }} />
       </Box>
-      <Grid container spacing={1.5}>
-        {/* Meta Section */}
-        <Grid size={6}>
-          <Box sx={{ p: 1.5, bgcolor: '#1877f210', borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ color: '#1877f2', fontWeight: 600 }}>Meta</Typography>
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="caption" color="text.secondary">Fund</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{(data?.metaFund || 0).toLocaleString()}</Typography>
-            </Box>
-            <Box sx={{ mt: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">CPL</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{(data?.metaCPL || 0).toFixed(2)}</Typography>
-            </Box>
-            <Box sx={{ mt: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">Leads</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>{data?.metaLeads || 0}</Typography>
+
+      <CardContent sx={{ px: 2, py: 1.5, '&:last-child': { pb: 1.5 } }}>
+        {/* META row */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+            <Facebook sx={{ color: '#1877f2', fontSize: 18 }} />
+            <Typography sx={{ fontWeight: 700, color: '#1877f2', fontSize: '0.78rem' }}>META</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flex: 1, gap: 0.8 }}>
+            <MetricBox value={data.metaForm || 0} label="Form" />
+            <MetricBox value={data.metaWhatsapp || 0} label="WhatsApp" />
+            <MetricBox value={(data.metaFund || 0).toLocaleString()} label="Fund" />
+            <MetricBox value={(data.metaCPL || 0).toFixed(0)} label="CPL" />
+          </Box>
+        </Box>
+
+        <Divider sx={{ mb: 1.5 }} />
+
+        {/* GOOGLE row */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
+            <Google sx={{ color: '#34a853', fontSize: 18 }} />
+            <Typography sx={{ fontWeight: 700, color: '#34a853', fontSize: '0.78rem' }}>GOOGLE</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flex: 1, gap: 0.8 }}>
+            <MetricBox value={data.googleCall || 0} label="Call" />
+            <MetricBox value={data.googleWebsite || 0} label="Website" />
+            <MetricBox value={(data.googleFund || 0).toLocaleString()} label="Fund" />
+            <MetricBox value={(data.googleCPL || 0).toFixed(0)} label="CPL" />
+          </Box>
+        </Box>
+
+        {/* Total bar at bottom */}
+        {totalLeads > 0 && (
+          <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px dashed', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Total Leads</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Chip label={`Meta: ${metaLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#1877f212', color: '#1877f2', fontWeight: 600 }} />
+              <Chip label={`Google: ${googleLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#34a85312', color: '#34a853', fontWeight: 600 }} />
+              <Chip label={totalLeads} size="small" sx={{ height: 22, fontSize: '0.75rem', bgcolor: `${color}18`, color: color, fontWeight: 700 }} />
             </Box>
           </Box>
-        </Grid>
-        {/* Google Section */}
-        <Grid size={6}>
-          <Box sx={{ p: 1.5, bgcolor: '#34a85310', borderRadius: 1 }}>
-            <Typography variant="caption" sx={{ color: '#34a853', fontWeight: 600 }}>Google</Typography>
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="caption" color="text.secondary">Fund</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{(data?.googleFund || 0).toLocaleString()}</Typography>
-            </Box>
-            <Box sx={{ mt: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">CPL</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{(data?.googleCPL || 0).toFixed(2)}</Typography>
-            </Box>
-            <Box sx={{ mt: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">Leads</Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>{data?.googleLeads || 0}</Typography>
-            </Box>
-          </Box>
-        </Grid>
-      </Grid>
-    </CardContent>
-  </Card>
-);
-
-// Lead Type Card with comparison
-const LeadTypeCard = ({ title, value, comparison, icon, color }) => (
-  <Card sx={{ height: '100%', border: '1px solid', borderColor: 'divider' }}>
-    <CardContent sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <Box sx={{ width: 32, height: 32, borderRadius: 1, bgcolor: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {React.cloneElement(icon, { sx: { color, fontSize: 18 } })}
-        </Box>
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>{title}</Typography>
-      </Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, color, mb: 0.5 }}>{value}</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        {comparison >= 0 ? (
-          <TrendingUpIcon sx={{ fontSize: 14, color: 'success.main' }} />
-        ) : (
-          <TrendingDownIcon sx={{ fontSize: 14, color: 'error.main' }} />
         )}
-        <Typography variant="caption" sx={{ color: comparison >= 0 ? 'success.main' : 'error.main', fontWeight: 500 }}>
-          {comparison >= 0 ? '+' : ''}{comparison} vs yesterday
-        </Typography>
-      </Box>
-    </CardContent>
-  </Card>
-);
+      </CardContent>
+    </Card>
+  );
+};
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const { clients, loading } = useSelector((state) => state.clients);
-  const { user } = useSelector((state) => state.auth);
+  const { accentColor } = useContext(ThemeContext);
+  const primaryColor = accentColor?.primary || '#4A7CC9';
+  const { leads: cachedLeads, clients: cachedClients, leadsLoading, clientsLoading, refreshAll } = useDataCache();
 
-  const [selectedClient, setSelectedClient] = useState('all');
+  const loading = leadsLoading || clientsLoading;
 
-  useEffect(() => {
-    dispatch(fetchClients({ limit: 100 }));
-  }, [dispatch]);
+  // Transform clients to simple format
+  const clients = useMemo(() =>
+    cachedClients.map(c => ({ _id: c._id, name: c.clientName, status: c.status })),
+  [cachedClients]);
 
-  // Mock data - replace with actual API calls
-  const dashboardData = useMemo(() => {
-    // This would come from API based on selectedClient
-    return {
-      totalLeads: 156,
-      totalLeadsYesterday: 142,
-      activeClients: clients.filter(c => c.status === 'Active').length || 12,
-      metaLeads: 89,
-      metaLeadsYesterday: 82,
-      googleLeads: 67,
-      googleLeadsYesterday: 60,
-      metaFund: 125000,
-      metaCPL: 245.50,
-      googleFund: 98000,
-      googleCPL: 312.75,
-    };
-  }, [clients, selectedClient]);
-
-  // Client-wise data for current date
-  const clientsData = useMemo(() => {
-    return clients.map(client => ({
-      client,
-      data: {
-        metaFund: Math.floor(Math.random() * 50000) + 10000,
-        metaCPL: Math.random() * 300 + 100,
-        metaLeads: Math.floor(Math.random() * 50) + 5,
-        googleFund: Math.floor(Math.random() * 40000) + 8000,
-        googleCPL: Math.random() * 400 + 150,
-        googleLeads: Math.floor(Math.random() * 40) + 3,
-      },
-    }));
-  }, [clients]);
-
-  // Today's performance data for chart
-  const todayPerformance = useMemo(() => {
-    return [
-      { hour: '9 AM', meta: 12, google: 8 },
-      { hour: '10 AM', meta: 18, google: 12 },
-      { hour: '11 AM', meta: 25, google: 18 },
-      { hour: '12 PM', meta: 22, google: 15 },
-      { hour: '1 PM', meta: 15, google: 10 },
-      { hour: '2 PM', meta: 28, google: 22 },
-      { hour: '3 PM', meta: 35, google: 28 },
-      { hour: '4 PM', meta: 42, google: 32 },
-      { hour: '5 PM', meta: 38, google: 30 },
-      { hour: '6 PM', meta: 30, google: 25 },
-    ];
+  const today = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }, []);
 
-  // Lead types data
-  const leadTypesData = useMemo(() => ({
-    metaForm: { value: 45, comparison: 8 },
-    whatsApp: { value: 44, comparison: -3 },
-    website: { value: 38, comparison: 12 },
-    googleCall: { value: 29, comparison: 5 },
-  }), []);
+  const todayLeads = useMemo(() => cachedLeads.filter(l => l.date === today), [cachedLeads, today]);
 
-  // Channel performance data
-  const channelPerformance = useMemo(() => [
-    { channel: 'Facebook', leads: 45, spend: 35000, cpl: 778 },
-    { channel: 'Instagram', leads: 44, spend: 28000, cpl: 636 },
-    { channel: 'Google Search', leads: 38, spend: 42000, cpl: 1105 },
-    { channel: 'Google Display', leads: 29, spend: 18000, cpl: 621 },
-  ], []);
+  const todayByClient = useMemo(() => {
+    const map = {};
+    todayLeads.forEach(lead => {
+      map[lead.clientId] = {
+        metaForm: lead.metaFormLead || 0, metaWhatsapp: lead.metaWhatsappLead || 0,
+        metaFund: lead.metaFund || 0, metaCPL: lead.metaCpl || 0,
+        googleCall: lead.googleCallLead || 0, googleWebsite: lead.googleWebsiteLead || 0,
+        googleFund: lead.googleFund || 0, googleCPL: lead.googleCpl || 0,
+      };
+    });
+    return map;
+  }, [todayLeads]);
 
-  // Client Analysis data (without ROI)
-  const clientAnalysis = useMemo(() => {
-    return clients.slice(0, 6).map(client => ({
-      name: client.name?.substring(0, 10) || 'Client',
-      metaLeads: Math.floor(Math.random() * 30) + 5,
-      googleLeads: Math.floor(Math.random() * 25) + 3,
-    }));
-  }, [clients]);
+  const emptyData = { metaForm: 0, metaWhatsapp: 0, metaFund: 0, metaCPL: 0, googleCall: 0, googleWebsite: 0, googleFund: 0, googleCPL: 0 };
 
-  // Top performing clients
-  const topPerformingClients = useMemo(() => {
-    return clients.slice(0, 5).map((client, index) => ({
-      rank: index + 1,
-      name: client.name,
-      totalLeads: Math.floor(Math.random() * 100) + 20,
-      metaLeads: Math.floor(Math.random() * 60) + 10,
-      googleLeads: Math.floor(Math.random() * 40) + 5,
-      totalSpend: Math.floor(Math.random() * 100000) + 20000,
-    }));
-  }, [clients]);
+  // Aggregated totals
+  const totals = useMemo(() => {
+    const t = { metaForm: 0, metaWhatsapp: 0, metaFund: 0, googleCall: 0, googleWebsite: 0, googleFund: 0 };
+    todayLeads.forEach(l => {
+      t.metaForm += l.metaFormLead || 0;
+      t.metaWhatsapp += l.metaWhatsappLead || 0;
+      t.metaFund += l.metaFund || 0;
+      t.googleCall += l.googleCallLead || 0;
+      t.googleWebsite += l.googleWebsiteLead || 0;
+      t.googleFund += l.googleFund || 0;
+    });
+    t.metaLeads = t.metaForm + t.metaWhatsapp;
+    t.googleLeads = t.googleCall + t.googleWebsite;
+    t.totalLeads = t.metaLeads + t.googleLeads;
+    t.totalSpend = t.metaFund + t.googleFund;
+    return t;
+  }, [todayLeads]);
 
-  // Show loader during initial data fetch (loading OR no clients loaded yet)
-  if (loading || clients.length === 0) {
+  // Bar chart — clients with data
+  const clientBarData = useMemo(() => {
+    return clients.map(c => {
+      const d = todayByClient[c._id] || emptyData;
+      const meta = (d.metaForm || 0) + (d.metaWhatsapp || 0);
+      const google = (d.googleCall || 0) + (d.googleWebsite || 0);
+      // Short label for X-axis, full name for tooltip
+      const short = c.name?.length > 12 ? c.name.substring(0, 12) + '…' : c.name;
+      return { name: c.name, short, meta, google, total: meta + google };
+    }).filter(d => d.total > 0).sort((a, b) => b.total - a.total);
+  }, [clients, todayByClient]);
+
+  // Top clients for table
+  const topClients = useMemo(() => {
+    return clients.map(c => {
+      const d = todayByClient[c._id] || emptyData;
+      const meta = (d.metaForm || 0) + (d.metaWhatsapp || 0);
+      const google = (d.googleCall || 0) + (d.googleWebsite || 0);
+      const total = meta + google;
+      const spend = (d.metaFund || 0) + (d.googleFund || 0);
+      return { name: c.name, meta, google, total, spend, cpl: total > 0 ? Math.round(spend / total) : 0 };
+    }).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
+  }, [clients, todayByClient]);
+
+  if (loading) {
     return <PageLoader message="Loading dashboard..." />;
   }
 
+  const activeClients = clients.filter(c => c.status === 'Active' || c.status === 'active').length;
+  const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const todayLong = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
   return (
     <Box>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+      {/* ── Header ── */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
-            Dashboard
-          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
-            Welcome back, {user?.name || 'Admin'}! Here's today's overview.
+            Today's Client Performance — {todayLong}
           </Typography>
         </Box>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Select Client</InputLabel>
-          <Select
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            label="Select Client"
-          >
-            <MenuItem value="all">All Clients</MenuItem>
-            {clients.map(client => (
-              <MenuItem key={client._id} value={client._id}>{client.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Button variant="outlined" startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />} onClick={refreshAll} disabled={loading}>
+          Refresh
+        </Button>
       </Box>
 
-      {/* Main Stats Cards */}
+      {/* ── Row 1: Summary Stats ── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Total Leads"
-            value={dashboardData.totalLeads}
-            icon={<TrendingUpIcon />}
-            color="#667eea"
-            comparison={dashboardData.totalLeads - dashboardData.totalLeadsYesterday}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Active Clients"
-            value={dashboardData.activeClients}
-            icon={<PeopleIcon />}
-            color="#10b981"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Meta Leads"
-            value={dashboardData.metaLeads}
-            icon={<Facebook />}
-            color="#1877f2"
-            comparison={dashboardData.metaLeads - dashboardData.metaLeadsYesterday}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Google Leads"
-            value={dashboardData.googleLeads}
-            icon={<Google />}
-            color="#34a853"
-            comparison={dashboardData.googleLeads - dashboardData.googleLeadsYesterday}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Meta Fund"
-            value={`₹${dashboardData.metaFund.toLocaleString()}`}
-            icon={<MoneyIcon />}
-            color="#4267B2"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Meta CPL"
-            value={`₹${dashboardData.metaCPL.toFixed(2)}`}
-            icon={<Campaign />}
-            color="#1877f2"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Google Fund"
-            value={`₹${dashboardData.googleFund.toLocaleString()}`}
-            icon={<MoneyIcon />}
-            color="#ea4335"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
-          <StatsCard
-            title="Google CPL"
-            value={`₹${dashboardData.googleCPL.toFixed(2)}`}
-            icon={<Campaign />}
-            color="#34a853"
-          />
-        </Grid>
-      </Grid>
-
-      {/* All Clients Current Date Leads */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Today's Client Performance
-            <Chip
-              label={new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-              size="small"
-              color="primary"
-              sx={{ ml: 2 }}
-            />
-          </Typography>
-          <Grid container spacing={2}>
-            {clientsData.map(({ client, data }) => (
-              <Grid key={client._id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <ClientCard client={client} data={data} />
-              </Grid>
-            ))}
-            {clientsData.length === 0 && (
-              <Grid size={12}>
-                <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-                  No clients found. Please add clients first.
-                </Typography>
-              </Grid>
-            )}
+        {[
+          { label: 'Total Clients', value: clients.length, color: primaryColor, icon: <People /> },
+          { label: 'Active Clients', value: activeClients, color: '#10b981', icon: <People /> },
+          { label: 'Total Leads', value: totals.totalLeads, color: '#667eea', icon: <TrendingUpIcon /> },
+          { label: 'Meta Leads', value: totals.metaLeads, color: '#1877f2', icon: <Facebook /> },
+          { label: 'Google Leads', value: totals.googleLeads, color: '#34a853', icon: <Google /> },
+          { label: 'Total Spend', value: `₹${totals.totalSpend.toLocaleString()}`, color: '#f59e0b', icon: <TrendingUpIcon /> },
+        ].map((s, i) => (
+          <Grid key={i} size={{ xs: 6, sm: 4, md: 2 }}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ width: 42, height: 42, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 22 } })}
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1.35rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
+                </Box>
+              </CardContent>
+            </Card>
           </Grid>
-        </CardContent>
-      </Card>
-
-      {/* Meta and Google Today's Performance Chart */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Meta & Google Today's Performance
-          </Typography>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={todayPerformance}>
-              <defs>
-                <linearGradient id="colorMeta" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1877f2" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#1877f2" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorGoogle" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#34a853" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#34a853" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="hour" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="meta"
-                name="Meta Leads"
-                stroke="#1877f2"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorMeta)"
-              />
-              <Area
-                type="monotone"
-                dataKey="google"
-                name="Google Leads"
-                stroke="#34a853"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorGoogle)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Lead Types Compared to Yesterday */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <LeadTypeCard
-            title="Meta Form"
-            value={leadTypesData.metaForm.value}
-            comparison={leadTypesData.metaForm.comparison}
-            icon={<Facebook />}
-            color="#1877f2"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <LeadTypeCard
-            title="WhatsApp"
-            value={leadTypesData.whatsApp.value}
-            comparison={leadTypesData.whatsApp.comparison}
-            icon={<WhatsApp />}
-            color="#25D366"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <LeadTypeCard
-            title="Website"
-            value={leadTypesData.website.value}
-            comparison={leadTypesData.website.comparison}
-            icon={<Language />}
-            color="#ea4335"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <LeadTypeCard
-            title="Google Call"
-            value={leadTypesData.googleCall.value}
-            comparison={leadTypesData.googleCall.comparison}
-            icon={<Phone />}
-            color="#34a853"
-          />
-        </Grid>
+        ))}
       </Grid>
 
-      {/* Channel Performance */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
+      {/* ── Row 2: Client Leads Bar Chart (full width) ── */}
+      <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Channel Performance
-          </Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: '#f9fafb' }}>
-                  <TableCell sx={{ fontWeight: 700 }}>Channel</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }} align="right">Leads</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }} align="right">Spend</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }} align="right">CPL</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {channelPerformance.map((row) => (
-                  <TableRow key={row.channel} hover>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {row.channel.includes('Facebook') || row.channel.includes('Instagram') ? (
-                          <Facebook sx={{ color: '#1877f2', fontSize: 20 }} />
-                        ) : (
-                          <Google sx={{ color: '#34a853', fontSize: 20 }} />
-                        )}
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{row.channel}</Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell align="right">{row.leads}</TableCell>
-                    <TableCell align="right">₹{row.spend.toLocaleString()}</TableCell>
-                    <TableCell align="right">₹{row.cpl.toFixed(2)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Typography sx={{ fontWeight: 600, fontSize: '0.92rem', mb: 0.5 }}>Client Leads — Meta vs Google</Typography>
+          <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mb: 1 }}>Today's performance by client</Typography>
+          {clientBarData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={clientBarData} barGap={4} barSize={22} margin={{ left: 0, right: 10, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                <XAxis dataKey="short" tick={{ fontSize: 10.5 }} tickLine={false} axisLine={false} angle={-40} textAnchor="end" height={80} interval={0} />
+                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                <RechartsTooltip content={<GlassTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+                <Legend wrapperStyle={{ fontSize: '0.85rem', paddingTop: 4 }} />
+                <Bar dataKey="meta" name="Meta Leads" fill="#1877f2" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="google" name="Google Leads" fill="#34a853" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <Box sx={{ py: 6, textAlign: 'center' }}>
+              <Typography sx={{ color: 'text.secondary' }}>No leads data today</Typography>
+            </Box>
+          )}
         </CardContent>
       </Card>
 
-      {/* Client Analysis Bar Chart (without ROI) */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Client Analysis
-          </Typography>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={clientAnalysis} barGap={8}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="metaLeads" name="Meta Leads" fill="#1877f2" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="googleLeads" name="Google Leads" fill="#34a853" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      {/* ── Row 3: Client Performance Cards ── */}
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 1.5 }}>
+        Client-wise Performance
+        <Typography component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary', ml: 1 }}>
+          {clients.length} clients
+        </Typography>
+      </Typography>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {[...clients].sort((a, b) => {
+          const aLeads = todayByClient[a._id] ? ((todayByClient[a._id].metaForm || 0) + (todayByClient[a._id].metaWhatsapp || 0) + (todayByClient[a._id].googleCall || 0) + (todayByClient[a._id].googleWebsite || 0)) : 0;
+          const bLeads = todayByClient[b._id] ? ((todayByClient[b._id].metaForm || 0) + (todayByClient[b._id].metaWhatsapp || 0) + (todayByClient[b._id].googleCall || 0) + (todayByClient[b._id].googleWebsite || 0)) : 0;
+          return bLeads - aLeads;
+        }).map((client, i) => (
+          <Grid key={client._id} size={{ xs: 12, md: 6, lg: 4 }}>
+            <ClientCard
+              client={client}
+              data={todayByClient[client._id] || emptyData}
+              color={CLIENT_COLORS[i % CLIENT_COLORS.length]}
+              todayStr={todayStr}
+            />
+          </Grid>
+        ))}
+        {clients.length === 0 && (
+          <Grid size={12}>
+            <Card><CardContent sx={{ textAlign: 'center', py: 4 }}><Typography color="text.secondary">No clients found</Typography></CardContent></Card>
+          </Grid>
+        )}
+      </Grid>
 
-      {/* Top Performing Clients (without Actions and ROI) */}
-      <Card sx={{ border: '1px solid', borderColor: 'divider' }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Top Performing Clients
-          </Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: '#f9fafb' }}>
-                  <TableCell sx={{ fontWeight: 700 }}>Rank</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Client</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }} align="right">Total Leads</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: '#1877f2' }} align="right">Meta Leads</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: '#34a853' }} align="right">Google Leads</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }} align="right">Total Spend</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {topPerformingClients.map((client) => (
-                  <TableRow key={client.rank} hover>
-                    <TableCell>
-                      <Chip
-                        label={`#${client.rank}`}
-                        size="small"
-                        sx={{
-                          bgcolor: client.rank === 1 ? '#ffd700' : client.rank === 2 ? '#c0c0c0' : client.rank === 3 ? '#cd7f32' : '#f3f4f6',
-                          color: client.rank <= 3 ? 'white' : 'text.primary',
-                          fontWeight: 700,
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar sx={{ width: 28, height: 28, bgcolor: '#667eea', fontSize: '0.75rem' }}>
-                          {client.name?.charAt(0) || 'C'}
-                        </Avatar>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{client.name}</Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{client.totalLeads}</Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1877f2' }}>{client.metaLeads}</Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#34a853' }}>{client.googleLeads}</Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{client.totalSpend.toLocaleString()}</Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {topPerformingClients.length === 0 && (
+      {/* ── Row 4: Top Performing Clients Table ── */}
+      {topClients.length > 0 && (
+        <Card>
+          <CardContent>
+            <Typography sx={{ fontWeight: 600, fontSize: '0.92rem', mb: 1.5 }}>
+              Top Performing Clients
+              <Typography component="span" sx={{ fontSize: '0.72rem', color: 'text.secondary', ml: 1 }}>Ranked by today's leads</Typography>
+            </Typography>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                      <Typography color="text.secondary">No clients found</Typography>
-                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>#</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Client</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#1877f2' }} align="right">Meta</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#34a853' }} align="right">Google</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="right">Total</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="right">Spend</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }} align="right">CPL</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
-      </Card>
+                </TableHead>
+                <TableBody>
+                  {topClients.map((c, i) => (
+                    <TableRow key={i} hover>
+                      <TableCell>
+                        <Chip label={i + 1} size="small" sx={{
+                          height: 22, minWidth: 28, fontWeight: 700,
+                          bgcolor: i === 0 ? '#ffd70025' : i === 1 ? '#c0c0c025' : i === 2 ? '#cd7f3225' : 'transparent',
+                          color: i === 0 ? '#b8860b' : i === 1 ? '#808080' : i === 2 ? '#8b4513' : 'text.secondary',
+                          border: i > 2 ? '1px solid' : 'none', borderColor: 'divider',
+                        }} />
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Avatar sx={{ width: 26, height: 26, fontSize: '0.68rem', fontWeight: 700, bgcolor: CLIENT_COLORS[i % CLIENT_COLORS.length] }}>
+                            {c.name?.charAt(0)}
+                          </Avatar>
+                          <Typography sx={{ fontWeight: 500 }}>{c.name}</Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: '#1877f2', fontWeight: 600 }}>{c.meta}</TableCell>
+                      <TableCell align="right" sx={{ color: '#34a853', fontWeight: 600 }}>{c.google}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, color: primaryColor }}>{c.total}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>₹{c.spend.toLocaleString()}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600, color: c.cpl > 500 ? '#ef4444' : '#10b981' }}>₹{c.cpl}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 };

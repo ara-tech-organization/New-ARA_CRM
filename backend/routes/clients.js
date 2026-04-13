@@ -12,11 +12,25 @@ import { protect } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
 import { clientValidation, idValidation, paginationValidation } from '../utils/validators.js';
 import { checkPermission, PERMISSIONS } from '../middleware/permissions.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
 // All routes are protected
 router.use(protect);
+
+// Get SMM users for Assigned SMM/SME dropdowns — must be before /:id
+router.get('/smm-users', checkPermission(PERMISSIONS.CLIENT_READ), async (req, res) => {
+  try {
+    const smmUsers = await User.find({ role: 'SMM', isActive: true })
+      .select('name email userID team')
+      .sort({ name: 1 })
+      .lean();
+    res.json({ success: true, data: smmUsers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch SMM users' });
+  }
+});
 
 router.route('/')
   .get(paginationValidation, validate, checkPermission(PERMISSIONS.CLIENT_READ), getClients)

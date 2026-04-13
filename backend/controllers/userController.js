@@ -75,7 +75,7 @@ export const getUser = asyncHandler(async (req, res) => {
  * @access  Private (Admin/Superadmin)
  */
 export const createUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, phone, department, permissions } = req.body;
+  const { name, email, password, role, phone, department, permissions, team } = req.body;
 
   // Check if user exists
   const userExists = await User.findOne({ email });
@@ -105,23 +105,36 @@ export const createUser = asyncHandler(async (req, res) => {
   }
 
   // Create user
-  const user = await User.create({
-    name,
-    email,
-    password,
-    role: role || 'SMM',
-    permissions: userPermissions,
-    phone,
-    department,
-  });
+  try {
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role: role || 'SMM',
+      permissions: userPermissions,
+      phone,
+      department,
+      team: role === 'SMM' ? (team || '') : '',
+    });
 
-  // Return user without password
-  const userResponse = await User.findById(user._id).select('-password');
+    // Return user without password
+    const userResponse = await User.findById(user._id).select('-password');
 
-  res.status(201).json({
-    success: true,
-    data: userResponse,
-  });
+    res.status(201).json({
+      success: true,
+      data: userResponse,
+    });
+  } catch (error) {
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || 'field';
+      return res.status(400).json({
+        success: false,
+        message: `A user with this ${field} already exists`,
+      });
+    }
+    throw error;
+  }
 });
 
 /**
@@ -222,6 +235,39 @@ export const toggleUserStatus = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Change user password (by Admin)
+ * @route   PATCH /api/users/:id/change-password
+ * @access  Private (Admin/Superadmin)
+ */
+export const changeUserPassword = asyncHandler(async (req, res) => {
+  const { newPassword } = req.body;
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: 'Password must be at least 6 characters',
+    });
+  }
+
+  const user = await User.findById(req.params.id).select('+password');
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found',
+    });
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: `Password changed successfully for ${user.name}`,
+  });
+});
+
+/**
  * @desc    Update user permissions
  * @route   PATCH /api/users/:id/permissions
  * @access  Private (Superadmin only)
@@ -245,6 +291,21 @@ export const updateUserPermissions = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: user,
+  });
+});
+
+/**
+ * @desc    Get distinct teams from users
+ * @route   GET /api/users/teams
+ * @access  Private (Admin/Superadmin)
+ */
+export const getTeams = asyncHandler(async (req, res) => {
+  const teams = await User.distinct('team', { team: { $ne: '' } });
+  teams.sort();
+
+  res.status(200).json({
+    success: true,
+    data: teams,
   });
 });
 

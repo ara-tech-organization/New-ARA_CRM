@@ -1,4 +1,9 @@
 import Client from '../models/Client.js';
+import DailyEntry from '../models/DailyEntry.js';
+import FundEntry from '../models/FundEntry.js';
+import ContentEntry from '../models/ContentEntry.js';
+import Lead from '../models/Lead.js';
+import Vault from '../models/Vault.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 /**
@@ -91,6 +96,13 @@ export const createClient = asyncHandler(async (req, res) => {
     customerID,
     removalReason,
     links,
+    team,
+    assignedSMM,
+    assignedSME,
+    creativeCommitment,
+    staticCommitment,
+    motionCreative,
+    notes,
   } = req.body;
 
   // Validate required field
@@ -113,6 +125,13 @@ export const createClient = asyncHandler(async (req, res) => {
     customerID: customerID || '',
     removalReason: removalReason || '',
     links: links || [],
+    team: team || '',
+    assignedSMM: assignedSMM || '',
+    assignedSME: assignedSME || '',
+    creativeCommitment: creativeCommitment || '',
+    staticCommitment: staticCommitment || '',
+    motionCreative: motionCreative || '',
+    notes: notes || '',
   });
 
   res.status(201).json({
@@ -163,11 +182,23 @@ export const deleteClient = asyncHandler(async (req, res) => {
     });
   }
 
+  const clientIdStr = client._id.toString();
+  const clientName = client.clientName;
+
+  // Cascade delete all related data
+  await Promise.all([
+    DailyEntry.deleteMany({ clientId: clientIdStr }),
+    FundEntry.deleteMany({ $or: [{ client: client._id }, { clientId: clientIdStr }] }),
+    ContentEntry.deleteMany({ clientName }),
+    Lead.deleteMany({ client: client._id }),
+    Vault.deleteMany({ clientId: clientIdStr }),
+  ]);
+
   await client.deleteOne();
 
   res.status(200).json({
     success: true,
-    message: 'Client deleted successfully',
+    message: 'Client and all related data deleted successfully',
   });
 });
 

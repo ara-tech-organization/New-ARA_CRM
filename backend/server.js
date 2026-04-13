@@ -19,6 +19,8 @@ import dailyLeadDataRoutes from './routes/dailyLeadData.js';
 import reportRoutes from './routes/reports.js';
 import leadRoutes from './routes/leads.js';
 import vaultRoutes from './routes/vault.js';
+import personalVaultRoutes from './routes/personalVault.js';
+import contentEntryRoutes from './routes/contentEntries.js';
 
 // Load environment variables
 dotenv.config();
@@ -29,12 +31,30 @@ connectDB();
 const app = express();
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: false,
+}));
 
 // CORS configuration
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'https://crm.aradiscoveries.com',
+  'http://localhost:3000',
+].filter(Boolean);
+
 const corsOptions = {
-  origin: process.env.CLIENT_URL,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (server-to-server, mobile apps)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
@@ -76,6 +96,8 @@ app.use('/api/daily-lead-data', dailyLeadDataRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/vault', vaultRoutes);
+app.use('/api/personal-vault', personalVaultRoutes);
+app.use('/api/content-entries', contentEntryRoutes);
 
 // Basic route
 app.get('/', (req, res) => {

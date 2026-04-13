@@ -127,6 +127,9 @@ const fundEntrySchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    metaFundDate: {
+      type: Date,
+    },
     googleAmount: {
       type: Number,
       default: 0,
@@ -139,6 +142,9 @@ const fundEntrySchema = new mongoose.Schema(
     googlePaymentDetails: {
       type: String,
       default: '',
+    },
+    googleFundDate: {
+      type: Date,
     },
     totalAmountAdded: {
       type: Number,

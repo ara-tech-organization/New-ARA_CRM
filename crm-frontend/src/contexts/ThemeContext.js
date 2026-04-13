@@ -1,32 +1,14 @@
-import React, { createContext, useState, useMemo, useEffect, useContext } from 'react';
+import { createContext, useState, useMemo, useEffect, useContext } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
-// Premium color palette
-export const premiumColors = [
-  { name: 'Royal Indigo', primary: '#6366F1', secondary: '#818CF8', text: '#FFFFFF' },
-  { name: 'Ocean Blue', primary: '#0EA5E9', secondary: '#38BDF8', text: '#FFFFFF' },
-  { name: 'Emerald', primary: '#10B981', secondary: '#34D399', text: '#FFFFFF' },
-  { name: 'Sunset Orange', primary: '#F97316', secondary: '#FB923C', text: '#FFFFFF' },
-  { name: 'Rose Pink', primary: '#EC4899', secondary: '#F472B6', text: '#FFFFFF' },
-  { name: 'Purple Haze', primary: '#8B5CF6', secondary: '#A78BFA', text: '#FFFFFF' },
-  { name: 'Crimson', primary: '#DC2626', secondary: '#EF4444', text: '#FFFFFF' },
-  { name: 'Teal', primary: '#14B8A6', secondary: '#2DD4BF', text: '#FFFFFF' },
-  { name: 'Amber Gold', primary: '#D97706', secondary: '#FBBF24', text: '#1F2937' },
-  { name: 'Slate', primary: '#475569', secondary: '#64748B', text: '#FFFFFF' },
-];
-
-// Default accent color
-const defaultAccentColor = premiumColors[0];
+// Fixed brand colors — professional navy + blue
+const brandColor = { primary: '#2563EB', secondary: '#3B82F6', text: '#FFFFFF' };
 
 export const ThemeContext = createContext({
   mode: 'light',
   toggleTheme: () => {},
-  accentColor: defaultAccentColor,
-  setAccentColor: () => {},
-  applyAccentColor: () => {},
-  pendingAccentColor: defaultAccentColor,
-  setPendingAccentColor: () => {},
+  accentColor: brandColor,
 });
 
 // Hook to use theme context
@@ -73,7 +55,6 @@ const getDesignTokens = (mode, accentColor) => ({
     mode,
     ...(mode === 'light'
       ? {
-          // Light mode colors with dynamic accent
           primary: {
             main: accentColor.primary,
             light: accentColor.secondary,
@@ -86,38 +67,18 @@ const getDesignTokens = (mode, accentColor) => ({
             dark: accentColor.primary,
             contrastText: accentColor.text,
           },
-          success: {
-            main: '#10b981',
-            light: '#34d399',
-            dark: '#059669',
-          },
-          warning: {
-            main: '#f59e0b',
-            light: '#fbbf24',
-            dark: '#d97706',
-          },
-          error: {
-            main: '#ef4444',
-            light: '#f87171',
-            dark: '#dc2626',
-          },
-          info: {
-            main: '#3b82f6',
-            light: '#60a5fa',
-            dark: '#2563eb',
-          },
+          success: { main: '#10b981', light: '#34d399', dark: '#059669' },
+          warning: { main: '#f59e0b', light: '#fbbf24', dark: '#d97706' },
+          error: { main: '#ef4444', light: '#f87171', dark: '#dc2626' },
+          info: { main: '#3b82f6', light: '#60a5fa', dark: '#2563eb' },
           background: {
-            default: '#f8f9fa',
-            paper: '#ffffff',
+            default: 'transparent',
+            paper: 'rgba(255, 255, 255, 0.55)',
           },
-          text: {
-            primary: '#1f2937',
-            secondary: '#6b7280',
-          },
-          divider: 'rgba(0, 0, 0, 0.08)',
+          text: { primary: '#1e293b', secondary: '#64748b' },
+          divider: 'rgba(255, 255, 255, 0.4)',
         }
       : {
-          // Dark mode colors with dynamic accent
           primary: {
             main: accentColor.secondary,
             light: lightenColor(accentColor.secondary, 15),
@@ -130,66 +91,81 @@ const getDesignTokens = (mode, accentColor) => ({
             dark: accentColor.secondary,
             contrastText: accentColor.text,
           },
-          success: {
-            main: '#34d399',
-            light: '#6ee7b7',
-            dark: '#10b981',
-          },
-          warning: {
-            main: '#fbbf24',
-            light: '#fcd34d',
-            dark: '#f59e0b',
-          },
-          error: {
-            main: '#f87171',
-            light: '#fca5a5',
-            dark: '#ef4444',
-          },
-          info: {
-            main: '#60a5fa',
-            light: '#93c5fd',
-            dark: '#3b82f6',
-          },
+          success: { main: '#34d399', light: '#6ee7b7', dark: '#10b981' },
+          warning: { main: '#fbbf24', light: '#fcd34d', dark: '#f59e0b' },
+          error: { main: '#f87171', light: '#fca5a5', dark: '#ef4444' },
+          info: { main: '#60a5fa', light: '#93c5fd', dark: '#3b82f6' },
           background: {
-            default: '#0f172a',
-            paper: '#1e293b',
+            default: 'transparent',
+            paper: 'rgba(15, 23, 42, 0.6)',
           },
-          text: {
-            primary: '#f1f5f9',
-            secondary: '#cbd5e1',
-          },
+          text: { primary: '#f1f5f9', secondary: '#94a3b8' },
           divider: 'rgba(255, 255, 255, 0.08)',
         }),
   },
   typography: {
     fontFamily: '"Poppins", "Helvetica", "Arial", sans-serif',
-    h1: { fontSize: '2.5rem', fontWeight: 700 },
-    h2: { fontSize: '2rem', fontWeight: 700 },
-    h3: { fontSize: '1.75rem', fontWeight: 600 },
-    h4: { fontSize: '1.5rem', fontWeight: 600 },
-    h5: { fontSize: '1.25rem', fontWeight: 600 },
-    h6: { fontSize: '1rem', fontWeight: 600 },
+    fontSize: 14,
+    h1: { fontSize: '2rem', fontWeight: 700 },
+    h2: { fontSize: '1.65rem', fontWeight: 700 },
+    h3: { fontSize: '1.4rem', fontWeight: 600 },
+    h4: { fontSize: '1.2rem', fontWeight: 600 },
+    h5: { fontSize: '1.05rem', fontWeight: 600 },
+    h6: { fontSize: '0.92rem', fontWeight: 600 },
+    body1: { fontSize: '0.9rem' },
+    body2: { fontSize: '0.84rem' },
+    caption: { fontSize: '0.75rem' },
+    overline: { fontSize: '0.7rem' },
+    subtitle1: { fontSize: '0.95rem', fontWeight: 600 },
+    subtitle2: { fontSize: '0.85rem', fontWeight: 600 },
   },
   shape: {
-    borderRadius: 8,
+    borderRadius: 10,
   },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          background: mode === 'light'
+            ? `linear-gradient(135deg, ${lightenColor(accentColor.primary, 42)} 0%, #f0f4f8 25%, ${lightenColor(accentColor.secondary, 44)} 50%, #f8f0f4 75%, ${lightenColor(accentColor.primary, 46)} 100%)`
+            : `linear-gradient(135deg, #0c1222 0%, ${darkenColor(accentColor.primary, 35)} 25%, #0f172a 50%, ${darkenColor(accentColor.secondary, 35)} 75%, #0c1222 100%)`,
+          backgroundAttachment: 'fixed',
+          minHeight: '100vh',
+        },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
           textTransform: 'none',
           fontWeight: 600,
           borderRadius: 8,
-          padding: '8px 20px',
+          padding: '6px 16px',
+          fontSize: '0.84rem',
+          transition: 'all 0.25s ease',
         },
         contained: {
-          boxShadow: mode === 'light'
-            ? `0 2px 8px ${accentColor.primary}40`
-            : '0 2px 8px rgba(0, 0, 0, 0.4)',
+          background: `linear-gradient(135deg, ${accentColor.primary} 0%, ${accentColor.secondary} 100%)`,
+          boxShadow: `0 4px 15px ${accentColor.primary}30`,
           '&:hover': {
-            boxShadow: mode === 'light'
-              ? `0 4px 12px ${accentColor.primary}50`
-              : '0 4px 12px rgba(0, 0, 0, 0.5)',
+            background: `linear-gradient(135deg, ${darkenColor(accentColor.primary, 8)} 0%, ${accentColor.primary} 100%)`,
+            boxShadow: `0 6px 20px ${accentColor.primary}40`,
+            transform: 'translateY(-1px)',
+          },
+        },
+        outlined: {
+          borderColor: mode === 'light'
+            ? `${accentColor.primary}40`
+            : `${accentColor.secondary}40`,
+          backdropFilter: 'blur(8px)',
+          background: mode === 'light'
+            ? 'rgba(255, 255, 255, 0.4)'
+            : 'rgba(255, 255, 255, 0.05)',
+          '&:hover': {
+            borderColor: accentColor.primary,
+            background: mode === 'light'
+              ? `${accentColor.primary}10`
+              : `${accentColor.primary}15`,
           },
         },
       },
@@ -197,11 +173,19 @@ const getDesignTokens = (mode, accentColor) => ({
     MuiCard: {
       styleOverrides: {
         root: {
-          boxShadow: mode === 'light'
-            ? '0px 2px 12px rgba(0,0,0,0.06)'
-            : '0px 2px 12px rgba(0,0,0,0.4)',
+          background: mode === 'light'
+            ? 'rgba(255, 255, 255, 0.55)'
+            : 'rgba(30, 41, 59, 0.50)',
+          backdropFilter: 'blur(16px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+          border: mode === 'light'
+            ? '1px solid rgba(255, 255, 255, 0.6)'
+            : '1px solid rgba(255, 255, 255, 0.08)',
           borderRadius: 12,
-          border: mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+          boxShadow: mode === 'light'
+            ? '0 2px 16px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.5)'
+            : '0 2px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+          transition: 'all 0.3s ease',
         },
       },
     },
@@ -209,11 +193,43 @@ const getDesignTokens = (mode, accentColor) => ({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
+          background: mode === 'light'
+            ? 'rgba(255, 255, 255, 0.50)'
+            : 'rgba(30, 41, 59, 0.45)',
+          backdropFilter: 'blur(12px) saturate(150%)',
+          WebkitBackdropFilter: 'blur(12px) saturate(150%)',
+          border: mode === 'light'
+            ? '1px solid rgba(255, 255, 255, 0.5)'
+            : '1px solid rgba(255, 255, 255, 0.06)',
+        },
+        elevation0: {
+          background: 'transparent',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
+          border: 'none',
         },
         elevation1: {
           boxShadow: mode === 'light'
-            ? '0px 2px 8px rgba(0,0,0,0.06)'
-            : '0px 2px 8px rgba(0,0,0,0.4)',
+            ? '0 2px 12px rgba(0, 0, 0, 0.05)'
+            : '0 2px 12px rgba(0, 0, 0, 0.3)',
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          background: mode === 'light'
+            ? 'rgba(255, 255, 255, 0.80)'
+            : 'rgba(30, 41, 59, 0.85)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          border: mode === 'light'
+            ? '1px solid rgba(255, 255, 255, 0.6)'
+            : '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: 14,
+          boxShadow: mode === 'light'
+            ? '0 16px 40px rgba(0, 0, 0, 0.1)'
+            : '0 16px 40px rgba(0, 0, 0, 0.45)',
         },
       },
     },
@@ -222,13 +238,75 @@ const getDesignTokens = (mode, accentColor) => ({
         root: {
           '& .MuiOutlinedInput-root': {
             borderRadius: 8,
-            transition: 'all 0.2s ease',
+            transition: 'all 0.25s ease',
+            background: mode === 'light'
+              ? 'rgba(255, 255, 255, 0.5)'
+              : 'rgba(255, 255, 255, 0.04)',
+            backdropFilter: 'blur(8px)',
             '&:hover': {
               '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: mode === 'light' ? `${accentColor.primary}50` : `${accentColor.secondary}50`,
+                borderColor: `${accentColor.primary}60`,
+              },
+            },
+            '&.Mui-focused': {
+              background: mode === 'light'
+                ? 'rgba(255, 255, 255, 0.7)'
+                : 'rgba(255, 255, 255, 0.07)',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: accentColor.primary,
+                borderWidth: '1.5px',
               },
             },
           },
+          '& .MuiOutlinedInput-notchedOutline': {
+            borderColor: mode === 'light'
+              ? 'rgba(0, 0, 0, 0.1)'
+              : 'rgba(255, 255, 255, 0.1)',
+          },
+        },
+      },
+    },
+    MuiCardContent: {
+      styleOverrides: {
+        root: {
+          padding: '14px 16px',
+          '&:last-child': { paddingBottom: '14px' },
+        },
+      },
+    },
+    MuiDialogTitle: {
+      styleOverrides: {
+        root: {
+          padding: '16px 22px',
+          fontSize: '1.05rem',
+          fontWeight: 600,
+        },
+      },
+    },
+    MuiDialogContent: {
+      styleOverrides: {
+        root: {
+          padding: '12px 22px',
+        },
+      },
+    },
+    MuiDialogActions: {
+      styleOverrides: {
+        root: {
+          padding: '12px 22px 16px',
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          padding: '7px 12px',
+          fontSize: '0.84rem',
+        },
+        head: {
+          fontSize: '0.78rem',
+          fontWeight: 600,
+          padding: '9px 12px',
         },
       },
     },
@@ -236,6 +314,46 @@ const getDesignTokens = (mode, accentColor) => ({
       styleOverrides: {
         root: {
           fontWeight: 500,
+          fontSize: '0.76rem',
+          height: 26,
+          backdropFilter: 'blur(8px)',
+          border: mode === 'light'
+            ? '1px solid rgba(255, 255, 255, 0.3)'
+            : '1px solid rgba(255, 255, 255, 0.08)',
+        },
+        sizeSmall: {
+          height: 22,
+          fontSize: '0.72rem',
+        },
+      },
+    },
+    MuiTableContainer: {
+      styleOverrides: {
+        root: {
+          background: mode === 'light'
+            ? 'rgba(255, 255, 255, 0.45)'
+            : 'rgba(30, 41, 59, 0.40)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderRadius: 12,
+          border: mode === 'light'
+            ? '1px solid rgba(255, 255, 255, 0.5)'
+            : '1px solid rgba(255, 255, 255, 0.06)',
+        },
+      },
+    },
+    MuiTableHead: {
+      styleOverrides: {
+        root: {
+          '& .MuiTableCell-head': {
+            background: mode === 'light'
+              ? `${accentColor.primary}0A`
+              : 'rgba(255, 255, 255, 0.03)',
+            borderBottom: mode === 'light'
+              ? '1px solid rgba(0, 0, 0, 0.06)'
+              : '1px solid rgba(255, 255, 255, 0.06)',
+            fontWeight: 600,
+          },
         },
       },
     },
@@ -255,6 +373,8 @@ const getDesignTokens = (mode, accentColor) => ({
       styleOverrides: {
         indicator: {
           backgroundColor: accentColor.primary,
+          height: 3,
+          borderRadius: 3,
         },
       },
     },
@@ -267,85 +387,63 @@ const getDesignTokens = (mode, accentColor) => ({
         },
       },
     },
+    MuiAlert: {
+      styleOverrides: {
+        root: {
+          backdropFilter: 'blur(12px)',
+          borderRadius: 8,
+          padding: '4px 12px',
+          fontSize: '0.8rem',
+        },
+      },
+    },
+    MuiMenu: {
+      styleOverrides: {
+        paper: {
+          background: mode === 'light'
+            ? 'rgba(255, 255, 255, 0.82) !important'
+            : 'rgba(30, 41, 59, 0.88) !important',
+          backdropFilter: 'blur(20px) saturate(180%) !important',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%) !important',
+          border: mode === 'light'
+            ? '1px solid rgba(255, 255, 255, 0.5) !important'
+            : '1px solid rgba(255, 255, 255, 0.08) !important',
+          borderRadius: '14px !important',
+          boxShadow: mode === 'light'
+            ? '0 8px 32px rgba(0, 0, 0, 0.1) !important'
+            : '0 8px 32px rgba(0, 0, 0, 0.4) !important',
+        },
+      },
+    },
   },
 });
 
 export const ThemeContextProvider = ({ children }) => {
   const [mode, setMode] = useState(() => {
     try {
-      const savedMode = localStorage.getItem('themeMode');
-      if (savedMode === 'light' || savedMode === 'dark') {
-        return savedMode;
-      }
-      return 'light';
-    } catch (error) {
-      console.error('Error loading theme from localStorage:', error);
+      const saved = localStorage.getItem('themeMode');
+      return saved === 'dark' ? 'dark' : 'light';
+    } catch {
       return 'light';
     }
   });
 
-  const [accentColor, setAccentColor] = useState(() => {
-    try {
-      const savedAccent = localStorage.getItem('accentColor');
-      if (savedAccent) {
-        const parsed = JSON.parse(savedAccent);
-        // Validate it's a valid accent color
-        const found = premiumColors.find(c => c.name === parsed.name);
-        if (found) return found;
-      }
-      return defaultAccentColor;
-    } catch (error) {
-      console.error('Error loading accent color from localStorage:', error);
-      return defaultAccentColor;
-    }
-  });
-
-  // Pending accent color for preview before applying
-  const [pendingAccentColor, setPendingAccentColor] = useState(accentColor);
+  const accentColor = brandColor;
 
   useEffect(() => {
-    try {
-      localStorage.setItem('themeMode', mode);
-      document.body.setAttribute('data-theme', mode);
-      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-      if (metaThemeColor) {
-        metaThemeColor.setAttribute('content', mode === 'dark' ? '#0f172a' : accentColor.primary);
-      }
-    } catch (error) {
-      console.error('Error saving theme to localStorage:', error);
-    }
-  }, [mode, accentColor]);
+    localStorage.setItem('themeMode', mode);
+    document.body.setAttribute('data-theme', mode);
+  }, [mode]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('accentColor', JSON.stringify(accentColor));
-    } catch (error) {
-      console.error('Error saving accent color to localStorage:', error);
-    }
-  }, [accentColor]);
+  const toggleTheme = () => setMode(prev => prev === 'light' ? 'dark' : 'light');
 
-  const toggleTheme = () => {
-    setMode((prevMode) => {
-      const newMode = prevMode === 'light' ? 'dark' : 'light';
-      return newMode;
-    });
-  };
-
-  const applyAccentColor = () => {
-    setAccentColor(pendingAccentColor);
-  };
-
-  const theme = useMemo(() => createTheme(getDesignTokens(mode, accentColor)), [mode, accentColor]);
+  const theme = useMemo(() => createTheme(getDesignTokens(mode, accentColor)), [mode]);
 
   const contextValue = useMemo(() => ({
     mode,
     toggleTheme,
     accentColor,
-    setAccentColor,
-    applyAccentColor,
-    pendingAccentColor,
-    setPendingAccentColor,
-  }), [mode, accentColor, pendingAccentColor]);
+  }), [mode]);
 
   return (
     <ThemeContext.Provider value={contextValue}>

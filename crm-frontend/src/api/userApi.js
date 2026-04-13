@@ -37,9 +37,21 @@ export const userApi = {
     return response.data;
   },
 
+  // Change user password (admin)
+  changeUserPassword: async (id, newPassword) => {
+    const response = await api.patch(`/users/${id}/change-password`, { newPassword });
+    return response.data;
+  },
+
   // Update user permissions
   updatePermissions: async (id, permissions) => {
     const response = await api.patch(`/users/${id}/permissions`, { permissions });
+    return response.data;
+  },
+
+  // Get distinct teams from database
+  getTeams: async () => {
+    const response = await api.get('/users/teams');
     return response.data;
   },
 

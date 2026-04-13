@@ -197,7 +197,7 @@ services:
       JWT_EXPIRE: 30d
       JWT_REFRESH_EXPIRE: 90d
       COOKIE_EXPIRE: 30
-      CLIENT_URL: https://crm.aradiscoveries.com
+      CLIENT_URL: http://localhost:3000
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       RATE_LIMIT_WINDOW_MS: 900000
       RATE_LIMIT_MAX_REQUESTS: 100

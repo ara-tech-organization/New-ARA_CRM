@@ -4,12 +4,12 @@ const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       // Connection pool settings for better performance
-      maxPoolSize: 50, // Maximum connections in the pool
-      minPoolSize: 10, // Minimum connections to maintain
-      maxIdleTimeMS: 30000, // Close idle connections after 30 seconds
-      serverSelectionTimeoutMS: 5000, // Timeout for server selection
-      socketTimeoutMS: 45000, // Socket timeout
-      connectTimeoutMS: 10000, // Connection timeout
+      maxPoolSize: 50,
+      minPoolSize: 10,
+      maxIdleTimeMS: 120000,
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
       // Performance optimizations
       autoIndex: process.env.NODE_ENV !== 'production', // Disable auto-indexing in production
     });

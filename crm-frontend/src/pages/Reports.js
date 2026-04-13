@@ -49,7 +49,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { PageLoader } from '../components/Loading';
-import api from '../api/axios';
+import { useDataCache } from '../contexts/DataCacheContext';
 
 // Colors for different metrics
 const METRIC_CONFIG = {
@@ -100,7 +100,7 @@ const MetricCard = ({ title, value, icon, color, prefix = '' }) => {
             <Typography color="text.secondary" variant="overline" gutterBottom>
               {title}
             </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 700, color }}>
+            <Typography variant="h5" sx={{ fontWeight: 700, color }}>
               {prefix}{typeof value === 'number' ? value.toLocaleString() : value}
             </Typography>
           </Box>
@@ -115,7 +115,7 @@ const MetricCard = ({ title, value, icon, color, prefix = '' }) => {
               justifyContent: 'center',
             }}
           >
-            {React.cloneElement(icon, { sx: { fontSize: 32, color } })}
+            {React.cloneElement(icon, { sx: { fontSize: 22, color } })}
           </Box>
         </Box>
       </CardContent>
@@ -170,7 +170,7 @@ const MetricLineChart = ({ data, metricKey, title }) => {
           </Typography>
         </Box>
         {data.length > 0 ? (
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={200}>
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
@@ -222,7 +222,7 @@ const MetricBarChart = ({ data, metricKey, title }) => {
           </Typography>
         </Box>
         {data.length > 0 ? (
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={200}>
             <BarChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -246,10 +246,31 @@ const MetricBarChart = ({ data, metricKey, title }) => {
 };
 
 const Reports = () => {
-  // Main API state - only source of data
-  const [clients, setClients] = useState([]);
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const { leads: cachedLeads, clients: cachedClients, leadsLoading: loading, refreshAll } = useDataCache();
+
+  // Transform cached data to match expected formats
+  const clients = useMemo(() =>
+    cachedClients.map(c => ({ _id: c._id, name: c.clientName })),
+  [cachedClients]);
+
+  const entries = useMemo(() =>
+    cachedLeads.map(lead => ({
+      _id: lead._id,
+      date: lead.date,
+      client: lead.clientId,
+      clientName: lead.clientName,
+      metaForm: lead.metaFormLead || 0,
+      metaWhatsapp: lead.metaWhatsappLead || 0,
+      metaTotalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0),
+      googleWebsite: lead.googleWebsiteLead || 0,
+      googleCall: lead.googleCallLead || 0,
+      googleTotalLeads: (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
+      totalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0) + (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
+      totalSpend: (lead.metaFund || 0) + (lead.googleFund || 0),
+    })),
+  [cachedLeads]);
+
+  const fetchAllData = () => refreshAll();
 
   // Filter states
   const [selectedClient, setSelectedClient] = useState('');
@@ -262,60 +283,6 @@ const Reports = () => {
     return new Date().toISOString().split('T')[0];
   });
   const [monthFilter, setMonthFilter] = useState('1');
-
-  // Fetch clients from main API
-  const fetchClients = async () => {
-    try {
-      const response = await api.get('/clients');
-      const data = response.data.data || response.data;
-      const transformedClients = data.map(client => ({
-        _id: client._id,
-        name: client.clientName,
-      }));
-      setClients(transformedClients);
-    } catch (error) {
-      console.error('Error fetching clients from main API:', error);
-    }
-  };
-
-  // Fetch leads (entries) from main API
-  const fetchEntries = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/leads?limit=10000');
-      const data = response.data.data || response.data;
-      // Transform to match expected format
-      const transformedEntries = data.map(lead => ({
-        _id: lead._id,
-        date: lead.date,
-        client: lead.clientId,
-        clientName: lead.clientName,
-        metaForm: lead.metaFormLead || 0,
-        metaWhatsapp: lead.metaWhatsappLead || 0,
-        metaTotalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0),
-        googleWebsite: lead.googleWebsiteLead || 0,
-        googleCall: lead.googleCallLead || 0,
-        googleTotalLeads: (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
-        totalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0) + (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
-        totalSpend: (lead.metaFund || 0) + (lead.googleFund || 0),
-      }));
-      setEntries(transformedEntries);
-    } catch (error) {
-      console.error('Error fetching leads from main API:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch all data
-  const fetchAllData = async () => {
-    await Promise.all([fetchClients(), fetchEntries()]);
-  };
-
-  // Fetch data on mount
-  useEffect(() => {
-    fetchAllData();
-  }, []);
 
   // Auto-select first client when clients load
   useEffect(() => {
@@ -498,9 +465,9 @@ const Reports = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
             Analytics & Reports
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -518,7 +485,7 @@ const Reports = () => {
       </Box>
 
       {/* Filters Section */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 2 }}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
             <Grid size={{ xs: 12, sm: 4 }}>
@@ -572,7 +539,7 @@ const Reports = () => {
       ) : (
         <>
           {/* Stats Cards */}
-          <Grid container spacing={3} sx={{ mb: 3 }}>
+          <Grid container spacing={1.5} sx={{ mb: 2 }}>
             <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
               <MetricCard
                 title="Meta Total Leads"
@@ -622,11 +589,11 @@ const Reports = () => {
             Daily Lead Trends
             <Chip label={selectedClientName} size="small" sx={{ ml: 2 }} color="primary" />
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             View individual metrics over the selected date range
           </Typography>
 
-          <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid container spacing={1.5} sx={{ mb: 2 }}>
             {/* Meta Form Leads */}
             <Grid size={{ xs: 12, md: 6 }}>
               <MetricLineChart
@@ -678,7 +645,7 @@ const Reports = () => {
           </Grid>
 
           {/* Bar Charts Section */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4, flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4, flexWrap: 'wrap', gap: 1.5 }}>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 600 }}>
                 Monthly Overview
@@ -708,7 +675,7 @@ const Reports = () => {
             </ToggleButtonGroup>
           </Box>
 
-          <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid container spacing={1.5} sx={{ mb: 2 }}>
             {/* Meta Form Leads Bar */}
             <Grid size={{ xs: 12, md: 6 }}>
               <MetricBarChart
@@ -762,7 +729,7 @@ const Reports = () => {
           {/* Data Table */}
           <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
                 {selectedClientName} - Date-wise Performance
               </Typography>
               <TableContainer component={Paper} variant="outlined">
@@ -862,7 +829,7 @@ const Reports = () => {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                        <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
                           <Typography color="text.secondary">No data available for selected date range</Typography>
                         </TableCell>
                       </TableRow>

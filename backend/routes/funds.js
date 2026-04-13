@@ -56,8 +56,37 @@ router.post('/', async (req, res) => {
     }
 
     // Calculate total amount added
-    const totalAmountAdded = (parseFloat(metaAmount) || 0) + (parseFloat(googleAmount) || 0);
+    const parsedMetaAmount = parseFloat(metaAmount) || 0;
+    const parsedGoogleAmount = parseFloat(googleAmount) || 0;
+    const totalAmountAdded = parsedMetaAmount + parsedGoogleAmount;
     const fundAdded = totalAmountAdded > 0;
+
+    // Build update object
+    const updateData = {
+      entryType: 'daily_fund',
+      clientId,
+      clientName,
+      date,
+      metaBalance: parseFloat(metaBalance) || 0,
+      googleBalance: parseFloat(googleBalance) || 0,
+      metaAmount: parsedMetaAmount,
+      metaPaymentMode: metaPaymentMode || '',
+      metaPaymentDetails: metaPaymentDetails || '',
+      googleAmount: parsedGoogleAmount,
+      googlePaymentMode: googlePaymentMode || '',
+      googlePaymentDetails: googlePaymentDetails || '',
+      totalAmountAdded,
+      fundAdded,
+      status: 'completed',
+    };
+
+    // Track when meta/google fund was added
+    if (parsedMetaAmount > 0) {
+      updateData.metaFundDate = new Date();
+    }
+    if (parsedGoogleAmount > 0) {
+      updateData.googleFundDate = new Date();
+    }
 
     // Find existing entry or create new one (upsert)
     const entry = await FundEntry.findOneAndUpdate(
@@ -66,23 +95,7 @@ router.post('/', async (req, res) => {
         clientId: clientId,
         date: date,
       },
-      {
-        entryType: 'daily_fund',
-        clientId,
-        clientName,
-        date,
-        metaBalance: parseFloat(metaBalance) || 0,
-        googleBalance: parseFloat(googleBalance) || 0,
-        metaAmount: parseFloat(metaAmount) || 0,
-        metaPaymentMode: metaPaymentMode || '',
-        metaPaymentDetails: metaPaymentDetails || '',
-        googleAmount: parseFloat(googleAmount) || 0,
-        googlePaymentMode: googlePaymentMode || '',
-        googlePaymentDetails: googlePaymentDetails || '',
-        totalAmountAdded,
-        fundAdded,
-        status: 'completed',
-      },
+      updateData,
       {
         new: true,
         upsert: true,

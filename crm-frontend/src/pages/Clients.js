@@ -42,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { MenuItem, Select, InputLabel, FormControl } from '@mui/material';
 import { TableLoader, PageLoader } from '../components/Loading';
+import userApi from '../api/userApi';
 
 const Clients = () => {
   const { accentColor } = useContext(ThemeContext);
@@ -58,6 +59,10 @@ const Clients = () => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // SMM users for Assigned SMM/SME dropdowns
+  const [smmUsers, setSmmUsers] = useState([]);
+  const [teams, setTeams] = useState([]);
+
   // Add Client Dialog state
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -70,6 +75,13 @@ const Clients = () => {
     accountId: '',
     onboardedDate: new Date().toISOString().split('T')[0],
     status: 'active',
+    team: '',
+    assignedSMM: '',
+    assignedSME: '',
+    creativeCommitment: '',
+    staticCommitment: '',
+    motionCreative: '',
+    notes: '',
   });
 
   // Edit Client Dialog state
@@ -102,6 +114,13 @@ const Clients = () => {
         removalReason: client.removalReason || '',
         links: client.links || [],
         createdAt: client.createdAt,
+        team: client.team || '',
+        assignedSMM: client.assignedSMM || '',
+        assignedSME: client.assignedSME || '',
+        creativeCommitment: client.creativeCommitment || '',
+        staticCommitment: client.staticCommitment || '',
+        motionCreative: client.motionCreative || '',
+        notes: client.notes || '',
       }));
       setClients(transformedClients);
     } catch (error) {
@@ -112,9 +131,31 @@ const Clients = () => {
     }
   };
 
-  // Fetch clients on mount
+  // Fetch SMM users for dropdowns
+  const fetchSMMUsers = async () => {
+    try {
+      const response = await api.get('/clients/smm-users');
+      setSmmUsers(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching SMM users:', error);
+    }
+  };
+
+  // Fetch teams from DB
+  const fetchTeams = async () => {
+    try {
+      const response = await userApi.getTeams();
+      setTeams(response.data || []);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    }
+  };
+
+  // Fetch clients, SMM users, and teams on mount
   useEffect(() => {
     fetchClients();
+    fetchSMMUsers();
+    fetchTeams();
   }, []);
 
   const handleViewDetails = (client) => {
@@ -139,6 +180,13 @@ const Clients = () => {
       accountId: '',
       onboardedDate: new Date().toISOString().split('T')[0],
       status: 'active',
+      team: '',
+      assignedSMM: '',
+      assignedSME: '',
+      creativeCommitment: '',
+      staticCommitment: '',
+      motionCreative: '',
+      notes: '',
     });
   };
 
@@ -162,6 +210,13 @@ const Clients = () => {
       status: client.status || 'active',
       removalReason: client.removalReason || '',
       links: client.links || [],
+      team: client.team || '',
+      assignedSMM: client.assignedSMM || '',
+      assignedSME: client.assignedSME || '',
+      creativeCommitment: client.creativeCommitment || '',
+      staticCommitment: client.staticCommitment || '',
+      motionCreative: client.motionCreative || '',
+      notes: client.notes || '',
     });
     setEditClientOpen(true);
   };
@@ -178,7 +233,7 @@ const Clients = () => {
       return;
     }
     if (!editClient.organisationType?.trim()) {
-      setSnackbar({ open: true, message: 'Organisation Type is required', severity: 'error' });
+      setSnackbar({ open: true, message: 'Industry is required', severity: 'error' });
       return;
     }
     if (!editClient.address?.trim()) {
@@ -203,6 +258,13 @@ const Clients = () => {
         status: editClient.status || 'active',
         removalReason: editClient.removalReason || '',
         links: editClient.links || [],
+        team: editClient.team || '',
+        assignedSMM: editClient.assignedSMM || '',
+        assignedSME: editClient.assignedSME || '',
+        creativeCommitment: editClient.creativeCommitment?.trim() || '',
+        staticCommitment: editClient.staticCommitment?.trim() || '',
+        motionCreative: editClient.motionCreative?.trim() || '',
+        notes: editClient.notes?.trim() || '',
       };
 
       // Add optional accountId only if provided (must contain only digits)
@@ -215,8 +277,6 @@ const Clients = () => {
         }
         payload.accountId = accountIdTrimmed;
       }
-
-      console.log('Sending edit payload:', payload);
 
       await api.put(`/clients/${editClient._id}`, payload);
 
@@ -270,7 +330,7 @@ const Clients = () => {
       return;
     }
     if (!newClient.organisationType.trim()) {
-      setSnackbar({ open: true, message: 'Organisation Type is required', severity: 'error' });
+      setSnackbar({ open: true, message: 'Industry is required', severity: 'error' });
       return;
     }
     if (!newClient.address.trim()) {
@@ -292,6 +352,13 @@ const Clients = () => {
         address: newClient.address.trim(),
         onboardDate: newClient.onboardedDate ? new Date(newClient.onboardedDate).toISOString() : new Date().toISOString(),
         gstNumber: newClient.gstNumber.trim(),
+        team: newClient.team || '',
+        assignedSMM: newClient.assignedSMM || '',
+        assignedSME: newClient.assignedSME || '',
+        creativeCommitment: newClient.creativeCommitment?.trim() || '',
+        staticCommitment: newClient.staticCommitment?.trim() || '',
+        motionCreative: newClient.motionCreative?.trim() || '',
+        notes: newClient.notes?.trim() || '',
       };
 
       // Add optional accountId only if provided (must contain only digits)
@@ -304,8 +371,6 @@ const Clients = () => {
         }
         payload.accountId = accountIdTrimmed;
       }
-
-      console.log('Sending payload:', JSON.stringify(payload, null, 2));
 
       const response = await api.post('/clients', payload);
       console.log('API Response:', response.data);
@@ -364,11 +429,11 @@ const Clients = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Clients Management
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -389,14 +454,14 @@ const Clients = () => {
       </Box>
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid size={{xs: 12, sm: 6, md: 4}}>
           <Card sx={{ background: `linear-gradient(135deg, ${primaryColor}15 0%, ${primaryColor}05 100%)` }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom variant="overline">
                 Total Clients
               </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: primaryColor }}>
+              <Typography sx={{ fontWeight: 600, color: primaryColor, fontSize: '1.3rem' }}>
                 {clients.length}
               </Typography>
             </CardContent>
@@ -408,7 +473,7 @@ const Clients = () => {
               <Typography color="text.secondary" gutterBottom variant="overline">
                 Active Clients
               </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: '#2e7d32' }}>
+              <Typography sx={{ fontWeight: 600, color: '#2e7d32', fontSize: '1.3rem' }}>
                 {clients.filter(c => c.status === 'active').length}
               </Typography>
             </CardContent>
@@ -420,7 +485,7 @@ const Clients = () => {
               <Typography color="text.secondary" gutterBottom variant="overline">
                 Inactive Clients
               </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: '#ed6c02' }}>
+              <Typography sx={{ fontWeight: 600, color: '#ed6c02', fontSize: '1.3rem' }}>
                 {clients.filter(c => c.status === 'inactive').length}
               </Typography>
             </CardContent>
@@ -440,7 +505,10 @@ const Clients = () => {
                 <TableRow sx={{ backgroundColor: 'grey.100' }}>
                   <TableCell sx={{ fontWeight: 600 }}>Client ID</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Organisation Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Team</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Industry</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Assigned SMM</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Assigned SME</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Place</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Onboarded</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
@@ -450,7 +518,7 @@ const Clients = () => {
               <TableBody>
                 {clients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={10} align="center">
                       <Typography color="text.secondary" sx={{ py: 4 }}>
                         No clients found. Click "Refresh" to fetch from Main API.
                       </Typography>
@@ -472,10 +540,21 @@ const Clients = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
+                        {client.team ? (
+                          <Chip label={client.team} size="small" color="success" variant="outlined" />
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <BusinessIcon fontSize="small" color="action" />
                           {client.organisationType || '-'}
                         </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{client.assignedSMM || '-'}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{client.assignedSME || '-'}</Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">{client.place || '-'}</Typography>
@@ -558,7 +637,7 @@ const Clients = () => {
                     {selectedClient.name}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {selectedClient.organisationType} | {selectedClient.clientID}
+                    {selectedClient.organisationType || 'N/A'} | {selectedClient.clientID}
                   </Typography>
                 </Box>
                 <Chip
@@ -576,7 +655,7 @@ const Clients = () => {
                   <Typography variant="body2">{selectedClient.place || '-'}</Typography>
                 </Grid>
                 <Grid size={{xs: 6}}>
-                  <Typography variant="caption" color="text.secondary">Organisation Type</Typography>
+                  <Typography variant="caption" color="text.secondary">Industry</Typography>
                   <Typography variant="body2">{selectedClient.organisationType || '-'}</Typography>
                 </Grid>
                 <Grid size={{xs: 12}}>
@@ -595,10 +674,48 @@ const Clients = () => {
                   <Typography variant="caption" color="text.secondary">Account ID</Typography>
                   <Typography variant="body2">{selectedClient.accountId || '-'}</Typography>
                 </Grid>
+                <Grid size={{xs: 6}}>
+                  <Typography variant="caption" color="text.secondary">Team</Typography>
+                  <Typography variant="body2">
+                    {selectedClient.team ? (
+                      <Chip label={selectedClient.team} size="small" color="success" variant="outlined" />
+                    ) : '-'}
+                  </Typography>
+                </Grid>
+                <Grid size={{xs: 6}}>
+                  <Typography variant="caption" color="text.secondary">Assigned SMM</Typography>
+                  <Typography variant="body2">{selectedClient.assignedSMM || '-'}</Typography>
+                </Grid>
+                <Grid size={{xs: 6}}>
+                  <Typography variant="caption" color="text.secondary">Assigned SME</Typography>
+                  <Typography variant="body2">{selectedClient.assignedSME || '-'}</Typography>
+                </Grid>
+                {(selectedClient.creativeCommitment || selectedClient.staticCommitment || selectedClient.motionCreative) && (
+                  <>
+                    <Grid size={{xs: 12}}>
+                      <Divider sx={{ my: 0.5 }} />
+                    </Grid>
+                    <Grid size={{xs: 4}}>
+                      <Typography variant="caption" color="text.secondary">Creative Commitment</Typography>
+                      <Typography variant="body2">{selectedClient.creativeCommitment || '-'}</Typography>
+                    </Grid>
+                    <Grid size={{xs: 4}}>
+                      <Typography variant="caption" color="text.secondary">Static Commitment</Typography>
+                      <Typography variant="body2">{selectedClient.staticCommitment || '-'}</Typography>
+                    </Grid>
+                    <Grid size={{xs: 4}}>
+                      <Typography variant="caption" color="text.secondary">Motion Creative</Typography>
+                      <Typography variant="body2">{selectedClient.motionCreative || '-'}</Typography>
+                    </Grid>
+                  </>
+                )}
+                {selectedClient.notes && (
+                  <Grid size={{xs: 12}}>
+                    <Typography variant="caption" color="text.secondary">Notes</Typography>
+                    <Typography variant="body2">{selectedClient.notes}</Typography>
+                  </Grid>
+                )}
               </Grid>
-              <Alert severity="info" sx={{ mt: 2 }}>
-                Data fetched from Main API
-              </Alert>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2 }}>
               <Button onClick={() => setDetailsOpen(false)}>Close</Button>
@@ -608,7 +725,7 @@ const Clients = () => {
       </Dialog>
 
       {/* Add Client Dialog */}
-      <Dialog open={addClientOpen} onClose={() => setAddClientOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={addClientOpen} onClose={() => setAddClientOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 600, bgcolor: 'grey.50' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <AddIcon sx={{ color: primaryColor }} />
@@ -641,7 +758,7 @@ const Clients = () => {
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 fullWidth
-                label="Organisation Type *"
+                label="Industry *"
                 name="organisationType"
                 value={newClient.organisationType}
                 onChange={handleInputChange}
@@ -707,6 +824,111 @@ const Clients = () => {
                 </Select>
               </FormControl>
             </Grid>
+            <Grid size={{ xs: 12 }}>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Team Assignment
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel>Team Name</InputLabel>
+                <Select
+                  name="team"
+                  value={newClient.team}
+                  label="Team Name"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewClient(prev => ({ ...prev, team: val, assignedSMM: '', assignedSME: '' }));
+                  }}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {teams.map((t) => (
+                    <MenuItem key={t} value={t}>{t}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel>Assigned SMM</InputLabel>
+                <Select
+                  name="assignedSMM"
+                  value={newClient.assignedSMM}
+                  label="Assigned SMM"
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {smmUsers.map(u => (
+                    <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel>Assigned SME</InputLabel>
+                <Select
+                  name="assignedSME"
+                  value={newClient.assignedSME}
+                  label="Assigned SME"
+                  onChange={handleInputChange}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {smmUsers.map(u => (
+                    <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Commitments & Notes
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <TextField
+                fullWidth
+                label="Creative Commitment"
+                name="creativeCommitment"
+                value={newClient.creativeCommitment}
+                onChange={handleInputChange}
+                placeholder="e.g., 10 per month"
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <TextField
+                fullWidth
+                label="Static Commitment"
+                name="staticCommitment"
+                value={newClient.staticCommitment}
+                onChange={handleInputChange}
+                placeholder="e.g., 5 per month"
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <TextField
+                fullWidth
+                label="Motion Creative"
+                name="motionCreative"
+                value={newClient.motionCreative}
+                onChange={handleInputChange}
+                placeholder="e.g., 3 per month"
+              />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <TextField
+                fullWidth
+                label="Notes"
+                name="notes"
+                value={newClient.notes}
+                onChange={handleInputChange}
+                placeholder="Additional notes..."
+                multiline
+                rows={2}
+              />
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -726,7 +948,7 @@ const Clients = () => {
       </Dialog>
 
       {/* Edit Client Dialog */}
-      <Dialog open={editClientOpen} onClose={() => setEditClientOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={editClientOpen} onClose={() => setEditClientOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 600, bgcolor: 'grey.50' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <EditIcon sx={{ color: '#1976d2' }} />
@@ -760,7 +982,7 @@ const Clients = () => {
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
-                  label="Organisation Type *"
+                  label="Industry *"
                   name="organisationType"
                   value={editClient.organisationType}
                   onChange={handleEditInputChange}
@@ -825,6 +1047,111 @@ const Clients = () => {
                     <MenuItem value="suspended">Suspended</MenuItem>
                   </Select>
                 </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  Team Assignment
+                </Typography>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Team Name</InputLabel>
+                  <Select
+                    name="team"
+                    value={editClient.team}
+                    label="Team Name"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditClient(prev => ({ ...prev, team: val, assignedSMM: '', assignedSME: '' }));
+                    }}
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {teams.map((t) => (
+                      <MenuItem key={t} value={t}>{t}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Assigned SMM</InputLabel>
+                  <Select
+                    name="assignedSMM"
+                    value={editClient.assignedSMM}
+                    label="Assigned SMM"
+                    onChange={handleEditInputChange}
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {smmUsers.map(u => (
+                      <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Assigned SME</InputLabel>
+                  <Select
+                    name="assignedSME"
+                    value={editClient.assignedSME}
+                    label="Assigned SME"
+                    onChange={handleEditInputChange}
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {smmUsers.map(u => (
+                      <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  Commitments & Notes
+                </Typography>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  fullWidth
+                  label="Creative Commitment"
+                  name="creativeCommitment"
+                  value={editClient.creativeCommitment}
+                  onChange={handleEditInputChange}
+                  placeholder="e.g., 10 per month"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  fullWidth
+                  label="Static Commitment"
+                  name="staticCommitment"
+                  value={editClient.staticCommitment}
+                  onChange={handleEditInputChange}
+                  placeholder="e.g., 5 per month"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  fullWidth
+                  label="Motion Creative"
+                  name="motionCreative"
+                  value={editClient.motionCreative}
+                  onChange={handleEditInputChange}
+                  placeholder="e.g., 3 per month"
+                />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  fullWidth
+                  label="Notes"
+                  name="notes"
+                  value={editClient.notes}
+                  onChange={handleEditInputChange}
+                  placeholder="Additional notes..."
+                  multiline
+                  rows={2}
+                />
               </Grid>
             </Grid>
           )}

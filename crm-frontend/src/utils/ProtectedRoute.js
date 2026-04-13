@@ -14,6 +14,8 @@ const routePermissions = {
   '/reports': 'reports',
   '/settings': 'settings',
   '/access-management': 'access-management',
+  '/personal-vault': 'personal-vault',
+  '/content-management': 'content-management',
 };
 
 const ProtectedRoute = ({ children }) => {
