@@ -23,34 +23,28 @@ const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
  * @access  Private
  */
 export const getLeads = asyncHandler(async (req, res) => {
-  try {
-    // Forward the incoming Authorization header (or cookie) to the main API
-    const headers = {};
-    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
-    if (req.headers.cookie) headers.cookie = req.headers.cookie;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 100;
+  const skip = (page - 1) * limit;
 
-    // Forward query string (e.g. ?limit=10000&_t=...)
-    const qs = new URLSearchParams(req.query).toString();
-    const url = `${MAIN_API_URL}/api/leads${qs ? `?${qs}` : ''}`;
+  const leads = await Lead.find()
+    .populate('assignedTo', 'name email userID')
+    .populate('client', 'name email company')
+    .populate('createdBy', 'name email userID')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
-    const response = await fetchWithTimeout(url, { headers }, 20000);
+  const total = await Lead.countDocuments();
 
-    if (!response.ok) {
-      console.error(`Lead proxy: main API returned ${response.status}`);
-      return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
-    }
-    const leads = await response.json();
-    const data = Array.isArray(leads) ? leads : (leads.data || []);
-    return res.status(200).json({
-      success: true,
-      count: data.length,
-      total: data.length,
-      data,
-    });
-  } catch (error) {
-    console.error('Lead proxy error:', error.message);
-    return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
-  }
+  res.status(200).json({
+    success: true,
+    count: leads.length,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    data: leads,
+  });
 });
 
 /**

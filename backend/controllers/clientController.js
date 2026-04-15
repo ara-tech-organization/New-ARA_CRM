@@ -27,33 +27,25 @@ const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
  * @access  Private
  */
 export const getClients = asyncHandler(async (req, res) => {
-  try {
-    // Forward auth header to main API
-    const headers = {};
-    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
-    if (req.headers.cookie) headers.cookie = req.headers.cookie;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 100;
+  const skip = (page - 1) * limit;
 
-    const qs = new URLSearchParams(req.query).toString();
-    const url = `${MAIN_API_URL}/api/clients${qs ? `?${qs}` : ''}`;
+  const clients = await Client.find()
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
-    const response = await fetchWithTimeout(url, { headers }, 20000);
+  const total = await Client.countDocuments();
 
-    if (!response.ok) {
-      console.error(`Client proxy: main API returned ${response.status}`);
-      return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
-    }
-    const clients = await response.json();
-    const data = Array.isArray(clients) ? clients : (clients.data || []);
-    return res.status(200).json({
-      success: true,
-      count: data.length,
-      total: data.length,
-      data,
-    });
-  } catch (error) {
-    console.error('Client proxy error:', error.message);
-    return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
-  }
+  res.status(200).json({
+    success: true,
+    count: clients.length,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    data: clients,
+  });
 });
 
 /**
