@@ -4,6 +4,7 @@ import Campaign from '../models/Campaign.js';
 import Metric from '../models/Metric.js';
 import Payment from '../models/Payment.js';
 import googleAdsService from '../services/googleAdsService.js';
+import analyticsService from '../services/analyticsService.js';
 
 class SyncService {
   constructor() {
@@ -53,6 +54,9 @@ class SyncService {
       // 2. Fetch and store metrics (last 30 days)
       const metrics = await googleAdsService.fetchMetricsWithClicks(client.google_ads_customer_id);
       for (const metricData of metrics) {
+        // Calculate KPIs for this metric
+        const kpis = analyticsService.calculateKPIs(metricData);
+
         await Metric.findOneAndUpdate(
           {
             client_id: client._id,
@@ -61,7 +65,8 @@ class SyncService {
           },
           {
             ...metricData,
-            campaign_name: campaignMap[metricData.campaign_id] || metricData.campaign_name || 'Unknown Campaign'
+            campaign_name: campaignMap[metricData.campaign_id] || metricData.campaign_name || 'Unknown Campaign',
+            ...kpis
           },
           { upsert: true, returnDocument: 'after' }
         );

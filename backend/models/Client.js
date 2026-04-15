@@ -103,6 +103,19 @@ const clientSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: '',
+      unique: true,
+      sparse: true,
+      validate: {
+        validator: function(v) {
+          return v === '' || /^\d{10}$/.test(v);
+        },
+        message: 'Google Ads Customer ID must be exactly 10 digits'
+      }
+    },
+    google_ads_account_name: {
+      type: String,
+      trim: true,
+      default: '',
     },
     google_ads_enabled: {
       type: Boolean,
@@ -119,6 +132,9 @@ clientSchema.index({ clientName: 1 });
 clientSchema.index({ status: 1 });
 clientSchema.index({ accountID: 1 });
 clientSchema.index({ createdAt: -1 });
+clientSchema.index({ google_ads_customer_id: 1 });
+clientSchema.index({ google_ads_enabled: 1 });
+clientSchema.index({ 'billing.available_balance': 1 });
 // Text index for fast text search
 clientSchema.index({ clientName: 'text', place: 'text', organisationType: 'text', accountID: 'text' });
 

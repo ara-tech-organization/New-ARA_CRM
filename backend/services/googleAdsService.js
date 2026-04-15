@@ -68,6 +68,32 @@ class GoogleAdsService {
     }));
   }
 
+  async validateCustomerId(customerId) {
+    try {
+      const customer = this.getCustomer(customerId);
+      // Try a simple query to verify the customer exists
+      const result = await customer.query(`
+        SELECT
+          customer.id,
+          customer.descriptive_name
+        FROM customer
+        LIMIT 1
+      `);
+      return {
+        valid: true,
+        customerId: customerId,
+        accountName: result[0]?.customer.descriptive_name || ''
+      };
+    } catch (error) {
+      console.error('Validate customer ID error:', error);
+      return {
+        valid: false,
+        customerId: customerId,
+        error: error.message
+      };
+    }
+  }
+
   async fetchMetricsWithClicks(customerId, dateRange = "LAST_30_DAYS") {
     const customer = this.getCustomer(customerId);
 

@@ -26,7 +26,12 @@ const metricSchema = new mongoose.Schema({
     website_clicks: { type: Number, default: 0 },
     call_clicks: { type: Number, default: 0 },
     other_clicks: { type: Number, default: 0 }
-  }
+  },
+  // Calculated KPIs
+  ctr: { type: Number, default: 0 }, // Click Through Rate (%)
+  cpc: { type: Number, default: 0 }, // Cost Per Click
+  cpa: { type: Number, default: 0 }, // Cost Per Acquisition
+  roas: { type: Number, default: 0 } // Return on Ad Spend
 }, {
   timestamps: true
 });

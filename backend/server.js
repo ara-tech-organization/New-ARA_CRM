@@ -23,6 +23,7 @@ import personalVaultRoutes from "./routes/personalVault.js";
 import contentEntryRoutes from "./routes/contentEntries.js";
 import metricsRoutes from "./routes/metrics.js";
 import googleAdsRoutes from "./routes/googleAds.js";
+import analyticsRoutes from "./routes/analytics.js";
 import syncService from "./sync/syncService.js";
 
 // Load environment variables
@@ -108,6 +109,7 @@ app.use("/api/personal-vault", personalVaultRoutes);
 app.use("/api/content-entries", contentEntryRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/google-ads", googleAdsRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // Basic route
 app.get("/", (req, res) => {
