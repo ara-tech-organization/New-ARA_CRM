@@ -90,6 +90,24 @@ const clientSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    billing: {
+      billing_type: { type: String, enum: ['monthly', 'quarterly'], default: 'monthly' },
+      total_added_funds: { type: Number, default: 0 },
+      total_spend: { type: Number, default: 0 },
+      available_balance: { type: Number, default: 0 },
+      low_balance_threshold: { type: Number, default: 100 }
+    },
+    currency: { type: String, default: 'INR' },
+    time_zone: { type: String, default: 'Asia/Kolkata' },
+    google_ads_customer_id: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    google_ads_enabled: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

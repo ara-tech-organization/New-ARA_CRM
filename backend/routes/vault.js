@@ -1,11 +1,16 @@
 import express from 'express';
 import Vault from '../models/Vault.js';
+import { protect } from '../middleware/auth.js';
+import { decrypt } from '../utils/encryption.js';
 
 const router = express.Router();
 
+// All routes require authentication
+router.use(protect);
+
 // @desc    Get all vault credentials
 // @route   GET /api/vault
-// @access  Public (for now - add auth middleware later)
+// @access  Private
 router.get('/', async (req, res) => {
   try {
     const { clientId } = req.query;
@@ -16,7 +21,16 @@ router.get('/', async (req, res) => {
     }
 
     const vaultData = await Vault.find(filter).sort({ updatedAt: -1 });
-    res.json(vaultData);
+    const decryptedData = vaultData.map(vault => {
+      const obj = vault.toObject();
+      try {
+        obj.password = decrypt(obj.password);
+      } catch (e) {
+        obj.password = '***decryption error***';
+      }
+      return obj;
+    });
+    res.json(decryptedData);
   } catch (error) {
     console.error('Error fetching vault data:', error);
     res.status(500).json({ message: 'Failed to fetch vault credentials', error: error.message });
@@ -25,7 +39,7 @@ router.get('/', async (req, res) => {
 
 // @desc    Get single vault credential
 // @route   GET /api/vault/:id
-// @access  Public (for now - add auth middleware later)
+// @access  Private
 router.get('/:id', async (req, res) => {
   try {
     const vault = await Vault.findById(req.params.id);
@@ -34,7 +48,13 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Vault credential not found' });
     }
 
-    res.json(vault);
+    const obj = vault.toObject();
+    try {
+      obj.password = decrypt(obj.password);
+    } catch (e) {
+      obj.password = '***decryption error***';
+    }
+    res.json(obj);
   } catch (error) {
     console.error('Error fetching vault credential:', error);
     res.status(500).json({ message: 'Failed to fetch vault credential', error: error.message });
@@ -43,7 +63,7 @@ router.get('/:id', async (req, res) => {
 
 // @desc    Create vault credential
 // @route   POST /api/vault
-// @access  Public (for now - add auth middleware later)
+// @access  Private
 router.post('/', async (req, res) => {
   try {
     const { clientId, clientName, platform, username, password, url, notes } = req.body;
@@ -64,7 +84,13 @@ router.post('/', async (req, res) => {
     });
 
     const savedVault = await vault.save();
-    res.status(201).json(savedVault);
+    const obj = savedVault.toObject();
+    try {
+      obj.password = password; // Return the original password since it's just saved
+    } catch (e) {
+      obj.password = '***decryption error***';
+    }
+    res.status(201).json(obj);
   } catch (error) {
     console.error('Error creating vault credential:', error);
     res.status(500).json({ message: 'Failed to create vault credential', error: error.message });
@@ -73,7 +99,7 @@ router.post('/', async (req, res) => {
 
 // @desc    Update vault credential
 // @route   PUT /api/vault/:id
-// @access  Public (for now - add auth middleware later)
+// @access  Private
 router.put('/:id', async (req, res) => {
   try {
     const { clientId, clientName, platform, username, password, url, notes } = req.body;
@@ -94,7 +120,13 @@ router.put('/:id', async (req, res) => {
     vault.notes = notes !== undefined ? notes : vault.notes;
 
     const updatedVault = await vault.save();
-    res.json(updatedVault);
+    const obj = updatedVault.toObject();
+    try {
+      obj.password = password || decrypt(obj.password); // If password was updated, return the new one, else decrypt the existing
+    } catch (e) {
+      obj.password = '***decryption error***';
+    }
+    res.json(obj);
   } catch (error) {
     console.error('Error updating vault credential:', error);
     res.status(500).json({ message: 'Failed to update vault credential', error: error.message });
@@ -103,7 +135,7 @@ router.put('/:id', async (req, res) => {
 
 // @desc    Delete vault credential
 // @route   DELETE /api/vault/:id
-// @access  Public (for now - add auth middleware later)
+// @access  Private
 router.delete('/:id', async (req, res) => {
   try {
     const vault = await Vault.findById(req.params.id);
@@ -122,11 +154,20 @@ router.delete('/:id', async (req, res) => {
 
 // @desc    Get vault credentials by client ID
 // @route   GET /api/vault/client/:clientId
-// @access  Public (for now - add auth middleware later)
+// @access  Private
 router.get('/client/:clientId', async (req, res) => {
   try {
     const vaultData = await Vault.find({ clientId: req.params.clientId }).sort({ updatedAt: -1 });
-    res.json(vaultData);
+    const decryptedData = vaultData.map(vault => {
+      const obj = vault.toObject();
+      try {
+        obj.password = decrypt(obj.password);
+      } catch (e) {
+        obj.password = '***decryption error***';
+      }
+      return obj;
+    });
+    res.json(decryptedData);
   } catch (error) {
     console.error('Error fetching vault data for client:', error);
     res.status(500).json({ message: 'Failed to fetch vault credentials', error: error.message });
