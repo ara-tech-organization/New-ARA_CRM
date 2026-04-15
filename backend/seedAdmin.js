@@ -19,10 +19,14 @@ const seedAdmin = async () => {
     }
 
     // Create admin user
+    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+    if (!process.env.ADMIN_PASSWORD) {
+      console.warn('Warning: Using default admin password. Set ADMIN_PASSWORD environment variable for security.');
+    }
     const adminUser = await User.create({
       name: 'Admin User',
       email: 'admin@aracrm.com',
-      password: 'Admin@123',
+      password: adminPassword,
       phone: '+91 9876543210',
       department: 'Management',
       role: 'superadmin',
@@ -43,7 +47,7 @@ const seedAdmin = async () => {
     console.log('-------------------------------');
     console.log('Login credentials:');
     console.log('  Email: admin@aracrm.com');
-    console.log('  Password: Admin@123');
+    console.log('  Password:', adminPassword);
     console.log('-------------------------------');
 
     await mongoose.disconnect();

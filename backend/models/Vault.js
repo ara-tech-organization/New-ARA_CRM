@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { encrypt } from '../utils/encryption.js';
 
 const vaultSchema = new mongoose.Schema(
   {
@@ -36,6 +37,14 @@ const vaultSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Pre-save hook to encrypt password
+vaultSchema.pre('save', function (next) {
+  if (this.isModified('password')) {
+    this.password = encrypt(this.password);
+  }
+  next();
+});
 
 // Index for better query performance
 vaultSchema.index({ clientId: 1 });

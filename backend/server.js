@@ -21,12 +21,18 @@ import leadRoutes from './routes/leads.js';
 import vaultRoutes from './routes/vault.js';
 import personalVaultRoutes from './routes/personalVault.js';
 import contentEntryRoutes from './routes/contentEntries.js';
+import metricsRoutes from './routes/metrics.js';
+import googleAdsRoutes from './routes/googleAds.js';
+import syncService from './sync/syncService.js';
 
 // Load environment variables
 dotenv.config();
 
 // Connect to database
 connectDB();
+
+// Initialize sync service (starts cron job)
+syncService;
 
 const app = express();
 
@@ -98,6 +104,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/vault', vaultRoutes);
 app.use('/api/personal-vault', personalVaultRoutes);
 app.use('/api/content-entries', contentEntryRoutes);
+app.use('/api/metrics', metricsRoutes);
+app.use('/api/google-ads', googleAdsRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
