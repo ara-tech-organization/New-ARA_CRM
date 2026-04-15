@@ -54,40 +54,40 @@ import { useDataCache } from '../contexts/DataCacheContext';
 // Colors for different metrics
 const METRIC_CONFIG = {
   metaForm: {
-    color: '#1877f2',
+    color: '#C08552',
     label: 'Meta Form Leads',
     icon: <Facebook />,
-    bgColor: '#1877f215',
+    bgColor: '#C0855215',
   },
   metaWhatsapp: {
-    color: '#25D366',
+    color: '#3E2723',
     label: 'Meta WhatsApp Leads',
     icon: <WhatsApp />,
-    bgColor: '#25D36615',
+    bgColor: '#3E272315',
   },
   metaTotalLeads: {
-    color: '#4267B2',
+    color: '#C08552',
     label: 'Total Meta Leads',
     icon: <Facebook />,
-    bgColor: '#4267B215',
+    bgColor: '#C0855215',
   },
   googleWebsite: {
-    color: '#ea4335',
+    color: '#C08552',
     label: 'Google Website Leads',
     icon: <Language />,
-    bgColor: '#ea433515',
+    bgColor: '#C0855215',
   },
   googleCall: {
-    color: '#34a853',
+    color: '#3E2723',
     label: 'Google Call Leads',
     icon: <Phone />,
-    bgColor: '#34a85315',
+    bgColor: '#3E272315',
   },
   googleTotalLeads: {
-    color: '#4285f4',
+    color: '#C08552',
     label: 'Total Google Leads',
     icon: <Google />,
-    bgColor: '#4285f415',
+    bgColor: '#C0855215',
   },
 };
 
@@ -465,7 +465,7 @@ const Reports = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
             Analytics & Reports
@@ -645,7 +645,7 @@ const Reports = () => {
           </Grid>
 
           {/* Bar Charts Section */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4, flexWrap: 'wrap', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2, mt: 4, flexWrap: 'wrap', gap: 1.5 }}>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 600 }}>
                 Monthly Overview
@@ -735,7 +735,7 @@ const Reports = () => {
               <TableContainer component={Paper} variant="outlined">
                 <Table size="small">
                   <TableHead>
-                    <TableRow sx={{ bgcolor: 'grey.100' }}>
+                    <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                       <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
                       <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.metaForm.color }} align="right">
                         Meta Form

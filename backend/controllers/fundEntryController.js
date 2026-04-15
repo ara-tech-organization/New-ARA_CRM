@@ -81,7 +81,7 @@ export const getFundEntry = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const createFundEntry = asyncHandler(async (req, res) => {
-  req.body.recordedBy = req.user.id;
+  req.body.recordedBy = req.user._id;
 
   const entry = await FundEntry.create(req.body);
 
@@ -150,7 +150,7 @@ export const approveFundEntry = asyncHandler(async (req, res) => {
     req.params.id,
     {
       status: 'completed',
-      approvedBy: req.user.id,
+      approvedBy: req.user._id,
       approvalDate: Date.now(),
     },
     { new: true, runValidators: true }

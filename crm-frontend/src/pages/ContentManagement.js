@@ -128,8 +128,8 @@ const emptyForm = {
 
 const ContentManagement = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const [entries, setEntries] = useState([]);
   const [clients, setClients] = useState([]);
@@ -1091,8 +1091,8 @@ const ContentManagement = () => {
                   <CircularProgress />
                 </Box>
               ) : (
-                <TableContainer>
-                  <Table size="small">
+                <TableContainer sx={{ overflowX: 'auto' }}>
+                  <Table size="small" sx={{ minWidth: 900 }}>
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'action.hover' }}>
                         <TableCell sx={{ fontWeight: 700 }}>Posting Date</TableCell>
@@ -1824,9 +1824,9 @@ const ContentManagement = () => {
             onClick={handleSubmit}
             disabled={actionLoading}
             sx={{
-              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              bgcolor: primaryColor,
               '&:hover': {
-                background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                bgcolor: secondaryColor,
               },
             }}
           >

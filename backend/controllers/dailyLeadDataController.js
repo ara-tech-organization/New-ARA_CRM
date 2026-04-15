@@ -93,7 +93,7 @@ export const getDailyLeadDataByDate = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const createDailyLeadData = asyncHandler(async (req, res) => {
-  req.body.recordedBy = req.user.id;
+  req.body.recordedBy = req.user._id;
 
   // Check if data already exists for this date and client combination
   const existingData = await DailyLeadData.findOne({

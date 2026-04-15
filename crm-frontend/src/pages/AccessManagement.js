@@ -49,6 +49,7 @@ const availablePages = [
   { id: 'daily-entry', name: 'Daily Entry', icon: '📝' },
   { id: 'daily-lead-data', name: 'Daily Lead Data', icon: '📈' },
   { id: 'leads', name: 'Leads Management', icon: '🎯' },
+  { id: 'ads-dashboard', name: 'Ads Dashboard', icon: '📣' },
   { id: 'clients', name: 'Clients', icon: '👥' },
   { id: 'client-vault', name: 'Client Vault', icon: '🔐' },
   { id: 'content-management', name: 'Content Management', icon: '📋' },
@@ -70,8 +71,8 @@ const allPageIds = availablePages.map((page) => page.id);
 
 const AccessManagement = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -380,72 +381,56 @@ const AccessManagement = () => {
           startIcon={<AddIcon />}
           onClick={() => setCreateDialogOpen(true)}
           sx={{
-            background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
-            '&:hover': {
-              background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
-            },
+            bgcolor: primaryColor,
+            '&:hover': { bgcolor: secondaryColor, color: 'white' },
           }}
         >
           Add New User
         </Button>
       </Box>
 
-      {/* Search and Stats */}
+      {/* Stats Row */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, md: 8 }}>
-          <TextField
-            fullWidth
-            placeholder="Search by name, email, or User ID..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            autoComplete="off"
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon color="action" />
-                  </InputAdornment>
-                ),
-              },
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                bgcolor: 'background.paper',
-              },
-            }}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    bgcolor: 'primary.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                  }}
-                >
-                  <ShieldIcon />
+        {[
+          { label: 'Total Users', value: users.length, color: '#C08552', icon: <ShieldIcon /> },
+          { label: 'Active Users', value: users.filter((u) => u.isActive).length, color: '#10b981', icon: <ShieldIcon /> },
+          { label: 'Inactive Users', value: users.filter((u) => !u.isActive).length, color: '#C08552', icon: <ShieldIcon /> },
+        ].map((s, i) => (
+          <Grid key={i} size={{ xs: 12, sm: 4 }}>
+            <Card variant="outlined" sx={{ borderLeft: `3px solid ${s.color}` }}>
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 20 } })}
                 </Box>
                 <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    {users.filter((u) => u.isActive).length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Active Users
-                  </Typography>
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
                 </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
+
+      {/* Search */}
+      <TextField
+        fullWidth
+        placeholder="Search by name, email, or User ID..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        autoComplete="off"
+        size="small"
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon color="action" />
+              </InputAdornment>
+            ),
+          },
+        }}
+        sx={{ mb: 2 }}
+      />
 
       {/* Users List */}
       <Grid container spacing={1.5}>
@@ -463,38 +448,25 @@ const AccessManagement = () => {
           filteredUsers.map((user) => (
             <Grid size={{ xs: 12, md: 6, lg: 4 }} key={user._id}>
               <Card
+                variant="outlined"
                 sx={{
                   height: '100%',
                   overflow: 'hidden',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  opacity: user.isActive ? 1 : 0.7,
-                  '&:hover': {
-                    transform: 'translateY(-3px)',
-                    boxShadow: (theme) =>
-                      theme.palette.mode === 'light'
-                        ? '0px 8px 24px rgba(0,0,0,0.12)'
-                        : '0px 8px 24px rgba(0,0,0,0.6)',
-                  },
+                  borderLeft: `3px solid ${user.isActive ? primaryColor : '#94a3b8'}`,
+                  opacity: user.isActive ? 1 : 0.65,
+                  transition: 'all 0.2s',
+                  '&:hover': { borderColor: primaryColor },
                 }}
               >
-                {/* Colored top accent bar */}
-                <Box
-                  sx={{
-                    height: 4,
-                    background: user.isActive
-                      ? `linear-gradient(90deg, ${primaryColor}, ${secondaryColor})`
-                      : 'grey.400',
-                  }}
-                />
                 <CardContent sx={{ p: 2 }}>
                   {/* Top row: Avatar + Info + Status */}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
                     <Avatar
                       sx={{
-                        width: 48,
-                        height: 48,
-                        background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
-                        fontSize: '1.2rem',
+                        width: 42,
+                        height: 42,
+                        bgcolor: user.isActive ? primaryColor : 'grey.400',
+                        fontSize: '1.1rem',
                         fontWeight: 700,
                       }}
                     >
@@ -575,7 +547,7 @@ const AccessManagement = () => {
                           sx={{
                             height: '100%',
                             width: `${((user.permissions?.length || 0) / availablePages.length) * 100}%`,
-                            background: `linear-gradient(90deg, ${primaryColor}, ${secondaryColor})`,
+                            bgcolor: primaryColor,
                             borderRadius: 2,
                             transition: 'width 0.3s ease',
                           }}
@@ -674,7 +646,7 @@ const AccessManagement = () => {
       </Grid>
 
       {/* Create User Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           Create New User
         </DialogTitle>
@@ -800,9 +772,9 @@ const AccessManagement = () => {
             onClick={handleCreateUser}
             disabled={!newUser.name || !newUser.email || !newUser.password || actionLoading}
             sx={{
-              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              bgcolor: primaryColor,
               '&:hover': {
-                background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                bgcolor: secondaryColor,
               },
             }}
           >
@@ -812,7 +784,7 @@ const AccessManagement = () => {
       </Dialog>
 
       {/* Edit Permissions Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           Edit Access Permissions
         </DialogTitle>
@@ -889,9 +861,9 @@ const AccessManagement = () => {
             onClick={handleSavePermissions}
             disabled={actionLoading}
             sx={{
-              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              bgcolor: primaryColor,
               '&:hover': {
-                background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                bgcolor: secondaryColor,
               },
             }}
           >
@@ -901,7 +873,7 @@ const AccessManagement = () => {
       </Dialog>
 
       {/* Edit User Dialog */}
-      <Dialog open={editUserDialogOpen} onClose={() => setEditUserDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={editUserDialogOpen} onClose={() => setEditUserDialogOpen(false)} maxWidth="sm" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           Edit User
         </DialogTitle>
@@ -984,9 +956,9 @@ const AccessManagement = () => {
             onClick={handleSaveEditUser}
             disabled={!editUserData?.name || !editUserData?.email || actionLoading}
             sx={{
-              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              bgcolor: primaryColor,
               '&:hover': {
-                background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                bgcolor: secondaryColor,
               },
             }}
           >
@@ -1017,7 +989,7 @@ const AccessManagement = () => {
       </Dialog>
 
       {/* Change Password Dialog */}
-      <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="xs" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600 }}>
           Change Password
         </DialogTitle>

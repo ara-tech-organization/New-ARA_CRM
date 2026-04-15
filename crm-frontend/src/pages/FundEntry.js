@@ -65,8 +65,8 @@ const getPaymentPlaceholder = (mode) => {
 
 const FundEntry = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const [activeTab, setActiveTab] = useState(0);
   const [dailyEntryPlatformTab, setDailyEntryPlatformTab] = useState(0); // 0 = Meta, 1 = Google
@@ -498,7 +498,7 @@ const FundEntry = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2, flexWrap: 'wrap', gap: 1.5 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
             Fund Entry
@@ -593,7 +593,7 @@ const FundEntry = () => {
           {/* Editable Table */}
           <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
             <CardContent sx={{ p: 0 }}>
-              <Box sx={{ px: 2, py: 1.5, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box sx={{ px: 2, py: 1.5, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   Client Fund Entries
                   <Chip
@@ -620,15 +620,15 @@ const FundEntry = () => {
                   <Tab
                     label="Meta"
                     sx={{
-                      color: dailyEntryPlatformTab === 0 ? '#1877f2' : 'text.secondary',
-                      '&.Mui-selected': { color: '#1877f2' },
+                      color: dailyEntryPlatformTab === 0 ? '#C08552' : 'text.secondary',
+                      '&.Mui-selected': { color: '#C08552' },
                     }}
                   />
                   <Tab
                     label="Google"
                     sx={{
-                      color: dailyEntryPlatformTab === 1 ? '#34a853' : 'text.secondary',
-                      '&.Mui-selected': { color: '#34a853' },
+                      color: dailyEntryPlatformTab === 1 ? '#3E2723' : 'text.secondary',
+                      '&.Mui-selected': { color: '#3E2723' },
                     }}
                   />
                 </Tabs>
@@ -641,26 +641,26 @@ const FundEntry = () => {
                   </Typography>
                 </Box>
               ) : (
-                <TableContainer>
+                <TableContainer sx={{ overflowX: "auto" }}>
                   <Table size="small">
                     <TableHead>
-                      <TableRow sx={{ bgcolor: '#f9fafb' }}>
-                        <TableCell sx={{ fontWeight: 700, minWidth: 160, position: 'sticky', left: 0, bgcolor: '#f9fafb', zIndex: 1 }}>
+                      <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb' }}>
+                        <TableCell sx={{ fontWeight: 700, minWidth: 160, position: 'sticky', left: 0, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb', zIndex: 1 }}>
                           Client
                         </TableCell>
                         {dailyEntryPlatformTab === 0 ? (
                           <>
                             {/* META Columns */}
-                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#C08552', bgcolor: '#C0855210' }} align="center">
                               Meta Balance
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#C08552', bgcolor: '#C0855210' }} align="center">
                               Meta Amount
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#C08552', bgcolor: '#C0855210' }} align="center">
                               Meta Payment Mode
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700, minWidth: 130, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 130, color: '#C08552', bgcolor: '#C0855210' }} align="center">
                               Meta Payment Details
                             </TableCell>
                             <TableCell sx={{ fontWeight: 700, minWidth: 100 }} align="center">
@@ -670,16 +670,16 @@ const FundEntry = () => {
                         ) : (
                           <>
                             {/* GOOGLE Columns */}
-                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#3E2723', bgcolor: '#3E272310' }} align="center">
                               Google Balance
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#3E2723', bgcolor: '#3E272310' }} align="center">
                               Google Amount
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#3E2723', bgcolor: '#3E272310' }} align="center">
                               Google Payment Mode
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700, minWidth: 130, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                            <TableCell sx={{ fontWeight: 700, minWidth: 130, color: '#3E2723', bgcolor: '#3E272310' }} align="center">
                               Google Payment Details
                             </TableCell>
                             <TableCell sx={{ fontWeight: 700, minWidth: 100 }} align="center">
@@ -700,14 +700,14 @@ const FundEntry = () => {
                             key={client._id}
                             hover
                             sx={{
-                              bgcolor: isLowBalance ? '#fee2e2' : 'inherit',
+                              bgcolor: (theme) => isLowBalance ? (theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.12)' : '#fee2e2') : 'inherit',
                               '&:hover': {
-                                bgcolor: isLowBalance ? '#fecaca !important' : undefined,
+                                bgcolor: (theme) => isLowBalance ? (theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.18) !important' : '#fecaca !important') : undefined,
                               },
                             }}
                           >
                             {/* Client Name */}
-                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: isLowBalance ? '#fee2e2' : 'white', zIndex: 1 }}>
+                            <TableCell sx={{ position: 'sticky', left: 0, bgcolor: (theme) => isLowBalance ? (theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.12)' : '#fee2e2') : (theme.palette.mode === 'dark' ? 'background.paper' : 'white'), zIndex: 1 }}>
                               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                                 {client.name}
                               </Typography>
@@ -716,7 +716,7 @@ const FundEntry = () => {
                             {dailyEntryPlatformTab === 0 ? (
                               <>
                                 {/* META COLUMNS */}
-                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#C0855208' }}>
                                   <TextField
                                     size="small"
                                     type="number"
@@ -730,7 +730,7 @@ const FundEntry = () => {
                                   />
                                 </TableCell>
 
-                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#C0855208' }}>
                                   <TextField
                                     size="small"
                                     type="number"
@@ -743,14 +743,14 @@ const FundEntry = () => {
                                     sx={{ width: 110 }}
                                   />
                                   {data.metaFundDate && (
-                                    <Typography sx={{ fontSize: '0.65rem', color: '#1877f2', mt: 0.5 }}>
+                                    <Typography sx={{ fontSize: '0.65rem', color: '#C08552', mt: 0.5 }}>
                                       Added: {new Date(data.metaFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}{' '}
                                       {new Date(data.metaFundDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                                     </Typography>
                                   )}
                                 </TableCell>
 
-                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#C0855208' }}>
                                   <FormControl size="small" sx={{ minWidth: 115 }}>
                                     <Select
                                       value={data.metaPaymentMode || ''}
@@ -766,7 +766,7 @@ const FundEntry = () => {
                                   </FormControl>
                                 </TableCell>
 
-                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#C0855208' }}>
                                   <TextField
                                     size="small"
                                     placeholder={getPaymentPlaceholder(data.metaPaymentMode)}
@@ -788,9 +788,9 @@ const FundEntry = () => {
                                       fontSize: '0.75rem',
                                       py: 0.5,
                                       px: 1.5,
-                                      background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                                      bgcolor: primaryColor,
                                       '&:hover': {
-                                        background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                                        bgcolor: secondaryColor,
                                       },
                                     }}
                                   >
@@ -801,7 +801,7 @@ const FundEntry = () => {
                             ) : (
                               <>
                                 {/* GOOGLE COLUMNS */}
-                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#3E272308' }}>
                                   <TextField
                                     size="small"
                                     type="number"
@@ -815,7 +815,7 @@ const FundEntry = () => {
                                   />
                                 </TableCell>
 
-                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#3E272308' }}>
                                   <TextField
                                     size="small"
                                     type="number"
@@ -828,14 +828,14 @@ const FundEntry = () => {
                                     sx={{ width: 110 }}
                                   />
                                   {data.googleFundDate && (
-                                    <Typography sx={{ fontSize: '0.65rem', color: '#34a853', mt: 0.5 }}>
+                                    <Typography sx={{ fontSize: '0.65rem', color: '#3E2723', mt: 0.5 }}>
                                       Added: {new Date(data.googleFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}{' '}
                                       {new Date(data.googleFundDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                                     </Typography>
                                   )}
                                 </TableCell>
 
-                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#3E272308' }}>
                                   <FormControl size="small" sx={{ minWidth: 115 }}>
                                     <Select
                                       value={data.googlePaymentMode || ''}
@@ -851,7 +851,7 @@ const FundEntry = () => {
                                   </FormControl>
                                 </TableCell>
 
-                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#3E272308' }}>
                                   <TextField
                                     size="small"
                                     placeholder={getPaymentPlaceholder(data.googlePaymentMode)}
@@ -873,9 +873,9 @@ const FundEntry = () => {
                                       fontSize: '0.75rem',
                                       py: 0.5,
                                       px: 1.5,
-                                      background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                                      bgcolor: primaryColor,
                                       '&:hover': {
-                                        background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                                        bgcolor: secondaryColor,
                                       },
                                     }}
                                   >
@@ -975,7 +975,7 @@ const FundEntry = () => {
               {/* Summary Table */}
               <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
                 <CardContent sx={{ p: 0 }}>
-                  <Box sx={{ px: 2, py: 1.5, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box sx={{ px: 2, py: 1.5, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="h6" sx={{ fontWeight: 600 }}>
                       Fund History
                       <Chip
@@ -1008,15 +1008,15 @@ const FundEntry = () => {
                       <Tab
                         label="Meta"
                         sx={{
-                          color: summaryPlatformTab === 0 ? '#1877f2' : 'text.secondary',
-                          '&.Mui-selected': { color: '#1877f2' },
+                          color: summaryPlatformTab === 0 ? '#C08552' : 'text.secondary',
+                          '&.Mui-selected': { color: '#C08552' },
                         }}
                       />
                       <Tab
                         label="Google"
                         sx={{
-                          color: summaryPlatformTab === 1 ? '#34a853' : 'text.secondary',
-                          '&.Mui-selected': { color: '#34a853' },
+                          color: summaryPlatformTab === 1 ? '#3E2723' : 'text.secondary',
+                          '&.Mui-selected': { color: '#3E2723' },
                         }}
                       />
                     </Tabs>
@@ -1027,46 +1027,46 @@ const FundEntry = () => {
                       <Typography color="text.secondary">Loading fund summary...</Typography>
                     </Box>
                   ) : (
-                  <TableContainer>
+                  <TableContainer sx={{ overflowX: "auto" }}>
                     <Table size="small">
                       <TableHead>
-                        <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                        <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb' }}>
                           <TableCell sx={{ fontWeight: 700, minWidth: 120 }}>Date</TableCell>
                           {summaryPlatformTab === 0 ? (
                             <>
                               {/* META Columns */}
-                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#1877f2', bgcolor: '#1877f210' }} align="right">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#C08552', bgcolor: '#C0855210' }} align="right">
                                 Meta Balance
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#1877f2', bgcolor: '#1877f210' }} align="right">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#C08552', bgcolor: '#C0855210' }} align="right">
                                 Meta Amount
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#C08552', bgcolor: '#C0855210' }} align="center">
                                 Meta Mode
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#C08552', bgcolor: '#C0855210' }} align="center">
                                 Meta Details
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 140, color: '#1877f2', bgcolor: '#1877f210' }} align="center">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 140, color: '#C08552', bgcolor: '#C0855210' }} align="center">
                                 Fund Added On
                               </TableCell>
                             </>
                           ) : (
                             <>
                               {/* GOOGLE Columns */}
-                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#34a853', bgcolor: '#34a85310' }} align="right">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#3E2723', bgcolor: '#3E272310' }} align="right">
                                 Google Balance
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#34a853', bgcolor: '#34a85310' }} align="right">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#3E2723', bgcolor: '#3E272310' }} align="right">
                                 Google Amount
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 110, color: '#3E2723', bgcolor: '#3E272310' }} align="center">
                                 Google Mode
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 120, color: '#3E2723', bgcolor: '#3E272310' }} align="center">
                                 Google Details
                               </TableCell>
-                              <TableCell sx={{ fontWeight: 700, minWidth: 140, color: '#34a853', bgcolor: '#34a85310' }} align="center">
+                              <TableCell sx={{ fontWeight: 700, minWidth: 140, color: '#3E2723', bgcolor: '#3E272310' }} align="center">
                                 Fund Added On
                               </TableCell>
                             </>
@@ -1081,9 +1081,9 @@ const FundEntry = () => {
                             key={index}
                             hover
                             sx={{
-                              bgcolor: isLowBalance ? '#fee2e2' : 'inherit',
+                              bgcolor: (theme) => isLowBalance ? (theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.12)' : '#fee2e2') : 'inherit',
                               '&:hover': {
-                                bgcolor: isLowBalance ? '#fecaca !important' : undefined,
+                                bgcolor: (theme) => isLowBalance ? (theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.18) !important' : '#fecaca !important') : undefined,
                               },
                             }}
                           >
@@ -1094,19 +1094,19 @@ const FundEntry = () => {
                             </TableCell>
                             {summaryPlatformTab === 0 ? (
                               <>
-                                <TableCell align="right" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="right" sx={{ bgcolor: '#C0855208' }}>
                                   ₹{row.metaBalance.toLocaleString()}
                                 </TableCell>
-                                <TableCell align="right" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="right" sx={{ bgcolor: '#C0855208' }}>
                                   ₹{row.metaAmount.toLocaleString()}
                                 </TableCell>
-                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#C0855208' }}>
                                   {row.metaPaymentMode && <Chip label={row.metaPaymentMode} size="small" variant="outlined" />}
                                 </TableCell>
-                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#C0855208' }}>
                                   {row.metaPaymentDetails || '-'}
                                 </TableCell>
-                                <TableCell align="center" sx={{ bgcolor: '#1877f208' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#C0855208' }}>
                                   {row.metaFundDate ? (
                                     <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
                                       {new Date(row.metaFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -1120,19 +1120,19 @@ const FundEntry = () => {
                               </>
                             ) : (
                               <>
-                                <TableCell align="right" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="right" sx={{ bgcolor: '#3E272308' }}>
                                   ₹{row.googleBalance.toLocaleString()}
                                 </TableCell>
-                                <TableCell align="right" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="right" sx={{ bgcolor: '#3E272308' }}>
                                   ₹{row.googleAmount.toLocaleString()}
                                 </TableCell>
-                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#3E272308' }}>
                                   {row.googlePaymentMode && <Chip label={row.googlePaymentMode} size="small" variant="outlined" />}
                                 </TableCell>
-                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#3E272308' }}>
                                   {row.googlePaymentDetails || '-'}
                                 </TableCell>
-                                <TableCell align="center" sx={{ bgcolor: '#34a85308' }}>
+                                <TableCell align="center" sx={{ bgcolor: '#3E272308' }}>
                                   {row.googleFundDate ? (
                                     <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
                                       {new Date(row.googleFundDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -1267,7 +1267,7 @@ const FundEntry = () => {
             /* Payment History Table */
             <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
               <CardContent sx={{ p: 0 }}>
-                <Box sx={{ px: 2, py: 1.5, bgcolor: '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box sx={{ px: 2, py: 1.5, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     Payment History
                     <Chip
@@ -1290,10 +1290,10 @@ const FundEntry = () => {
                     <Typography color="text.secondary">Loading payment history...</Typography>
                   </Box>
                 ) : (
-                  <TableContainer>
+                  <TableContainer sx={{ overflowX: "auto" }}>
                     <Table size="small">
                       <TableHead>
-                        <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                        <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb' }}>
                           <TableCell sx={{ fontWeight: 700, minWidth: 120 }}>Entry Date</TableCell>
                           <TableCell sx={{ fontWeight: 700, minWidth: 150 }}>Client Name</TableCell>
                           <TableCell sx={{ fontWeight: 700, minWidth: 100 }} align="center">Platform</TableCell>
@@ -1307,7 +1307,7 @@ const FundEntry = () => {
                       </TableHead>
                       <TableBody>
                         {historyData.map((row) => {
-                          const platformColor = row.platform === 'Meta' ? '#1877f2' : '#34a853';
+                          const platformColor = row.platform === 'Meta' ? '#C08552' : '#3E2723';
                           return (
                             <TableRow key={row._id} hover>
                               <TableCell>

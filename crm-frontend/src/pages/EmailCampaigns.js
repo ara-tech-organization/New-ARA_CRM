@@ -323,7 +323,7 @@ const EmailCampaigns = () => {
           <TableContainer component={Paper} variant="outlined">
             <Table>
               <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                   <TableCell sx={{ fontWeight: 600 }}>Campaign Name</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Subject</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>

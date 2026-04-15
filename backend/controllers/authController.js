@@ -124,11 +124,13 @@ export const logout = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getMe = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id);
+  const user = await User.findById(req.user._id);
 
   if (!user) {
-    res.status(401);
-    throw new Error('User not found. Please login again.');
+    return res.status(401).json({
+      success: false,
+      message: 'User not found. Please login again.',
+    });
   }
 
   res.status(200).json({
@@ -163,7 +165,7 @@ export const updateDetails = asyncHandler(async (req, res) => {
     department: req.body.department,
   };
 
-  const user = await User.findByIdAndUpdate(req.user.id, fieldsToUpdate, {
+  const user = await User.findByIdAndUpdate(req.user._id, fieldsToUpdate, {
     new: true,
     runValidators: true,
   });
@@ -180,7 +182,7 @@ export const updateDetails = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updatePassword = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id).select('+password');
+  const user = await User.findById(req.user._id).select('+password');
 
   // Check current password
   if (!(await user.comparePassword(req.body.currentPassword))) {

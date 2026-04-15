@@ -2,8 +2,8 @@ import { createContext, useState, useMemo, useEffect, useContext } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
-// Fixed brand colors — professional navy + blue
-const brandColor = { primary: '#2563EB', secondary: '#3B82F6', text: '#FFFFFF' };
+// Fixed brand colors — warm cream + copper
+const brandColor = { primary: '#FFF8F0', secondary: '#C08552', text: '#3E2723' };
 
 export const ThemeContext = createContext({
   mode: 'light',
@@ -56,51 +56,51 @@ const getDesignTokens = (mode, accentColor) => ({
     ...(mode === 'light'
       ? {
           primary: {
-            main: accentColor.primary,
-            light: accentColor.secondary,
-            dark: darkenColor(accentColor.primary, 15),
-            contrastText: accentColor.text,
+            main: '#C08552',
+            light: '#D4A574',
+            dark: '#8B5E3C',
+            contrastText: '#FFFFFF',
           },
           secondary: {
-            main: accentColor.secondary,
-            light: lightenColor(accentColor.secondary, 15),
-            dark: accentColor.primary,
-            contrastText: accentColor.text,
+            main: '#C08552',
+            light: '#D4A574',
+            dark: '#8B5E3C',
+            contrastText: '#FFFFFF',
           },
           success: { main: '#10b981', light: '#34d399', dark: '#059669' },
           warning: { main: '#f59e0b', light: '#fbbf24', dark: '#d97706' },
           error: { main: '#ef4444', light: '#f87171', dark: '#dc2626' },
           info: { main: '#3b82f6', light: '#60a5fa', dark: '#2563eb' },
           background: {
-            default: 'transparent',
-            paper: 'rgba(255, 255, 255, 0.55)',
+            default: '#FFF8F0',
+            paper: '#FFFFFF',
           },
-          text: { primary: '#1e293b', secondary: '#64748b' },
-          divider: 'rgba(255, 255, 255, 0.4)',
+          text: { primary: '#3E2723', secondary: '#6D4C41' },
+          divider: 'rgba(192, 133, 82, 0.15)',
         }
       : {
           primary: {
-            main: accentColor.secondary,
-            light: lightenColor(accentColor.secondary, 15),
-            dark: accentColor.primary,
-            contrastText: accentColor.text,
+            main: '#D4A574',
+            light: '#E0BB8F',
+            dark: '#C08552',
+            contrastText: '#1a1a1a',
           },
           secondary: {
-            main: lightenColor(accentColor.secondary, 10),
-            light: lightenColor(accentColor.secondary, 20),
-            dark: accentColor.secondary,
-            contrastText: accentColor.text,
+            main: '#D4A574',
+            light: '#E0BB8F',
+            dark: '#C08552',
+            contrastText: '#1a1a1a',
           },
           success: { main: '#34d399', light: '#6ee7b7', dark: '#10b981' },
           warning: { main: '#fbbf24', light: '#fcd34d', dark: '#f59e0b' },
           error: { main: '#f87171', light: '#fca5a5', dark: '#ef4444' },
           info: { main: '#60a5fa', light: '#93c5fd', dark: '#3b82f6' },
           background: {
-            default: 'transparent',
-            paper: 'rgba(15, 23, 42, 0.6)',
+            default: '#1C1410',
+            paper: '#2A1F18',
           },
-          text: { primary: '#f1f5f9', secondary: '#94a3b8' },
-          divider: 'rgba(255, 255, 255, 0.08)',
+          text: { primary: '#FFF8F0', secondary: '#D4A574' },
+          divider: 'rgba(208, 165, 116, 0.15)',
         }),
   },
   typography: {
@@ -126,10 +126,7 @@ const getDesignTokens = (mode, accentColor) => ({
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          background: mode === 'light'
-            ? `linear-gradient(135deg, ${lightenColor(accentColor.primary, 42)} 0%, #f0f4f8 25%, ${lightenColor(accentColor.secondary, 44)} 50%, #f8f0f4 75%, ${lightenColor(accentColor.primary, 46)} 100%)`
-            : `linear-gradient(135deg, #0c1222 0%, ${darkenColor(accentColor.primary, 35)} 25%, #0f172a 50%, ${darkenColor(accentColor.secondary, 35)} 75%, #0c1222 100%)`,
-          backgroundAttachment: 'fixed',
+          background: mode === 'light' ? '#FFF8F0' : '#1C1410',
           minHeight: '100vh',
         },
       },
@@ -145,27 +142,20 @@ const getDesignTokens = (mode, accentColor) => ({
           transition: 'all 0.25s ease',
         },
         contained: {
-          background: `linear-gradient(135deg, ${accentColor.primary} 0%, ${accentColor.secondary} 100%)`,
-          boxShadow: `0 4px 15px ${accentColor.primary}30`,
+          backgroundColor: '#C08552',
+          color: '#FFFFFF',
+          boxShadow: '0 2px 8px rgba(192, 133, 82, 0.25)',
           '&:hover': {
-            background: `linear-gradient(135deg, ${darkenColor(accentColor.primary, 8)} 0%, ${accentColor.primary} 100%)`,
-            boxShadow: `0 6px 20px ${accentColor.primary}40`,
-            transform: 'translateY(-1px)',
+            backgroundColor: '#8B5E3C',
+            boxShadow: '0 4px 12px rgba(192, 133, 82, 0.35)',
           },
         },
         outlined: {
-          borderColor: mode === 'light'
-            ? `${accentColor.primary}40`
-            : `${accentColor.secondary}40`,
-          backdropFilter: 'blur(8px)',
-          background: mode === 'light'
-            ? 'rgba(255, 255, 255, 0.4)'
-            : 'rgba(255, 255, 255, 0.05)',
+          borderColor: '#C0855240',
+          color: '#C08552',
           '&:hover': {
-            borderColor: accentColor.primary,
-            background: mode === 'light'
-              ? `${accentColor.primary}10`
-              : `${accentColor.primary}15`,
+            borderColor: '#C08552',
+            backgroundColor: '#C0855208',
           },
         },
       },
@@ -173,19 +163,10 @@ const getDesignTokens = (mode, accentColor) => ({
     MuiCard: {
       styleOverrides: {
         root: {
-          background: mode === 'light'
-            ? 'rgba(255, 255, 255, 0.55)'
-            : 'rgba(30, 41, 59, 0.50)',
-          backdropFilter: 'blur(16px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-          border: mode === 'light'
-            ? '1px solid rgba(255, 255, 255, 0.6)'
-            : '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: 12,
-          boxShadow: mode === 'light'
-            ? '0 2px 16px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.5)'
-            : '0 2px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-          transition: 'all 0.3s ease',
+          backgroundColor: mode === 'light' ? '#FFFFFF' : '#2A1F18',
+          border: mode === 'light' ? '1px solid #C0855215' : '1px solid rgba(208,165,116,0.1)',
+          borderRadius: 10,
+          boxShadow: mode === 'light' ? '0 1px 8px rgba(0,0,0,0.04)' : '0 1px 8px rgba(0,0,0,0.2)',
         },
       },
     },
@@ -193,43 +174,18 @@ const getDesignTokens = (mode, accentColor) => ({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          background: mode === 'light'
-            ? 'rgba(255, 255, 255, 0.50)'
-            : 'rgba(30, 41, 59, 0.45)',
-          backdropFilter: 'blur(12px) saturate(150%)',
-          WebkitBackdropFilter: 'blur(12px) saturate(150%)',
-          border: mode === 'light'
-            ? '1px solid rgba(255, 255, 255, 0.5)'
-            : '1px solid rgba(255, 255, 255, 0.06)',
+          backgroundColor: mode === 'light' ? '#FFFFFF' : '#2A1F18',
+          border: mode === 'light' ? '1px solid #C0855210' : '1px solid rgba(208,165,116,0.08)',
         },
-        elevation0: {
-          background: 'transparent',
-          backdropFilter: 'none',
-          WebkitBackdropFilter: 'none',
-          border: 'none',
-        },
-        elevation1: {
-          boxShadow: mode === 'light'
-            ? '0 2px 12px rgba(0, 0, 0, 0.05)'
-            : '0 2px 12px rgba(0, 0, 0, 0.3)',
-        },
+        elevation0: { background: 'transparent', border: 'none' },
       },
     },
     MuiDialog: {
       styleOverrides: {
         paper: {
-          background: mode === 'light'
-            ? 'rgba(255, 255, 255, 0.80)'
-            : 'rgba(30, 41, 59, 0.85)',
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-          border: mode === 'light'
-            ? '1px solid rgba(255, 255, 255, 0.6)'
-            : '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: 14,
-          boxShadow: mode === 'light'
-            ? '0 16px 40px rgba(0, 0, 0, 0.1)'
-            : '0 16px 40px rgba(0, 0, 0, 0.45)',
+          backgroundColor: mode === 'light' ? '#FFFFFF' : '#2A1F18',
+          borderRadius: 12,
+          boxShadow: '0 16px 40px rgba(0,0,0,0.15)',
         },
       },
     },
@@ -237,25 +193,13 @@ const getDesignTokens = (mode, accentColor) => ({
       styleOverrides: {
         root: {
           '& .MuiOutlinedInput-root': {
-            borderRadius: 8,
-            transition: 'all 0.25s ease',
-            background: mode === 'light'
-              ? 'rgba(255, 255, 255, 0.5)'
-              : 'rgba(255, 255, 255, 0.04)',
-            backdropFilter: 'blur(8px)',
-            '&:hover': {
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: `${accentColor.primary}60`,
-              },
+            borderRadius: 6,
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#C08552',
             },
-            '&.Mui-focused': {
-              background: mode === 'light'
-                ? 'rgba(255, 255, 255, 0.7)'
-                : 'rgba(255, 255, 255, 0.07)',
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: accentColor.primary,
-                borderWidth: '1.5px',
-              },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#C08552',
+              borderWidth: '1.5px',
             },
           },
           '& .MuiOutlinedInput-notchedOutline': {
@@ -316,29 +260,16 @@ const getDesignTokens = (mode, accentColor) => ({
           fontWeight: 500,
           fontSize: '0.76rem',
           height: 26,
-          backdropFilter: 'blur(8px)',
-          border: mode === 'light'
-            ? '1px solid rgba(255, 255, 255, 0.3)'
-            : '1px solid rgba(255, 255, 255, 0.08)',
         },
-        sizeSmall: {
-          height: 22,
-          fontSize: '0.72rem',
-        },
+        sizeSmall: { height: 22, fontSize: '0.72rem' },
       },
     },
     MuiTableContainer: {
       styleOverrides: {
         root: {
-          background: mode === 'light'
-            ? 'rgba(255, 255, 255, 0.45)'
-            : 'rgba(30, 41, 59, 0.40)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          borderRadius: 12,
-          border: mode === 'light'
-            ? '1px solid rgba(255, 255, 255, 0.5)'
-            : '1px solid rgba(255, 255, 255, 0.06)',
+          backgroundColor: mode === 'light' ? '#FFFFFF' : '#2A1F18',
+          borderRadius: 8,
+          border: mode === 'light' ? '1px solid #C0855210' : '1px solid rgba(208,165,116,0.08)',
         },
       },
     },
@@ -346,12 +277,8 @@ const getDesignTokens = (mode, accentColor) => ({
       styleOverrides: {
         root: {
           '& .MuiTableCell-head': {
-            background: mode === 'light'
-              ? `${accentColor.primary}0A`
-              : 'rgba(255, 255, 255, 0.03)',
-            borderBottom: mode === 'light'
-              ? '1px solid rgba(0, 0, 0, 0.06)'
-              : '1px solid rgba(255, 255, 255, 0.06)',
+            backgroundColor: mode === 'light' ? '#FFF8F0' : '#1C1410',
+            borderBottom: mode === 'light' ? '1px solid #C0855215' : '1px solid rgba(208,165,116,0.1)',
             fontWeight: 600,
           },
         },
@@ -361,57 +288,34 @@ const getDesignTokens = (mode, accentColor) => ({
       styleOverrides: {
         switchBase: {
           '&.Mui-checked': {
-            color: accentColor.primary,
-            '& + .MuiSwitch-track': {
-              backgroundColor: accentColor.primary,
-            },
+            color: '#C08552',
+            '& + .MuiSwitch-track': { backgroundColor: '#C08552' },
           },
         },
       },
     },
     MuiTabs: {
       styleOverrides: {
-        indicator: {
-          backgroundColor: accentColor.primary,
-          height: 3,
-          borderRadius: 3,
-        },
+        indicator: { backgroundColor: '#C08552', height: 3, borderRadius: 3 },
       },
     },
     MuiTab: {
       styleOverrides: {
-        root: {
-          '&.Mui-selected': {
-            color: accentColor.primary,
-          },
-        },
+        root: { '&.Mui-selected': { color: '#C08552' } },
       },
     },
     MuiAlert: {
       styleOverrides: {
-        root: {
-          backdropFilter: 'blur(12px)',
-          borderRadius: 8,
-          padding: '4px 12px',
-          fontSize: '0.8rem',
-        },
+        root: { borderRadius: 8, padding: '4px 12px', fontSize: '0.8rem' },
       },
     },
     MuiMenu: {
       styleOverrides: {
         paper: {
-          background: mode === 'light'
-            ? 'rgba(255, 255, 255, 0.82) !important'
-            : 'rgba(30, 41, 59, 0.88) !important',
-          backdropFilter: 'blur(20px) saturate(180%) !important',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%) !important',
-          border: mode === 'light'
-            ? '1px solid rgba(255, 255, 255, 0.5) !important'
-            : '1px solid rgba(255, 255, 255, 0.08) !important',
-          borderRadius: '14px !important',
-          boxShadow: mode === 'light'
-            ? '0 8px 32px rgba(0, 0, 0, 0.1) !important'
-            : '0 8px 32px rgba(0, 0, 0, 0.4) !important',
+          backgroundColor: mode === 'light' ? '#FFFFFF !important' : '#2A1F18 !important',
+          border: mode === 'light' ? '1px solid #C0855215 !important' : '1px solid rgba(208,165,116,0.1) !important',
+          borderRadius: '10px !important',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.1) !important',
         },
       },
     },

@@ -6,55 +6,54 @@ import Lead from '../models/Lead.js';
 import Vault from '../models/Vault.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
+const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net';
+
+const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+};
+
 /**
  * @desc    Get all clients
  * @route   GET /api/clients
  * @access  Private
  */
 export const getClients = asyncHandler(async (req, res) => {
-  const {
-    page = 1,
-    limit = 100,
-    search,
-    status,
-    dateFrom,
-    dateTo,
-  } = req.query;
+  try {
+    // Forward auth header to main API
+    const headers = {};
+    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+    if (req.headers.cookie) headers.cookie = req.headers.cookie;
 
-  const query = {};
+    const qs = new URLSearchParams(req.query).toString();
+    const url = `${MAIN_API_URL}/api/clients${qs ? `?${qs}` : ''}`;
 
-  if (search) {
-    query.$or = [
-      { clientName: { $regex: search, $options: 'i' } },
-      { place: { $regex: search, $options: 'i' } },
-      { organisationType: { $regex: search, $options: 'i' } },
-      { accountID: { $regex: search, $options: 'i' } },
-    ];
+    const response = await fetchWithTimeout(url, { headers }, 20000);
+
+    if (!response.ok) {
+      console.error(`Client proxy: main API returned ${response.status}`);
+      return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
+    }
+    const clients = await response.json();
+    const data = Array.isArray(clients) ? clients : (clients.data || []);
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      total: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error('Client proxy error:', error.message);
+    return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
   }
-
-  if (status) query.status = status;
-
-  if (dateFrom || dateTo) {
-    query.createdAt = {};
-    if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
-    if (dateTo) query.createdAt.$lte = new Date(dateTo);
-  }
-
-  const clients = await Client.find(query)
-    .limit(limit * 1)
-    .skip((page - 1) * limit)
-    .sort({ createdAt: -1 });
-
-  const count = await Client.countDocuments(query);
-
-  res.status(200).json({
-    success: true,
-    count: clients.length,
-    total: count,
-    totalPages: Math.ceil(count / limit),
-    currentPage: parseInt(page),
-    data: clients,
-  });
 });
 
 /**
@@ -258,3 +257,4 @@ export const getClientStats = asyncHandler(async (req, res) => {
     },
   });
 });
+

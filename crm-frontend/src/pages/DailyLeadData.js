@@ -40,8 +40,8 @@ import { useDataCache } from '../contexts/DataCacheContext';
 
 const DailyLeadData = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const printRef = useRef();
 
@@ -150,8 +150,8 @@ const DailyLeadData = () => {
           .header h1 { color: #333; margin-bottom: 5px; }
           .header p { color: #666; }
           .totals-row { background-color: #f5f5f5; font-weight: bold; }
-          .meta-col { background-color: #1877f210; }
-          .google-col { background-color: #34a85310; }
+          .meta-col { background-color: #C0855210; }
+          .google-col { background-color: #3E272310; }
           @page { size: landscape; margin: 10mm; }
         }
       </style>
@@ -246,7 +246,7 @@ const DailyLeadData = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
@@ -403,17 +403,17 @@ const DailyLeadData = () => {
             <TableContainer component={Paper} variant="outlined">
               <Table sx={{ minWidth: 1200 }}>
                 <TableHead>
-                  <TableRow sx={{ bgcolor: 'grey.100' }}>
+                  <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                     <TableCell sx={{ fontWeight: 700 }}>Client</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1877f210' }} align="center">Meta Form</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1877f210' }} align="center">Meta WhatsApp</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1877f210' }} align="center">Meta Total</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1877f210' }} align="right">Meta Fund</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#34a85310' }} align="center">Google Call</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#34a85310' }} align="center">Google Website</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#34a85310' }} align="center">Google Total</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#34a85310' }} align="right">Google Fund</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Form</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta WhatsApp</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Total</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Meta Fund</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="center">Google Call</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="center">Google Website</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="center">Google Total</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="right">Google Fund</TableCell>
                     <TableCell sx={{ fontWeight: 700 }} align="center">Total Leads</TableCell>
                     <TableCell sx={{ fontWeight: 700 }} align="right">Total Spend</TableCell>
                   </TableRow>
@@ -431,50 +431,50 @@ const DailyLeadData = () => {
                           {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </Typography>
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#1877f205' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
                         <Chip
                           label={entry.metaForm || 0}
                           size="small"
-                          sx={{ bgcolor: '#1877f215', color: '#1877f2', fontWeight: 600, minWidth: 40 }}
+                          sx={{ bgcolor: '#C0855215', color: '#C08552', fontWeight: 600, minWidth: 40 }}
                         />
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#1877f205' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
                         <Chip
                           label={entry.metaWhatsapp || 0}
                           size="small"
-                          sx={{ bgcolor: '#25D36615', color: '#25D366', fontWeight: 600, minWidth: 40 }}
+                          sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600, minWidth: 40 }}
                         />
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#1877f205' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#1877f2' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
                           {entry.metaTotalLeads || 0}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{ bgcolor: '#1877f205' }}>
+                      <TableCell align="right" sx={{ bgcolor: '#C0855205' }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           ₹{(entry.metaFund || 0).toLocaleString('en-IN')}
                         </Typography>
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#34a85305' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#3E272305' }}>
                         <Chip
                           label={entry.googleCall || 0}
                           size="small"
-                          sx={{ bgcolor: '#34a85315', color: '#34a853', fontWeight: 600, minWidth: 40 }}
+                          sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600, minWidth: 40 }}
                         />
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#34a85305' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#3E272305' }}>
                         <Chip
                           label={entry.googleWebsite || 0}
                           size="small"
-                          sx={{ bgcolor: '#4285f415', color: '#4285f4', fontWeight: 600, minWidth: 40 }}
+                          sx={{ bgcolor: '#C0855215', color: '#C08552', fontWeight: 600, minWidth: 40 }}
                         />
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#34a85305' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#34a853' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#3E272305' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#3E2723' }}>
                           {entry.googleTotalLeads || 0}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{ bgcolor: '#34a85305' }}>
+                      <TableCell align="right" sx={{ bgcolor: '#3E272305' }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           ₹{(entry.googleFund || 0).toLocaleString('en-IN')}
                         </Typography>
@@ -495,45 +495,45 @@ const DailyLeadData = () => {
                     </TableRow>
                   ))}
                   {/* Totals Row */}
-                  <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                  <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb' }}>
                     <TableCell sx={{ fontWeight: 700 }}>TOTAL</TableCell>
                     <TableCell></TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#1877f210' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#1877f2' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#C0855210' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
                         {dailyTotals.metaForm}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#1877f210' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#25D366' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#C0855210' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#3E2723' }}>
                         {dailyTotals.metaWhatsapp}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#1877f210' }}>
-                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#1877f2' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#C0855210' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#C08552' }}>
                         {dailyTotals.metaTotalLeads}
                       </Typography>
                     </TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#1877f210' }}>
+                    <TableCell align="right" sx={{ bgcolor: '#C0855210' }}>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#34a85310' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#34a853' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#3E272310' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#3E2723' }}>
                         {dailyTotals.googleCall}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#34a85310' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#4285f4' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#3E272310' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
                         {dailyTotals.googleWebsite}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#34a85310' }}>
-                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#34a853' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#3E272310' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#3E2723' }}>
                         {dailyTotals.googleTotalLeads}
                       </Typography>
                     </TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#34a85310' }}>
+                    <TableCell align="right" sx={{ bgcolor: '#3E272310' }}>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         ₹{dailyTotals.googleFund.toLocaleString('en-IN')}
                       </Typography>

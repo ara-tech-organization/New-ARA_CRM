@@ -55,8 +55,8 @@ import { CardLoader, PageLoader } from '../components/Loading';
 
 const ClientVault = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   // Main API state - only source of clients
   const [clients, setClients] = useState([]);
@@ -141,12 +141,12 @@ const ClientVault = () => {
   // Get platform icon and color
   const getPlatformConfig = (type) => {
     const configs = {
-      'Facebook': { icon: <FacebookIcon />, color: '#1877f2' },
+      'Facebook': { icon: <FacebookIcon />, color: '#C08552' },
       'Instagram': { icon: <InstagramIcon />, color: '#E4405F' },
-      'Google Ads': { icon: <GoogleIcon />, color: '#4285f4' },
-      'Email': { icon: <EmailIcon />, color: '#ea4335' },
+      'Google Ads': { icon: <GoogleIcon />, color: '#C08552' },
+      'Email': { icon: <EmailIcon />, color: '#C08552' },
       'Website': { icon: <WebsiteIcon />, color: '#10b981' },
-      'Other': { icon: <VpnKeyIcon />, color: '#8b5cf6' },
+      'Other': { icon: <VpnKeyIcon />, color: '#3E2723' },
     };
     return configs[type] || configs['Other'];
   };
@@ -155,9 +155,9 @@ const ClientVault = () => {
   const getPasswordStrength = (password) => {
     if (!password) return { strength: 'none', color: '#94a3b8', label: 'No Password' };
     if (password.length < 8) return { strength: 'weak', color: '#ef4444', label: 'Weak' };
-    if (password.length < 12) return { strength: 'medium', color: '#f59e0b', label: 'Medium' };
+    if (password.length < 12) return { strength: 'medium', color: '#C08552', label: 'Medium' };
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-      return { strength: 'medium', color: '#f59e0b', label: 'Medium' };
+      return { strength: 'medium', color: '#C08552', label: 'Medium' };
     }
     return { strength: 'strong', color: '#10b981', label: 'Strong' };
   };
@@ -297,7 +297,7 @@ const ClientVault = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <ShieldIcon sx={{ fontSize: 22, color: primaryColor }} />
@@ -323,10 +323,10 @@ const ClientVault = () => {
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
             sx={{
-              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              bgcolor: primaryColor,
               fontWeight: 600,
               '&:hover': {
-                background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                bgcolor: secondaryColor,
               },
             }}
           >
@@ -353,85 +353,26 @@ const ClientVault = () => {
 
       {/* Stats Cards */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        <Grid size={{xs: 12, sm: 6, md: 3}}>
-          <Card sx={{ background: `linear-gradient(135deg, ${primaryColor}15 0%, ${primaryColor}05 100%)` }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        {[
+          { label: 'Total Credentials', value: stats.totalCredentials, color: '#C08552', icon: <LockIcon /> },
+          { label: 'Clients Secured', value: stats.totalClients, color: '#C08552', icon: <SecurityIcon /> },
+          { label: 'Weak Passwords', value: stats.weakPasswords, color: '#ef4444', icon: <WarningIcon /> },
+          { label: 'Recently Updated', value: stats.recentlyUpdated, color: '#10b981', icon: <EditIcon /> },
+        ].map((s, i) => (
+          <Grid key={i} size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card variant="outlined" sx={{ borderLeft: `3px solid ${s.color}` }}>
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 20 } })}
+                </Box>
                 <Box>
-                  <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                    Total Credentials
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: primaryColor }}>
-                    {stats.totalCredentials}
-                  </Typography>
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
                 </Box>
-                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: `${primaryColor}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LockIcon sx={{ fontSize: 22, color: primaryColor }} />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{xs: 12, sm: 6, md: 3}}>
-          <Card sx={{ background: 'linear-gradient(135deg, #10b98115 0%, #10b98105 100%)' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Box>
-                  <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                    Clients Secured
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: '#10b981' }}>
-                    {stats.totalClients}
-                  </Typography>
-                </Box>
-                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#10b98120', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <SecurityIcon sx={{ fontSize: 22, color: '#10b981' }} />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{xs: 12, sm: 6, md: 3}}>
-          <Card sx={{ background: 'linear-gradient(135deg, #ef444415 0%, #ef444405 100%)' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Box>
-                  <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                    Weak Passwords
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: '#ef4444' }}>
-                    {stats.weakPasswords}
-                  </Typography>
-                </Box>
-                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#ef444420', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <WarningIcon sx={{ fontSize: 22, color: '#ef4444' }} />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{xs: 12, sm: 6, md: 3}}>
-          <Card sx={{ background: 'linear-gradient(135deg, #f59e0b15 0%, #f59e0b05 100%)' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Box>
-                  <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                    Recently Updated
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: '#f59e0b' }}>
-                    {stats.recentlyUpdated}
-                  </Typography>
-                </Box>
-                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#f59e0b20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <EditIcon sx={{ fontSize: 22, color: '#f59e0b' }} />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
       {/* Filters */}
@@ -525,10 +466,8 @@ const ClientVault = () => {
                 <AccordionSummary
                   expandIcon={<ExpandMoreIcon />}
                   sx={{
-                    background: `linear-gradient(135deg, ${primaryColor}10 0%, ${secondaryColor}10 100%)`,
-                    '&:hover': {
-                      background: `linear-gradient(135deg, ${primaryColor}20 0%, ${secondaryColor}20 100%)`,
-                    },
+                    bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#fafafa',
+                    '&:hover': { bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f5f5f5' },
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
@@ -571,7 +510,7 @@ const ClientVault = () => {
                           }}>
                             <CardContent>
                               {/* Header */}
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                                   <Box
                                     sx={{
@@ -729,7 +668,7 @@ const ClientVault = () => {
       )}
 
       {/* Add/Edit Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           {editingCredential ? 'Edit Credential' : 'Add New Credential'}
         </DialogTitle>
@@ -856,10 +795,10 @@ const ClientVault = () => {
               disabled={saving}
               startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null}
               sx={{
-                background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                bgcolor: primaryColor,
                 fontWeight: 600,
                 '&:hover': {
-                  background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                  bgcolor: secondaryColor,
                 },
               }}
             >

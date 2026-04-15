@@ -107,8 +107,8 @@ const StatCard = ({ title, value, icon, color, loading }) => (
 
 const DailyEntry = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const dispatch = useDispatch();
 
@@ -396,7 +396,7 @@ const DailyEntry = () => {
             title="Total Spend"
             value={`₹${(dateStats.totalSpend || 0).toLocaleString('en-IN')}`}
             icon={<CurrencyRupee />}
-            color="#f59e0b"
+            color="#C08552"
             loading={loading}
           />
         </Grid>
@@ -456,9 +456,9 @@ const DailyEntry = () => {
               startIcon={<Add />}
               onClick={() => handleOpenDialog()}
               sx={{
-                background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                bgcolor: primaryColor,
                 '&:hover': {
-                  background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                  bgcolor: secondaryColor,
                 },
               }}
             >
@@ -474,10 +474,10 @@ const DailyEntry = () => {
           {loading && filteredEntries.length === 0 ? (
             <TableLoader rows={5} message="Loading entries..." />
           ) : (
-          <TableContainer>
+          <TableContainer sx={{ overflowX: "auto" }}>
             <Table>
               <TableHead>
-                <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb' }}>
                   <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Client</TableCell>
                   <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>Meta Form</TableCell>
@@ -537,16 +537,16 @@ const DailyEntry = () => {
                             <Chip
                               label={entry.metaWhatsapp || 0}
                               size="small"
-                              sx={{ bgcolor: '#25D36615', color: '#25D366', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1877f2' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
                               ₹{(entry.metaFund || 0).toLocaleString('en-IN')}
                             </Typography>
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#ff6b6b' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#ef4444' }}>
                               ₹{metaCPL}
                             </Typography>
                           </TableCell>
@@ -554,23 +554,23 @@ const DailyEntry = () => {
                             <Chip
                               label={entry.googleCall || 0}
                               size="small"
-                              sx={{ bgcolor: '#34a85315', color: '#34a853', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="center">
                             <Chip
                               label={entry.googleWebsite || 0}
                               size="small"
-                              sx={{ bgcolor: '#4285f415', color: '#4285f4', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#C0855215', color: '#C08552', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#fbbc04' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
                               ₹{(entry.googleFund || 0).toLocaleString('en-IN')}
                             </Typography>
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#ea4335' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
                               ₹{googleCPL}
                             </Typography>
                           </TableCell>
@@ -598,7 +598,7 @@ const DailyEntry = () => {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', borderBottom: 'none', pb: 0 }}>
           {editingEntry ? 'Edit Lead Entry' : 'Add Lead Entry'}
         </DialogTitle>
@@ -687,7 +687,7 @@ const DailyEntry = () => {
                     InputLabelProps={{ shrink: true }}
                     InputProps={{
                       readOnly: true,
-                      sx: { bgcolor: '#f5f5f5' }
+                      sx: { bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f5f5f5' }
                     }}
                     helperText="Current date is automatically selected"
                   />
@@ -724,7 +724,7 @@ const DailyEntry = () => {
                 <Divider sx={{ my: 1 }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, mb: 1 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Campaign sx={{ color: '#1877f2' }} />
+                    <Campaign sx={{ color: '#C08552' }} />
                     META Leads
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
@@ -749,8 +749,8 @@ const DailyEntry = () => {
                         disabled={fetchingMetaData || !formik.values.client || !formik.values.date}
                         startIcon={fetchingMetaData ? <CircularProgress size={16} color="inherit" /> : <CloudDownloadIcon />}
                         sx={{
-                          bgcolor: '#1877f2',
-                          '&:hover': { bgcolor: '#166fe5' },
+                          bgcolor: '#C08552',
+                          '&:hover': { bgcolor: '#8B5E3C' },
                           fontSize: '0.75rem',
                         }}
                       >
@@ -802,11 +802,11 @@ const DailyEntry = () => {
                 />
               </Grid>
               <Grid size={{xs: 12}}>
-                <Box sx={{ bgcolor: '#1877f215', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1877f2' }}>
+                <Box sx={{ bgcolor: '#C0855215', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
                     Meta Total Leads: {(parseInt(formik.values.metaForm) || 0) + (parseInt(formik.values.metaWhatsapp) || 0)}
                   </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1877f2' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
                     Meta CPL: ₹{calculateCPL(formik.values.metaFund, (parseInt(formik.values.metaForm) || 0) + (parseInt(formik.values.metaWhatsapp) || 0))}
                   </Typography>
                 </Box>
@@ -816,7 +816,7 @@ const DailyEntry = () => {
               <Grid size={{xs: 12}}>
                 <Divider sx={{ my: 1 }} />
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 2, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Campaign sx={{ color: '#4285f4' }} />
+                  <Campaign sx={{ color: '#C08552' }} />
                   GOOGLE Leads
                 </Typography>
               </Grid>
@@ -857,11 +857,11 @@ const DailyEntry = () => {
                 />
               </Grid>
               <Grid size={{xs: 12}}>
-                <Box sx={{ bgcolor: '#4285f415', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#4285f4' }}>
+                <Box sx={{ bgcolor: '#C0855215', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
                     Google Total Leads: {(parseInt(formik.values.googleCall) || 0) + (parseInt(formik.values.googleWebsite) || 0)}
                   </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#4285f4' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
                     Google CPL: ₹{calculateCPL(formik.values.googleFund, (parseInt(formik.values.googleCall) || 0) + (parseInt(formik.values.googleWebsite) || 0))}
                   </Typography>
                 </Box>
@@ -899,9 +899,9 @@ const DailyEntry = () => {
               startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
               disabled={loading}
               sx={{
-                background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                bgcolor: primaryColor,
                 '&:hover': {
-                  background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                  bgcolor: secondaryColor,
                 },
                 px: 3,
               }}

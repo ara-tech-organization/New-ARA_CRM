@@ -31,8 +31,8 @@ import { useDataCache } from '../contexts/DataCacheContext';
 
 const Leads = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -231,7 +231,7 @@ const Leads = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <LeaderboardIcon sx={{ fontSize: 22, color: primaryColor }} />
@@ -293,7 +293,7 @@ const Leads = () => {
             sx={{
               borderBottom: '1px solid',
               borderColor: 'divider',
-              bgcolor: '#f8fafc',
+              bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
             }}
           >
             <Tabs
@@ -315,7 +315,7 @@ const Leads = () => {
                   color: '#64748b',
                   '&.Mui-selected': {
                     color: primaryColor,
-                    bgcolor: 'white',
+                    bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'white',
                   },
                   '&:hover': {
                     bgcolor: `${primaryColor}14`,
@@ -353,7 +353,7 @@ const Leads = () => {
               </Typography>
             </Box>
           ) : (
-            <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 220px)' }}>
+            <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 220px)', overflowX: 'auto' }}>
               <Table stickyHeader size="small" sx={{ minWidth: filteredDates.length * 70 + 270 }}>
                 <TableHead>
                   <TableRow>

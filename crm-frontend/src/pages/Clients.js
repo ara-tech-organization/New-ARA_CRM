@@ -46,8 +46,8 @@ import userApi from '../api/userApi';
 
 const Clients = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -429,7 +429,7 @@ const Clients = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Clients Management
         </Typography>
@@ -455,42 +455,25 @@ const Clients = () => {
 
       {/* Stats Cards */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        <Grid size={{xs: 12, sm: 6, md: 4}}>
-          <Card sx={{ background: `linear-gradient(135deg, ${primaryColor}15 0%, ${primaryColor}05 100%)` }}>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom variant="overline">
-                Total Clients
-              </Typography>
-              <Typography sx={{ fontWeight: 600, color: primaryColor, fontSize: '1.3rem' }}>
-                {clients.length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{xs: 12, sm: 6, md: 4}}>
-          <Card sx={{ background: 'linear-gradient(135deg, #2e7d3215 0%, #2e7d3205 100%)' }}>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom variant="overline">
-                Active Clients
-              </Typography>
-              <Typography sx={{ fontWeight: 600, color: '#2e7d32', fontSize: '1.3rem' }}>
-                {clients.filter(c => c.status === 'active').length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{xs: 12, sm: 6, md: 4}}>
-          <Card sx={{ background: 'linear-gradient(135deg, #ed6c0215 0%, #ed6c0205 100%)' }}>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom variant="overline">
-                Inactive Clients
-              </Typography>
-              <Typography sx={{ fontWeight: 600, color: '#ed6c02', fontSize: '1.3rem' }}>
-                {clients.filter(c => c.status === 'inactive').length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        {[
+          { label: 'Total Clients', value: clients.length, color: primaryColor },
+          { label: 'Active Clients', value: clients.filter(c => c.status === 'active').length, color: '#10b981' },
+          { label: 'Inactive Clients', value: clients.filter(c => c.status === 'inactive').length, color: '#C08552' },
+        ].map((s, i) => (
+          <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
+            <Card variant="outlined" sx={{ borderLeft: `3px solid ${s.color}` }}>
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BusinessIcon sx={{ color: s.color, fontSize: 20 }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
+                  <Typography sx={{ fontWeight: 700, color: s.color, fontSize: '1.3rem', lineHeight: 1.2 }}>{s.value}</Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
       <Card>
@@ -502,7 +485,7 @@ const Clients = () => {
           <TableContainer component={Paper} variant="outlined">
             <Table>
               <TableHead>
-                <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                   <TableCell sx={{ fontWeight: 600 }}>Client ID</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Team</TableCell>
@@ -627,7 +610,7 @@ const Clients = () => {
       </Card>
 
       {/* Client Details Dialog */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="sm" fullWidth fullScreen={false}>
         {selectedClient && (
           <>
             <DialogTitle sx={{ fontWeight: 600, fontSize: '1.5rem', bgcolor: 'grey.50' }}>
@@ -725,7 +708,7 @@ const Clients = () => {
       </Dialog>
 
       {/* Add Client Dialog */}
-      <Dialog open={addClientOpen} onClose={() => setAddClientOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={addClientOpen} onClose={() => setAddClientOpen(false)} maxWidth="md" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, bgcolor: 'grey.50' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <AddIcon sx={{ color: primaryColor }} />
@@ -948,7 +931,7 @@ const Clients = () => {
       </Dialog>
 
       {/* Edit Client Dialog */}
-      <Dialog open={editClientOpen} onClose={() => setEditClientOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={editClientOpen} onClose={() => setEditClientOpen(false)} maxWidth="md" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, bgcolor: 'grey.50' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <EditIcon sx={{ color: '#1976d2' }} />
@@ -1173,7 +1156,7 @@ const Clients = () => {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, bgcolor: 'error.50', color: 'error.main' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <DeleteIcon />

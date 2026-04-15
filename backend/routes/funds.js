@@ -3,34 +3,40 @@ import FundEntry from '../models/FundEntry.js';
 
 const router = express.Router();
 
-// GET /api/funds - Get all fund entries (with optional filters)
+const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net';
+
+const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+};
+
+// GET /api/funds - Proxies to main API (production data)
 router.get('/', async (req, res) => {
   try {
-    const { clientId, dateFrom, dateTo, entryType } = req.query;
+    const headers = {};
+    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+    if (req.headers.cookie) headers.cookie = req.headers.cookie;
 
-    const query = {};
-
-    // Filter by entryType if provided, otherwise return all
-    if (entryType) {
-      query.entryType = entryType;
+    const qs = new URLSearchParams(req.query).toString();
+    const url = `${MAIN_API_URL}/api/funds${qs ? `?${qs}` : ''}`;
+    const response = await fetchWithTimeout(url, { headers }, 20000);
+    if (!response.ok) {
+      console.error(`Funds proxy: main API returned ${response.status}`);
+      return res.status(200).json([]);
     }
-
-    if (clientId) {
-      query.clientId = clientId;
-    }
-
-    if (dateFrom || dateTo) {
-      query.date = {};
-      if (dateFrom) query.date.$gte = dateFrom;
-      if (dateTo) query.date.$lte = dateTo;
-    }
-
-    const entries = await FundEntry.find(query).sort({ date: -1 });
-
-    res.status(200).json(entries);
+    const data = await response.json();
+    return res.status(200).json(data);
   } catch (error) {
-    console.error('Error fetching funds:', error);
-    res.status(500).json({ message: 'Failed to fetch funds', error: error.message });
+    console.error('Funds proxy error:', error.message);
+    return res.status(200).json([]);
   }
 });
 

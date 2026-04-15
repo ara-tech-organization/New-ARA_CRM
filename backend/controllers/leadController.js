@@ -1,42 +1,56 @@
 import Lead from '../models/Lead.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
+const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net';
+
+// Fetch with timeout
+const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (e) {
+    clearTimeout(timeoutId);
+    throw e;
+  }
+};
+
 /**
  * @desc    Get all leads
  * @route   GET /api/leads
  * @access  Private
  */
 export const getLeads = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 100, status, source } = req.query;
+  try {
+    // Forward the incoming Authorization header (or cookie) to the main API
+    const headers = {};
+    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
+    if (req.headers.cookie) headers.cookie = req.headers.cookie;
 
-  const query = {};
+    // Forward query string (e.g. ?limit=10000&_t=...)
+    const qs = new URLSearchParams(req.query).toString();
+    const url = `${MAIN_API_URL}/api/leads${qs ? `?${qs}` : ''}`;
 
-  if (status) {
-    query.status = status;
+    const response = await fetchWithTimeout(url, { headers }, 20000);
+
+    if (!response.ok) {
+      console.error(`Lead proxy: main API returned ${response.status}`);
+      return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
+    }
+    const leads = await response.json();
+    const data = Array.isArray(leads) ? leads : (leads.data || []);
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      total: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error('Lead proxy error:', error.message);
+    return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
   }
-
-  if (source) {
-    query.source = source;
-  }
-
-  const leads = await Lead.find(query)
-    .populate('assignedTo', 'name email userID')
-    .populate('client', 'name email company')
-    .populate('createdBy', 'name email userID')
-    .limit(limit * 1)
-    .skip((page - 1) * limit)
-    .sort({ createdAt: -1 });
-
-  const count = await Lead.countDocuments(query);
-
-  res.status(200).json({
-    success: true,
-    count: leads.length,
-    total: count,
-    totalPages: Math.ceil(count / limit),
-    currentPage: parseInt(page),
-    data: leads,
-  });
 });
 
 /**
@@ -69,7 +83,7 @@ export const getLead = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const createLead = asyncHandler(async (req, res) => {
-  req.body.createdBy = req.user.id;
+  req.body.createdBy = req.user._id;
 
   const lead = await Lead.create(req.body);
 
@@ -170,3 +184,4 @@ export const getLeadStats = asyncHandler(async (req, res) => {
     },
   });
 });
+

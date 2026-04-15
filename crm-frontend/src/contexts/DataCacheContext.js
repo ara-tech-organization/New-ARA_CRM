@@ -30,11 +30,13 @@ export const DataCacheProvider = ({ children }) => {
     }
 
     setLeadsLoading(true);
-    leadsPromise.current = api.get('/leads?limit=10000')
+    leadsPromise.current = api.get(`/leads?limit=10000&_t=${Date.now()}`)
       .then(res => {
-        const data = res.data.data || res.data;
-        setLeads(data);
-        leadsTimestamp.current = Date.now();
+        const data = (res.data?.data || res.data || []);
+        if (Array.isArray(data)) {
+          setLeads(data);
+          leadsTimestamp.current = Date.now();
+        }
         leadsPromise.current = null;
         setLeadsLoading(false);
         return data;
@@ -60,11 +62,13 @@ export const DataCacheProvider = ({ children }) => {
     }
 
     setClientsLoading(true);
-    clientsPromise.current = api.get('/clients?limit=10000')
+    clientsPromise.current = api.get(`/clients?limit=10000&_t=${Date.now()}`)
       .then(res => {
-        const data = res.data.data || res.data;
-        setClients(data);
-        clientsTimestamp.current = Date.now();
+        const data = (res.data?.data || res.data || []);
+        if (Array.isArray(data)) {
+          setClients(data);
+          clientsTimestamp.current = Date.now();
+        }
         clientsPromise.current = null;
         setClientsLoading(false);
         return data;

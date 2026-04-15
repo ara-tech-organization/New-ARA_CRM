@@ -19,30 +19,28 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle errors
+// Response interceptor to handle 401 errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Handle 401 errors - but don't auto-logout on every 401
-    // Only logout if it's a token validation error (not network/server issues)
     if (error.response?.status === 401) {
       const isAuthEndpoint = error.config?.url?.includes('/auth/');
       const errorMessage = error.response?.data?.message?.toLowerCase() || '';
 
-      // Only clear auth and redirect if it's specifically a token/auth issue
-      // Not for general API errors or when backend is unreachable
       const isTokenError = errorMessage.includes('token') ||
                           errorMessage.includes('unauthorized') ||
                           errorMessage.includes('not authorized') ||
                           errorMessage.includes('jwt') ||
-                          errorMessage.includes('expired');
+                          errorMessage.includes('expired') ||
+                          errorMessage.includes('user not found') ||
+                          errorMessage.includes('login again');
 
-      if (!isAuthEndpoint && isTokenError) {
+      const isMeEndpoint = error.config?.url?.includes('/auth/me');
+
+      if ((!isAuthEndpoint && isTokenError) || isMeEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.replace('/login');

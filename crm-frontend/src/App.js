@@ -22,6 +22,7 @@ import AccessManagement from './pages/AccessManagement';
 import PersonalVault from './pages/PersonalVault';
 import ContentManagement from './pages/ContentManagement';
 import Leads from './pages/Leads';
+import AdsDashboard from './pages/AdsDashboard';
 import { DataCacheProvider } from './contexts/DataCacheContext';
 
 function App() {
@@ -47,6 +48,7 @@ function App() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="ads-dashboard" element={<AdsDashboard />} />
           <Route path="dashboard-v2" element={<DashboardEnhanced />} />
           <Route path="dashboard-old" element={<DashboardPro />} />
           <Route path="daily-entry" element={<DailyEntry />} />

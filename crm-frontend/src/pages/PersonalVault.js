@@ -65,13 +65,13 @@ const categories = ['Email', 'Social Media', 'Banking', 'Cloud Service', 'Websit
 
 const getCategoryConfig = (category) => {
   const configs = {
-    'Email': { icon: <EmailIcon />, color: '#ea4335' },
-    'Social Media': { icon: <ShareIcon />, color: '#1877f2' },
+    'Email': { icon: <EmailIcon />, color: '#C08552' },
+    'Social Media': { icon: <ShareIcon />, color: '#C08552' },
     'Banking': { icon: <AccountBalanceIcon />, color: '#10b981' },
-    'Cloud Service': { icon: <CloudIcon />, color: '#4285f4' },
-    'Website': { icon: <WebsiteIcon />, color: '#f59e0b' },
-    'App': { icon: <AppsIcon />, color: '#8b5cf6' },
-    'Other': { icon: <VpnKeyIcon />, color: '#6366f1' },
+    'Cloud Service': { icon: <CloudIcon />, color: '#C08552' },
+    'Website': { icon: <WebsiteIcon />, color: '#C08552' },
+    'App': { icon: <AppsIcon />, color: '#3E2723' },
+    'Other': { icon: <VpnKeyIcon />, color: '#3E2723' },
   };
   return configs[category] || configs['Other'];
 };
@@ -79,17 +79,17 @@ const getCategoryConfig = (category) => {
 const getPasswordStrength = (password) => {
   if (!password) return { strength: 'none', color: '#94a3b8', label: 'No Password' };
   if (password.length < 8) return { strength: 'weak', color: '#ef4444', label: 'Weak' };
-  if (password.length < 12) return { strength: 'medium', color: '#f59e0b', label: 'Medium' };
+  if (password.length < 12) return { strength: 'medium', color: '#C08552', label: 'Medium' };
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-    return { strength: 'medium', color: '#f59e0b', label: 'Medium' };
+    return { strength: 'medium', color: '#C08552', label: 'Medium' };
   }
   return { strength: 'strong', color: '#10b981', label: 'Strong' };
 };
 
 const PersonalVault = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
   const { user } = useSelector((state) => state.auth);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -107,6 +107,8 @@ const PersonalVault = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showPasswords, setShowPasswords] = useState({});
   const [expandedPanel, setExpandedPanel] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const [users, setUsers] = useState([]);
@@ -228,16 +230,23 @@ const PersonalVault = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this entry?')) {
-      try {
-        await api.delete(`/personal-vault/${id}`);
-        setSnackbar({ open: true, message: 'Entry deleted successfully!', severity: 'success' });
-        await fetchEntries();
-      } catch (error) {
-        console.error('Error deleting entry:', error);
-        setSnackbar({ open: true, message: 'Failed to delete entry', severity: 'error' });
-      }
+  const handleDeleteClick = (entry) => {
+    setEntryToDelete(entry);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!entryToDelete) return;
+    try {
+      await api.delete(`/personal-vault/${entryToDelete._id}`);
+      setSnackbar({ open: true, message: 'Entry deleted successfully!', severity: 'success' });
+      await fetchEntries();
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      setSnackbar({ open: true, message: 'Failed to delete entry', severity: 'error' });
+    } finally {
+      setDeleteDialogOpen(false);
+      setEntryToDelete(null);
     }
   };
 
@@ -296,7 +305,7 @@ const PersonalVault = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <LockIcon sx={{ fontSize: 22, color: primaryColor }} />
@@ -325,10 +334,10 @@ const PersonalVault = () => {
               startIcon={<AddIcon />}
               onClick={() => handleOpenDialog()}
               sx={{
-                background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                bgcolor: primaryColor,
                 fontWeight: 600,
                 '&:hover': {
-                  background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                  bgcolor: secondaryColor,
                 },
               }}
             >
@@ -347,87 +356,26 @@ const PersonalVault = () => {
 
       {/* Stats Cards */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ background: `linear-gradient(135deg, ${primaryColor}15 0%, ${primaryColor}05 100%)` }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        {[
+          { label: 'Total Entries', value: stats.totalEntries, color: '#C08552', icon: <LockIcon /> },
+          { label: 'Categories', value: stats.categories, color: '#C08552', icon: <FolderIcon /> },
+          ...(isAdmin ? [{ label: 'Shared Entries', value: stats.sharedEntries, color: '#C08552', icon: <PeopleIcon /> }] : []),
+          { label: 'Weak Passwords', value: stats.weakPasswords, color: '#ef4444', icon: <WarningIcon /> },
+        ].map((s, i) => (
+          <Grid key={i} size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card variant="outlined" sx={{ borderLeft: `3px solid ${s.color}` }}>
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 20 } })}
+                </Box>
                 <Box>
-                  <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                    Total Entries
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: primaryColor }}>
-                    {stats.totalEntries}
-                  </Typography>
-                </Box>
-                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: `${primaryColor}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LockIcon sx={{ fontSize: 22, color: primaryColor }} />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ background: 'linear-gradient(135deg, #10b98115 0%, #10b98105 100%)' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Box>
-                  <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                    Categories
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: '#10b981' }}>
-                    {stats.categories}
-                  </Typography>
-                </Box>
-                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#10b98120', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FolderIcon sx={{ fontSize: 22, color: '#10b981' }} />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {isAdmin && (
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card sx={{ background: 'linear-gradient(135deg, #4285f415 0%, #4285f405 100%)' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Box>
-                    <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                      Shared Entries
-                    </Typography>
-                    <Typography variant="h3" sx={{ fontWeight: 700, color: '#4285f4' }}>
-                      {stats.sharedEntries}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#4285f420', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <PeopleIcon sx={{ fontSize: 22, color: '#4285f4' }} />
-                  </Box>
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
                 </Box>
               </CardContent>
             </Card>
           </Grid>
-        )}
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ background: 'linear-gradient(135deg, #ef444415 0%, #ef444405 100%)' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Box>
-                  <Typography color="text.secondary" gutterBottom variant="caption" sx={{ fontWeight: 500, textTransform: 'uppercase' }}>
-                    Weak Passwords
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: '#ef4444' }}>
-                    {stats.weakPasswords}
-                  </Typography>
-                </Box>
-                <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: '#ef444420', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <WarningIcon sx={{ fontSize: 22, color: '#ef4444' }} />
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+        ))}
       </Grid>
 
       {/* Filters */}
@@ -516,10 +464,8 @@ const PersonalVault = () => {
                     <AccordionSummary
                       expandIcon={<ExpandMoreIcon />}
                       sx={{
-                        background: `linear-gradient(135deg, ${config.color}10 0%, ${config.color}05 100%)`,
-                        '&:hover': {
-                          background: `linear-gradient(135deg, ${config.color}20 0%, ${config.color}10 100%)`,
-                        },
+                        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#fafafa',
+                        '&:hover': { bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f5f5f5' },
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
@@ -564,7 +510,7 @@ const PersonalVault = () => {
                               }}>
                                 <CardContent>
                                   {/* Header */}
-                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                                       <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${config.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         {React.cloneElement(config.icon, { sx: { color: config.color, fontSize: 24 } })}
@@ -593,8 +539,8 @@ const PersonalVault = () => {
                                               sx={{
                                                 height: 20,
                                                 fontSize: '0.7rem',
-                                                bgcolor: '#4285f420',
-                                                color: '#4285f4',
+                                                bgcolor: '#C0855220',
+                                                color: '#C08552',
                                                 fontWeight: 600,
                                               }}
                                             />
@@ -605,7 +551,7 @@ const PersonalVault = () => {
                                     {isAdmin && (
                                       <Box sx={{ display: 'flex', gap: 0.5 }}>
                                         <Tooltip title="Share">
-                                          <IconButton size="small" onClick={() => handleOpenShareDialog(entry)} sx={{ color: '#4285f4' }}>
+                                          <IconButton size="small" onClick={() => handleOpenShareDialog(entry)} sx={{ color: '#C08552' }}>
                                             <PersonAddIcon fontSize="small" />
                                           </IconButton>
                                         </Tooltip>
@@ -615,7 +561,7 @@ const PersonalVault = () => {
                                           </IconButton>
                                         </Tooltip>
                                         <Tooltip title="Delete">
-                                          <IconButton size="small" onClick={() => handleDelete(entry._id)} sx={{ color: '#ef4444' }}>
+                                          <IconButton size="small" onClick={() => handleDeleteClick(entry)} sx={{ color: '#ef4444' }}>
                                             <DeleteIcon fontSize="small" />
                                           </IconButton>
                                         </Tooltip>
@@ -719,7 +665,7 @@ const PersonalVault = () => {
       )}
 
       {/* Add/Edit Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           {editingEntry ? 'Edit Entry' : 'Add New Entry'}
         </DialogTitle>
@@ -829,10 +775,10 @@ const PersonalVault = () => {
               disabled={saving}
               startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null}
               sx={{
-                background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                bgcolor: primaryColor,
                 fontWeight: 600,
                 '&:hover': {
-                  background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                  bgcolor: secondaryColor,
                 },
               }}
             >
@@ -843,7 +789,7 @@ const PersonalVault = () => {
       </Dialog>
 
       {/* Share Dialog */}
-      <Dialog open={openShareDialog} onClose={handleCloseShareDialog} maxWidth="sm" fullWidth>
+      <Dialog open={openShareDialog} onClose={handleCloseShareDialog} maxWidth="sm" fullWidth fullScreen={false}>
         <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <PersonAddIcon sx={{ color: primaryColor }} />
@@ -888,15 +834,29 @@ const PersonalVault = () => {
             disabled={saving}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <ShareIcon />}
             sx={{
-              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              bgcolor: primaryColor,
               fontWeight: 600,
               '&:hover': {
-                background: `linear-gradient(135deg, ${secondaryColor} 0%, ${primaryColor} 100%)`,
+                bgcolor: secondaryColor,
               },
             }}
           >
             {saving ? 'Saving...' : `Share with ${selectedUsers.length} user${selectedUsers.length !== 1 ? 's' : ''}`}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => { setDeleteDialogOpen(false); setEntryToDelete(null); }} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600 }}>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete <strong>{entryToDelete?.title}</strong>? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setDeleteDialogOpen(false); setEntryToDelete(null); }}>No</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteConfirm}>Yes, Delete</Button>
         </DialogActions>
       </Dialog>
 

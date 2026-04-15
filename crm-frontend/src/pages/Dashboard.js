@@ -15,7 +15,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-const CLIENT_COLORS = ['#4A7CC9', '#3D8B8B', '#6E5BA7', '#B06882', '#4E8A6E', '#5A6B82', '#A07D4F', '#3E4A5C', '#3A7AB5', '#9A7083'];
+const CLIENT_COLORS = ['#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723'];
 
 // --- Custom Tooltip (shows full client name from payload) ---
 const GlassTooltip = ({ active, payload }) => {
@@ -80,8 +80,8 @@ const ClientCard = ({ client, data, color, todayStr }) => {
         {/* META row */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
-            <Facebook sx={{ color: '#1877f2', fontSize: 18 }} />
-            <Typography sx={{ fontWeight: 700, color: '#1877f2', fontSize: '0.78rem' }}>META</Typography>
+            <Facebook sx={{ color: '#C08552', fontSize: 18 }} />
+            <Typography sx={{ fontWeight: 700, color: '#C08552', fontSize: '0.78rem' }}>META</Typography>
           </Box>
           <Box sx={{ display: 'flex', flex: 1, gap: 0.8 }}>
             <MetricBox value={data.metaForm || 0} label="Form" />
@@ -96,8 +96,8 @@ const ClientCard = ({ client, data, color, todayStr }) => {
         {/* GOOGLE row */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
-            <Google sx={{ color: '#34a853', fontSize: 18 }} />
-            <Typography sx={{ fontWeight: 700, color: '#34a853', fontSize: '0.78rem' }}>GOOGLE</Typography>
+            <Google sx={{ color: '#3E2723', fontSize: 18 }} />
+            <Typography sx={{ fontWeight: 700, color: '#3E2723', fontSize: '0.78rem' }}>GOOGLE</Typography>
           </Box>
           <Box sx={{ display: 'flex', flex: 1, gap: 0.8 }}>
             <MetricBox value={data.googleCall || 0} label="Call" />
@@ -112,8 +112,8 @@ const ClientCard = ({ client, data, color, todayStr }) => {
           <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px dashed', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Total Leads</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Chip label={`Meta: ${metaLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#1877f212', color: '#1877f2', fontWeight: 600 }} />
-              <Chip label={`Google: ${googleLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#34a85312', color: '#34a853', fontWeight: 600 }} />
+              <Chip label={`Meta: ${metaLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#C0855212', color: '#C08552', fontWeight: 600 }} />
+              <Chip label={`Google: ${googleLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#3E272312', color: '#3E2723', fontWeight: 600 }} />
               <Chip label={totalLeads} size="small" sx={{ height: 22, fontSize: '0.75rem', bgcolor: `${color}18`, color: color, fontWeight: 700 }} />
             </Box>
           </Box>
@@ -125,7 +125,7 @@ const ClientCard = ({ client, data, color, todayStr }) => {
 
 const Dashboard = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#4A7CC9';
+  const tealAccent = accentColor?.secondary || '#C08552';
   const { leads: cachedLeads, clients: cachedClients, leadsLoading, clientsLoading, refreshAll } = useDataCache();
 
   const loading = leadsLoading || clientsLoading;
@@ -210,7 +210,7 @@ const Dashboard = () => {
   return (
     <Box>
       {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 3 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 700 }}>Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
@@ -225,22 +225,22 @@ const Dashboard = () => {
       {/* ── Row 1: Summary Stats ── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { label: 'Total Clients', value: clients.length, color: primaryColor, icon: <People /> },
+          { label: 'Total Clients', value: clients.length, color: tealAccent, icon: <People /> },
           { label: 'Active Clients', value: activeClients, color: '#10b981', icon: <People /> },
-          { label: 'Total Leads', value: totals.totalLeads, color: '#667eea', icon: <TrendingUpIcon /> },
-          { label: 'Meta Leads', value: totals.metaLeads, color: '#1877f2', icon: <Facebook /> },
-          { label: 'Google Leads', value: totals.googleLeads, color: '#34a853', icon: <Google /> },
-          { label: 'Total Spend', value: `₹${totals.totalSpend.toLocaleString()}`, color: '#f59e0b', icon: <TrendingUpIcon /> },
+          { label: 'Total Leads', value: totals.totalLeads, color: tealAccent, icon: <TrendingUpIcon /> },
+          { label: 'Meta Leads', value: totals.metaLeads, color: '#C08552', icon: <Facebook /> },
+          { label: 'Google Leads', value: totals.googleLeads, color: '#3E2723', icon: <Google /> },
+          { label: 'Total Spend', value: `₹${totals.totalSpend.toLocaleString()}`, color: '#C08552', icon: <TrendingUpIcon /> },
         ].map((s, i) => (
           <Grid key={i} size={{ xs: 6, sm: 4, md: 2 }}>
-            <Card sx={{ height: '100%' }}>
+            <Card variant="outlined" sx={{ height: '100%', borderLeft: `3px solid ${s.color}` }}>
               <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Box sx={{ width: 42, height: 42, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 22 } })}
+                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 20 } })}
                 </Box>
                 <Box>
                   <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
-                  <Typography sx={{ fontWeight: 700, fontSize: '1.35rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
                 </Box>
               </CardContent>
             </Card>
@@ -261,8 +261,8 @@ const Dashboard = () => {
                 <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
                 <RechartsTooltip content={<GlassTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
                 <Legend wrapperStyle={{ fontSize: '0.85rem', paddingTop: 4 }} />
-                <Bar dataKey="meta" name="Meta Leads" fill="#1877f2" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="google" name="Google Leads" fill="#34a853" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="meta" name="Meta Leads" fill="#C08552" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="google" name="Google Leads" fill="#3E2723" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -310,14 +310,14 @@ const Dashboard = () => {
               Top Performing Clients
               <Typography component="span" sx={{ fontSize: '0.72rem', color: 'text.secondary', ml: 1 }}>Ranked by today's leads</Typography>
             </Typography>
-            <TableContainer>
+            <TableContainer sx={{ overflowX: "auto" }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600 }}>#</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Client</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#1877f2' }} align="right">Meta</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#34a853' }} align="right">Google</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#C08552' }} align="right">Meta</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: '#3E2723' }} align="right">Google</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="right">Total</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="right">Spend</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="right">CPL</TableCell>
@@ -342,9 +342,9 @@ const Dashboard = () => {
                           <Typography sx={{ fontWeight: 500 }}>{c.name}</Typography>
                         </Box>
                       </TableCell>
-                      <TableCell align="right" sx={{ color: '#1877f2', fontWeight: 600 }}>{c.meta}</TableCell>
-                      <TableCell align="right" sx={{ color: '#34a853', fontWeight: 600 }}>{c.google}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700, color: primaryColor }}>{c.total}</TableCell>
+                      <TableCell align="right" sx={{ color: '#C08552', fontWeight: 600 }}>{c.meta}</TableCell>
+                      <TableCell align="right" sx={{ color: '#3E2723', fontWeight: 600 }}>{c.google}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, color: tealAccent }}>{c.total}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 600 }}>₹{c.spend.toLocaleString()}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 600, color: c.cpl > 500 ? '#ef4444' : '#10b981' }}>₹{c.cpl}</TableCell>
                     </TableRow>

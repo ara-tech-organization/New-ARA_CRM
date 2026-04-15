@@ -50,7 +50,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
         {/* Header */}
         <Box
           sx={{
-            background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+            bgcolor: primaryColor,
             px: 3,
             py: 1.5,
             display: 'flex',
@@ -110,8 +110,8 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                 minWidth: 80,
               }}
             >
-              <Facebook sx={{ color: '#1877f2', fontSize: 20 }} />
-              <Typography variant="body2" sx={{ fontWeight: 700, color: '#1877f2' }}>
+              <Facebook sx={{ color: '#C08552', fontSize: 20 }} />
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
                 META
               </Typography>
             </Box>
@@ -122,7 +122,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -139,7 +139,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -156,7 +156,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -173,7 +173,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -197,8 +197,8 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                 minWidth: 80,
               }}
             >
-              <Google sx={{ color: '#34a853', fontSize: 20 }} />
-              <Typography variant="body2" sx={{ fontWeight: 700, color: '#34a853' }}>
+              <Google sx={{ color: '#3E2723', fontSize: 20 }} />
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#3E2723' }}>
                 GOOGLE
               </Typography>
             </Box>
@@ -209,7 +209,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -226,7 +226,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -243,7 +243,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -260,7 +260,7 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
                   textAlign: 'center',
                   py: 1,
                   px: 1.5,
-                  bgcolor: '#f8fafc',
+                  bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
                   borderRadius: 2,
                 }}
               >
@@ -281,8 +281,8 @@ const ClientPerformanceCard = ({ client, data, primaryColor, secondaryColor }) =
 
 const DashboardPro = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.primary || '#6366F1';
-  const secondaryColor = accentColor?.secondary || '#818CF8';
+  const primaryColor = accentColor?.secondary || '#C08552';
+  const secondaryColor = accentColor?.primary || '#3E2723';
 
   const [clients, setClients] = useState([]);
   const [todayLeads, setTodayLeads] = useState([]);
@@ -394,7 +394,7 @@ const DashboardPro = () => {
               variant="h4"
               sx={{
                 fontWeight: 800,
-                background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                bgcolor: primaryColor,
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
@@ -423,7 +423,7 @@ const DashboardPro = () => {
               sx={{
                 borderRadius: 3,
                 boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                bgcolor: primaryColor,
               }}
             >
               <CardContent sx={{ p: 2.5 }}>
@@ -458,7 +458,7 @@ const DashboardPro = () => {
               sx={{
                 borderRadius: 3,
                 boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                background: 'linear-gradient(135deg, #34a853 0%, #1e8e3e 100%)',
+                background: 'linear-gradient(135deg, #3E2723 0%, #1e8e3e 100%)',
               }}
             >
               <CardContent sx={{ p: 2.5 }}>
@@ -504,7 +504,7 @@ const DashboardPro = () => {
                   sx={{
                     textAlign: 'center',
                     py: 8,
-                    bgcolor: '#f9fafb',
+                    bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f9fafb',
                     borderRadius: 3,
                   }}
                 >
@@ -593,13 +593,13 @@ const DashboardPro = () => {
                     />
                     <Bar
                       dataKey="metaLeads"
-                      fill="#1877f2"
+                      fill="#C08552"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={50}
                     />
                     <Bar
                       dataKey="googleLeads"
-                      fill="#34a853"
+                      fill="#3E2723"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={50}
                     />

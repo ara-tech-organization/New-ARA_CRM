@@ -181,7 +181,7 @@ export const createDailyEntry = asyncHandler(async (req, res) => {
 
   // Set recordedBy from authenticated user
   if (req.user?.id) {
-    entryData.recordedBy = req.user.id;
+    entryData.recordedBy = req.user._id;
   }
 
   // Fetch client name from main API if not provided
