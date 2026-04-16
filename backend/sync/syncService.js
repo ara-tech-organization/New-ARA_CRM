@@ -83,19 +83,23 @@ class SyncService {
   }
 
   async updateClientBilling(clientId) {
-    // Calculate total spend from metrics
+    // Get the date of the most recent payment
+    const latestPayment = await Payment.findOne({ client_id: clientId }).sort({ date: -1 });
+    const lastPaymentDate = latestPayment ? latestPayment.date : new Date(0); // If no payments, use epoch
+
+    // Calculate total spend from metrics after the last payment
     const totalSpendResult = await Metric.aggregate([
-      { $match: { client_id: clientId } },
+      { $match: { client_id: clientId, date: { $gte: lastPaymentDate } } },
       { $group: { _id: null, total: { $sum: '$cost' } } }
     ]);
-
-    const totalSpend = totalSpendResult[0]?.total || 0;
 
     // Calculate total added funds from payments
     const totalFundsResult = await Payment.aggregate([
       { $match: { client_id: clientId } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
+
+    const totalSpend = totalSpendResult[0]?.total || 0;
 
     const totalAddedFunds = totalFundsResult[0]?.total || 0;
 
