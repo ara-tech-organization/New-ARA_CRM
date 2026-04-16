@@ -8,8 +8,8 @@ import analyticsService from '../services/analyticsService.js';
 
 class SyncService {
   constructor() {
-    // Schedule to run every 6 hours (adjust as needed)
-    cron.schedule('0 */6 * * *', () => {
+    // Schedule to run every 15 minutes for near real-time data updates
+    cron.schedule('*/15 * * * *', () => {
       console.log('Starting Google Ads sync...');
       this.syncAllClients();
     });

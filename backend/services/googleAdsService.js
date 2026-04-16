@@ -6,9 +6,15 @@ dotenv.config();
 class GoogleAdsService {
   constructor() {
     this.client = new GoogleAdsApi({
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID?.replace(/\r?\n/g, '').trim(),
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET?.replace(/\r?\n/g, '').trim(),
-      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.replace(/\r?\n/g, '').trim(),
+      client_id: process.env.GOOGLE_ADS_CLIENT_ID?.replace(/\r?\n/g, "").trim(),
+      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET?.replace(
+        /\r?\n/g,
+        "",
+      ).trim(),
+      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.replace(
+        /\r?\n/g,
+        "",
+      ).trim(),
     });
   }
 
@@ -16,8 +22,14 @@ class GoogleAdsService {
   getCustomer(customerId) {
     return this.client.Customer({
       customer_id: customerId,
-      refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN?.replace(/\r?\n/g, '').trim(),
-      login_customer_id: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID?.replace(/\r?\n/g, '').trim(),
+      refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN?.replace(
+        /\r?\n/g,
+        "",
+      ).trim(),
+      login_customer_id: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID?.replace(
+        /\r?\n/g,
+        "",
+      ).trim(),
     });
   }
 
@@ -26,25 +38,37 @@ class GoogleAdsService {
     return micros / 1000000; // 1,000,000 micros = 1 currency unit
   }
 
-  // Aggregate click types
+  // Aggregate click types - now shows ALL click types individually
   aggregateClickBreakdown(clickTypeData) {
-    const breakdown = { website_clicks: 0, call_clicks: 0, other_clicks: 0 };
+    const breakdown = { website_clicks: 0, call_clicks: 0 };
+    const rawClickTypes = [];
 
     clickTypeData.forEach((item) => {
       const clicks = item.clicks || 0;
-      switch (item.click_type) {
-        case "WEBSITE":
+      const clickType = item.click_type; // This is a number
+
+      // Store raw click type data
+      rawClickTypes.push({
+        click_type: clickType,
+        clicks: clicks
+      });
+
+      // Map known click types to categories
+      switch (clickType) {
+        case 2: // URL_CLICKS
           breakdown.website_clicks += clicks;
           break;
-        case "CALLS":
+        case 3: // CALLS
           breakdown.call_clicks += clicks;
           break;
-        default:
-          breakdown.other_clicks += clicks;
+        // Don't force unknown types into "other" - let them be shown as raw
       }
     });
 
-    return breakdown;
+    return {
+      breakdown,
+      rawClickTypes
+    };
   }
 
   async fetchCampaigns(customerId) {
@@ -82,20 +106,26 @@ class GoogleAdsService {
       return {
         valid: true,
         customerId: customerId,
-        accountName: result[0]?.customer.descriptive_name || ''
+        accountName: result[0]?.customer.descriptive_name || "",
       };
     } catch (error) {
-      console.error('Validate customer ID error:', error);
+      console.error("Validate customer ID error:", error);
       return {
         valid: false,
         customerId: customerId,
-        error: error.message
+        error: error.message,
       };
     }
   }
 
   async fetchMetricsWithClicks(customerId, dateRange = "LAST_30_DAYS") {
     const customer = this.getCustomer(customerId);
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    const formattedStart = startDate.toISOString().split("T")[0];
 
     // 1. Fetch total metrics (without click type segmentation)
     const metricsData = await customer.query(`
@@ -108,7 +138,7 @@ class GoogleAdsService {
         metrics.conversions,
         segments.date
       FROM campaign
-      WHERE segments.date DURING ${dateRange}
+      WHERE segments.date BETWEEN '${formattedStart}' AND '${today}'
       AND campaign.status != 'REMOVED'
     `);
 
@@ -120,9 +150,11 @@ class GoogleAdsService {
         metrics.clicks,
         segments.date
       FROM campaign
-      WHERE segments.date DURING ${dateRange}
+      WHERE segments.date BETWEEN '${formattedStart}' AND '${today}'
       AND campaign.status != 'REMOVED'
     `);
+
+
 
     // Group total metrics by campaign and date
     const metricsGrouped = {};
@@ -153,12 +185,16 @@ class GoogleAdsService {
     });
 
     // Combine metrics with click breakdown
-    return Object.keys(metricsGrouped).map((key) => ({
-      ...metricsGrouped[key],
-      click_breakdown: this.aggregateClickBreakdown(
+    return Object.keys(metricsGrouped).map((key) => {
+      const clickData = this.aggregateClickBreakdown(
         clickTypeGrouped[key] || [],
-      ),
-    }));
+      );
+      return {
+        ...metricsGrouped[key],
+        click_breakdown: clickData.breakdown,
+        raw_click_types: clickData.rawClickTypes,
+      };
+    });
   }
 }
 

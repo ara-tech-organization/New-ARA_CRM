@@ -27,8 +27,7 @@ router.get('/clients', async (req, res) => {
           totalCost: { $sum: '$cost' },
           totalConversions: { $sum: '$conversions' },
           totalCallClicks: { $sum: '$click_breakdown.call_clicks' },
-          totalWebsiteClicks: { $sum: '$click_breakdown.website_clicks' },
-          totalOtherClicks: { $sum: '$click_breakdown.other_clicks' }
+          totalWebsiteClicks: { $sum: '$click_breakdown.website_clicks' }
         }
       }
     ]);
@@ -66,6 +65,19 @@ router.get('/clients', async (req, res) => {
 
     const kpis = avgKPIs[0] || { avgCtr: 0, avgCpc: 0, avgCpa: 0, avgRoas: 0 };
 
+    // Show exact click types: click_type 25 accounts for website clicks
+    const clickTypes = {
+      25: metricData.totalWebsiteClicks  // Click type 25 (mapped to website clicks)
+    };
+
+    // Calculate remaining clicks from other click types
+    const knownClicks = metricData.totalWebsiteClicks + metricData.totalCallClicks;
+    const unknownClicks = metricData.totalClicks - knownClicks;
+
+    if (unknownClicks > 0) {
+      clickTypes["unknown_click_types"] = unknownClicks; // Clicks from unidentified click types
+    }
+
     clientOverviews.push({
       clientId: client._id,
       clientName: client.clientName,
@@ -77,14 +89,14 @@ router.get('/clients', async (req, res) => {
       totalCallClicks: metricData.totalCallClicks,
       totalWebsiteClicks: metricData.totalWebsiteClicks,
       totalClicks: metricData.totalClicks,
+      clickTypes,
       totalImpressions: metricData.totalImpressions,
       totalCost: metricData.totalCost,
       totalConversions: metricData.totalConversions,
-      cpl: Math.round(cpl * 100) / 100,
-      ctr: Math.round(kpis.avgCtr * 100) / 100,
-      cpc: Math.round(kpis.avgCpc * 100) / 100,
-      cpa: Math.round(kpis.avgCpa * 100) / 100,
-      roas: Math.round(kpis.avgRoas * 100) / 100
+      clickTypes, // Raw click types found
+      cpl: Math.round(cpl * 100) / 100, // Round to 2 decimal places
+      ctr: metricData.totalImpressions > 0 ? (metricData.totalClicks / metricData.totalImpressions) * 100 : 0,
+      cpc: metricData.totalClicks > 0 ? metricData.totalCost / metricData.totalClicks : 0
     });
   }
 
@@ -101,24 +113,32 @@ router.get('/clients', async (req, res) => {
 // GET /api/analytics/client/:clientId - Detailed reports for single client with date filters
 router.get('/client/:clientId', async (req, res) => {
   try {
-  const { clientId } = req.params;
-  const { start_date, end_date } = req.query;
+    const { clientId } = req.params;
+    const { start_date, end_date } = req.query;
 
-  // Validate client exists and has Google Ads enabled
-  const client = await Client.findById(clientId);
-  if (!client) {
-    return res.status(404).json({ error: 'Client not found' });
-  }
-  if (!client.google_ads_enabled || !client.google_ads_customer_id) {
-    return res.status(400).json({ error: 'Client does not have Google Ads enabled' });
-  }
+    // Validate client exists and has Google Ads enabled
+    const client = await Client.findById(clientId);
+    if (!client) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    if (!client.google_ads_enabled || !client.google_ads_customer_id) {
+      return res.status(400).json({ error: 'Client does not have Google Ads enabled' });
+    }
 
-  // Build date filter
+  // Build date filter - default to today if no dates provided
   let dateFilter = {};
   if (start_date && end_date) {
     dateFilter.date = {
       $gte: new Date(start_date),
       $lte: new Date(end_date)
+    };
+  } else {
+    // Default to today's date only
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    dateFilter.date = {
+      $gte: new Date(todayStr),
+      $lte: new Date(todayStr + 'T23:59:59.999Z')
     };
   }
 
@@ -141,7 +161,6 @@ router.get('/client/:clientId', async (req, res) => {
     acc.conversions += metric.conversions || 0;
     acc.callClicks += metric.click_breakdown?.call_clicks || 0;
     acc.websiteClicks += metric.click_breakdown?.website_clicks || 0;
-    acc.otherClicks += metric.click_breakdown?.other_clicks || 0;
     acc.ctr += metric.ctr || 0;
     acc.cpc += metric.cpc || 0;
     acc.cpa += metric.cpa || 0;
@@ -154,7 +173,6 @@ router.get('/client/:clientId', async (req, res) => {
     conversions: 0,
     callClicks: 0,
     websiteClicks: 0,
-    otherClicks: 0,
     ctr: 0,
     cpc: 0,
     cpa: 0,
@@ -173,6 +191,19 @@ router.get('/client/:clientId', async (req, res) => {
   // Calculate CPL (Cost Per Lead)
   const cpl = totals.conversions > 0 ? totals.cost / totals.conversions : 0;
 
+  // Calculate click types breakdown
+  const clickTypes = {
+    25: totals.websiteClicks  // Click type 25 (mapped to website clicks)
+  };
+
+  // Calculate remaining clicks from other click types
+  const knownClicks = totals.websiteClicks + totals.callClicks;
+  const unknownClicks = totals.clicks - knownClicks;
+
+  if (unknownClicks > 0) {
+    clickTypes["unknown_click_types"] = unknownClicks;
+  }
+
   // Group metrics by campaign
   const campaignMetrics = {};
   const campaignCounts = {};
@@ -188,7 +219,6 @@ router.get('/client/:clientId', async (req, res) => {
         conversions: 0,
         callClicks: 0,
         websiteClicks: 0,
-        otherClicks: 0,
         ctr: 0,
         cpc: 0,
         cpa: 0,
@@ -202,7 +232,6 @@ router.get('/client/:clientId', async (req, res) => {
     campaignMetrics[campaignId].conversions += metric.conversions || 0;
     campaignMetrics[campaignId].callClicks += metric.click_breakdown?.call_clicks || 0;
     campaignMetrics[campaignId].websiteClicks += metric.click_breakdown?.website_clicks || 0;
-    campaignMetrics[campaignId].otherClicks += metric.click_breakdown?.other_clicks || 0;
     campaignMetrics[campaignId].ctr += metric.ctr || 0;
     campaignMetrics[campaignId].cpc += metric.cpc || 0;
     campaignMetrics[campaignId].cpa += metric.cpa || 0;
@@ -223,6 +252,21 @@ router.get('/client/:clientId', async (req, res) => {
     campaignMetrics[campaignId].cpc = Math.round(campaignMetrics[campaignId].cpc * 100) / 100;
     campaignMetrics[campaignId].cpa = Math.round(campaignMetrics[campaignId].cpa * 100) / 100;
     campaignMetrics[campaignId].roas = Math.round(campaignMetrics[campaignId].roas * 100) / 100;
+
+    // Add click types for this campaign
+    const campaignClickTypes = {};
+    if (campaignMetrics[campaignId].websiteClicks > 0) {
+      campaignClickTypes[25] = campaignMetrics[campaignId].websiteClicks;
+    }
+
+    const knownClicks = campaignMetrics[campaignId].websiteClicks + campaignMetrics[campaignId].callClicks;
+    const unknownClicks = campaignMetrics[campaignId].clicks - knownClicks;
+
+    if (unknownClicks > 0) {
+      campaignClickTypes["unknown_click_types"] = unknownClicks;
+    }
+
+    campaignMetrics[campaignId].clickTypes = campaignClickTypes;
   });
 
   res.json({
@@ -234,8 +278,8 @@ router.get('/client/:clientId', async (req, res) => {
       billing: client.billing
     },
     dateRange: {
-      start_date: start_date || null,
-      end_date: end_date || null
+      start_date: start_date || new Date().toISOString().split('T')[0],
+      end_date: end_date || new Date().toISOString().split('T')[0]
     },
     summary: {
       totalImpressions: totals.impressions,
@@ -244,27 +288,46 @@ router.get('/client/:clientId', async (req, res) => {
       totalConversions: totals.conversions,
       totalCallClicks: totals.callClicks,
       totalWebsiteClicks: totals.websiteClicks,
-      totalOtherClicks: totals.otherClicks,
+      clickTypes,
       cpl: Math.round(cpl * 100) / 100,
       ctr: Math.round(avgKpis.ctr * 100) / 100,
       cpc: Math.round(avgKpis.cpc * 100) / 100,
       cpa: Math.round(avgKpis.cpa * 100) / 100,
       roas: Math.round(avgKpis.roas * 100) / 100
     },
-    dailyMetrics: metrics.map(m => ({
-      date: m.date,
-      campaignId: m.campaign_id,
-      campaignName: m.campaign_name,
-      impressions: m.impressions,
-      clicks: m.clicks,
-      cost: m.cost,
-      conversions: m.conversions,
-      clickBreakdown: m.click_breakdown,
-      ctr: m.ctr,
-      cpc: m.cpc,
-      cpa: m.cpa,
-      roas: m.roas
-    })),
+    dailyMetrics: metrics.map(m => {
+      // Calculate click types for this specific day
+      const dayClickTypes = {};
+      if (m.click_breakdown?.website_clicks > 0) {
+        dayClickTypes[25] = m.click_breakdown.website_clicks; // Click type 25
+      }
+
+      const knownClicks = (m.click_breakdown?.website_clicks || 0) + (m.click_breakdown?.call_clicks || 0);
+      const unknownClicks = m.clicks - knownClicks;
+
+      if (unknownClicks > 0) {
+        dayClickTypes["unknown_click_types"] = unknownClicks;
+      }
+
+      return {
+        date: m.date,
+        campaignId: m.campaign_id,
+        campaignName: m.campaign_name,
+        impressions: m.impressions,
+        clicks: m.clicks,
+        cost: m.cost,
+        conversions: m.conversions,
+        clickBreakdown: {
+          website_clicks: m.click_breakdown?.website_clicks || 0,
+          call_clicks: m.click_breakdown?.call_clicks || 0
+        },
+        clickTypes: dayClickTypes,
+        ctr: m.ctr,
+        cpc: m.cpc,
+        cpa: m.cpa,
+        roas: m.roas
+      };
+    }),
     campaignMetrics: Object.values(campaignMetrics),
     campaigns: campaigns
   });

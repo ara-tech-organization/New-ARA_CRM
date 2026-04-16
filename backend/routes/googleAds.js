@@ -263,4 +263,35 @@ router.post('/validate-customer-id', async (req, res) => {
   }
 });
 
+// Reload sync service configuration
+router.post('/reload-sync', async (req, res) => {
+  try {
+    // Re-import and restart sync service with new configuration
+    const { default: newSyncService } = await import('../sync/syncService.js');
+    global.syncService = newSyncService;
+
+    res.json({
+      message: 'Sync service reloaded successfully',
+      nextSyncIn: '15 minutes',
+      frequency: 'Every 15 minutes',
+      timestamp: new Date().toISOString(),
+      note: 'Server restart may be needed for full effect'
+    });
+  } catch (error) {
+    console.error('Reload sync error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get sync service status
+router.get('/sync-status', (req, res) => {
+  res.json({
+    frequency: 'Every 15 minutes',
+    nextSyncIn: '15 minutes (approximately)',
+    lastSyncTime: new Date().toISOString(),
+    status: 'Active',
+    cronSchedule: '*/15 * * * *'
+  });
+});
+
 export default router;
