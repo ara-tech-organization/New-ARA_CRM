@@ -2,12 +2,35 @@ import express from 'express';
 import Client from '../models/Client.js';
 import Metric from '../models/Metric.js';
 import Campaign from '../models/Campaign.js';
+import syncService from '../sync/syncService.js';
 
 const router = express.Router();
 
 // GET /api/analytics/clients - List all clients with overview data
 router.get('/clients', async (req, res) => {
   try {
+    const { start_date, end_date } = req.query;
+
+    // Build date filter - default to today if no dates provided
+    let dateFilter = {};
+    if (start_date && end_date) {
+      dateFilter.date = {
+        $gte: new Date(start_date),
+        $lte: new Date(end_date)
+      };
+    } else {
+      // Default to today's date only
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      dateFilter.date = {
+        $gte: new Date(todayStr),
+        $lte: new Date(todayStr + 'T23:59:59.999Z')
+      };
+    }
+
+    // Sync all clients before fetching analytics
+    await syncService.syncAllClients();
+
   // Get all clients with Google Ads enabled
   const clients = await Client.find({ google_ads_enabled: true })
     .select('clientName google_ads_customer_id google_ads_account_name billing')
@@ -16,9 +39,9 @@ router.get('/clients', async (req, res) => {
   const clientOverviews = [];
 
   for (const client of clients) {
-    // Get total metrics for the client (last 30 days)
+    // Get total metrics for the client with date filtering
     const metrics = await Metric.aggregate([
-      { $match: { client_id: client._id } },
+      { $match: { client_id: client._id, ...dateFilter } },
       {
         $group: {
           _id: null,
@@ -51,7 +74,7 @@ router.get('/clients', async (req, res) => {
 
     // Get average KPIs from stored values
     const avgKPIs = await Metric.aggregate([
-      { $match: { client_id: client._id } },
+      { $match: { client_id: client._id, ...dateFilter } },
       {
         $group: {
           _id: null,
@@ -86,14 +109,11 @@ router.get('/clients', async (req, res) => {
       fund: client.billing.total_added_funds || 0,
       availableBalance: client.billing.available_balance || 0,
       totalBudget,
-      totalCallClicks: metricData.totalCallClicks,
-      totalWebsiteClicks: metricData.totalWebsiteClicks,
       totalClicks: metricData.totalClicks,
       clickTypes,
       totalImpressions: metricData.totalImpressions,
       totalCost: metricData.totalCost,
       totalConversions: metricData.totalConversions,
-      clickTypes, // Raw click types found
       cpl: Math.round(cpl * 100) / 100, // Round to 2 decimal places
       ctr: metricData.totalImpressions > 0 ? (metricData.totalClicks / metricData.totalImpressions) * 100 : 0,
       cpc: metricData.totalClicks > 0 ? metricData.totalCost / metricData.totalClicks : 0
@@ -124,6 +144,9 @@ router.get('/client/:clientId', async (req, res) => {
     if (!client.google_ads_enabled || !client.google_ads_customer_id) {
       return res.status(400).json({ error: 'Client does not have Google Ads enabled' });
     }
+
+    // Sync client data before fetching analytics
+    await syncService.manualSync(clientId);
 
   // Build date filter - default to today if no dates provided
   let dateFilter = {};
