@@ -4,12 +4,39 @@ import Metric from '../models/Metric.js';
 import Campaign from '../models/Campaign.js';
 import syncService from '../sync/syncService.js';
 
+// Simple in-memory cache with TTL
+const cache = new Map();
+
+function getCacheKey(endpoint, params = {}) {
+  return `${endpoint}_${JSON.stringify(params)}`;
+}
+
+function getCachedData(key) {
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.timestamp < 5 * 60 * 1000) { // 5 minutes TTL
+    return entry.data;
+  }
+  cache.delete(key); // Remove expired entry
+  return null;
+}
+
+function setCachedData(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
 const router = express.Router();
 
 // GET /api/analytics/clients - List all clients with overview data
 router.get('/clients', async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
+    const cacheKey = getCacheKey('clients', { start_date, end_date });
+
+    // Check cache first
+    const cachedData = getCachedData(cacheKey);
+    if (cachedData) {
+      return res.json(cachedData);
+    }
 
     // Build date filter - default to today if no dates provided
     let dateFilter = {};
@@ -120,13 +147,19 @@ router.get('/clients', async (req, res) => {
     });
   }
 
-  res.json({
+  const responseData = {
     count: clientOverviews.length,
     clients: clientOverviews
-  });
+  };
+
+  // Cache the response
+  setCachedData(cacheKey, responseData);
+
+  res.json(responseData);
   } catch (error) {
     console.error('Get analytics clients error:', error);
-    res.status(500).json({ error: error.message });
+
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -135,6 +168,13 @@ router.get('/client/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
     const { start_date, end_date } = req.query;
+    const cacheKey = getCacheKey('client', { clientId, start_date, end_date });
+
+    // Check cache first
+    const cachedData = getCachedData(cacheKey);
+    if (cachedData) {
+      return res.json(cachedData);
+    }
 
     // Validate client exists and has Google Ads enabled
     const client = await Client.findById(clientId);
@@ -292,7 +332,7 @@ router.get('/client/:clientId', async (req, res) => {
     campaignMetrics[campaignId].clickTypes = campaignClickTypes;
   });
 
-  res.json({
+  const responseData = {
     client: {
       clientId: client._id,
       clientName: client.clientName,
@@ -353,7 +393,12 @@ router.get('/client/:clientId', async (req, res) => {
     }),
     campaignMetrics: Object.values(campaignMetrics),
     campaigns: campaigns
-  });
+  };
+
+  // Cache the response
+  setCachedData(cacheKey, responseData);
+
+  res.json(responseData);
   } catch (error) {
     console.error('Get client analytics error:', error);
     res.status(500).json({ error: error.message });

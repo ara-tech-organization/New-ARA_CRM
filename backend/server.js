@@ -24,6 +24,7 @@ import contentEntryRoutes from "./routes/contentEntries.js";
 import metricsRoutes from "./routes/metrics.js";
 import googleAdsRoutes from "./routes/googleAds.js";
 import analyticsRoutes from "./routes/analytics.js";
+import paymentRoutes from "./routes/payments.js";
 import syncService from "./sync/syncService.js";
 
 // Load environment variables
@@ -110,6 +111,7 @@ app.use("/api/content-entries", contentEntryRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/google-ads", googleAdsRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // Basic route
 app.get("/", (req, res) => {
