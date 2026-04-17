@@ -10,7 +10,7 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 // POST /api/payments - Add payment/funds to a client
 router.post('/', async (req, res) => {
   try {
-    const { clientId, amount, method, notes } = req.body;
+    const { clientId, amount, method, notes, date } = req.body;
 
     if (!clientId || amount === undefined || amount === null) {
       return res.status(400).json({ error: 'Client ID and amount are required' });
@@ -19,6 +19,15 @@ router.post('/', async (req, res) => {
     const amountNum = round2(amount);
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
       return res.status(400).json({ error: 'Amount must be a positive number' });
+    }
+
+    let paymentDate = new Date();
+    if (date !== undefined && date !== null && date !== '') {
+      const parsed = new Date(date);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ error: 'Invalid date format' });
+      }
+      paymentDate = parsed;
     }
 
     const client = await Client.findById(clientId);
@@ -30,7 +39,8 @@ router.post('/', async (req, res) => {
       client_id: clientId,
       amount: amountNum,
       method: method || 'bank_transfer',
-      notes: notes || ''
+      notes: notes || '',
+      date: paymentDate
     });
 
     let updatedClient;
@@ -58,7 +68,7 @@ router.post('/', async (req, res) => {
         type: 'credit',
         amount: amountNum,
         balance_after: newBalance,
-        occurred_at: payment.date || new Date(),
+        occurred_at: payment.date || paymentDate,
         source: 'manual_payment',
         reference: { payment_id: payment._id },
         description: notes ? `Funds added: ${notes}` : 'Funds added',

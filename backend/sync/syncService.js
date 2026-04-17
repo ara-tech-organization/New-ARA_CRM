@@ -41,9 +41,13 @@ class SyncService {
     }
   }
 
-  async syncClient(client) {
+  async syncClient(client, options = {}) {
     try {
-      console.log(`Syncing client: ${client.clientName} (${client.google_ads_customer_id})`);
+      const { deep = false } = options;
+
+      console.log(
+        `Syncing client: ${client.clientName} (${client.google_ads_customer_id})${deep ? ' [DEEP]' : ''}`
+      );
 
       // 1. Fetch and store campaigns
       const campaigns = await googleAdsService.fetchCampaigns(client.google_ads_customer_id);
@@ -60,8 +64,28 @@ class SyncService {
         );
       }
 
-      // 2. Fetch and store metrics (last 30 days)
-      const metrics = await googleAdsService.fetchMetricsWithClicks(client.google_ads_customer_id);
+      // 2. Fetch and store metrics.
+      //    Never pull data from before client.onboardDate — new clients only
+      //    track spend from their onboard date onwards.
+      //    - Regular sync: last 30 days, floored at onboardDate
+      //    - Deep sync:    onboardDate → today
+      const onboardDate = client.onboardDate ? new Date(client.onboardDate) : null;
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      let fromDate;
+      if (deep && onboardDate) {
+        fromDate = onboardDate;
+      } else if (onboardDate && onboardDate > thirtyDaysAgo) {
+        fromDate = onboardDate;
+      } else {
+        fromDate = thirtyDaysAgo;
+      }
+
+      const metrics = await googleAdsService.fetchMetricsWithClicks(
+        client.google_ads_customer_id,
+        fromDate
+      );
       for (const metricData of metrics) {
         const kpis = analyticsService.calculateKPIs(metricData);
 
@@ -81,7 +105,7 @@ class SyncService {
       }
 
       // 3. Reconcile billing ledger (delta-debit per campaign/day)
-      await this.updateClientBilling(client._id);
+      await this.updateClientBilling(client._id, { deep });
 
       console.log(`Sync completed for client: ${client.clientName}`);
     } catch (error) {
@@ -89,16 +113,29 @@ class SyncService {
     }
   }
 
-  async updateClientBilling(clientId) {
-    // Only reconcile metrics within the sync window (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
-    thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
+  async updateClientBilling(clientId, options = {}) {
+    const { deep = false } = options;
 
-    const metrics = await Metric.find({
-      client_id: clientId,
-      date: { $gte: thirtyDaysAgo }
-    }).sort({ date: 1 });
+    // Floor at onboardDate — we never reconcile pre-onboard data.
+    const client = await Client.findById(clientId).select('onboardDate');
+    const onboardDate = client?.onboardDate
+      ? startOfUtcDay(client.onboardDate)
+      : null;
+
+    const filter = { client_id: clientId };
+
+    if (deep) {
+      if (onboardDate) filter.date = { $gte: onboardDate };
+    } else {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
+      thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
+      const cutoff =
+        onboardDate && onboardDate > thirtyDaysAgo ? onboardDate : thirtyDaysAgo;
+      filter.date = { $gte: cutoff };
+    }
+
+    const metrics = await Metric.find(filter).sort({ date: 1 });
 
     for (const metric of metrics) {
       try {
@@ -206,11 +243,11 @@ class SyncService {
     }
   }
 
-  // Manual trigger method for testing
-  async manualSync(clientId = null) {
+  // Manual trigger method for testing + deep sync from reconciliation
+  async manualSync(clientId = null, options = {}) {
     if (clientId) {
       const client = await Client.findById(clientId);
-      if (client) await this.syncClient(client);
+      if (client) await this.syncClient(client, options);
     } else {
       await this.syncAllClients();
     }

@@ -118,14 +118,21 @@ class GoogleAdsService {
     }
   }
 
-  async fetchMetricsWithClicks(customerId, dateRange = "LAST_30_DAYS") {
+  async fetchMetricsWithClicks(customerId, fromDate = null, toDate = null) {
     const customer = this.getCustomer(customerId);
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = toDate
+      ? new Date(toDate).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-    const formattedStart = startDate.toISOString().split("T")[0];
+    let formattedStart;
+    if (fromDate) {
+      formattedStart = new Date(fromDate).toISOString().split("T")[0];
+    } else {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      formattedStart = startDate.toISOString().split("T")[0];
+    }
 
     // 1. Fetch total metrics (without click type segmentation)
     const metricsData = await customer.query(`
