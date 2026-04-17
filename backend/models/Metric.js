@@ -31,10 +31,16 @@ const metricSchema = new mongoose.Schema({
     click_type: { type: Number },
     clicks: { type: Number }
   }],
+  // Impression-share metrics (Search campaigns only; 0 elsewhere). Stored as percentages.
+  search_impression_share: { type: Number, default: 0 },
+  search_rank_lost_impression_share: { type: Number, default: 0 },
+  search_budget_lost_top_impression_share: { type: Number, default: 0 },
+
   // Calculated KPIs
   ctr: { type: Number, default: 0 }, // Click Through Rate (%)
   cpc: { type: Number, default: 0 }, // Cost Per Click
   cpa: { type: Number, default: 0 }, // Cost Per Acquisition
+  conversion_rate: { type: Number, default: 0 }, // (conversions / clicks) * 100
   roas: { type: Number, default: 0 } // Return on Ad Spend
 }, {
   timestamps: true

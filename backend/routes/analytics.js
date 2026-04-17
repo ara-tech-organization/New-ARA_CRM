@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Client from '../models/Client.js';
 import Metric from '../models/Metric.js';
 import Campaign from '../models/Campaign.js';
+import Keyword from '../models/Keyword.js';
 import BillingTransaction from '../models/BillingTransaction.js';
 import syncService from '../sync/syncService.js';
 
@@ -269,9 +270,10 @@ router.get('/client/:clientId', async (req, res) => {
     clickTypes["unknown_click_types"] = unknownClicks;
   }
 
-  // Group metrics by campaign
+  // Group metrics by campaign — sum raw numbers, then derive KPIs from totals
+  // (more accurate than averaging per-day KPIs).
   const campaignMetrics = {};
-  const campaignCounts = {};
+  const campaignISCounts = {}; // days where impression-share data was present
   metrics.forEach(metric => {
     const campaignId = metric.campaign_id;
     if (!campaignMetrics[campaignId]) {
@@ -284,12 +286,12 @@ router.get('/client/:clientId', async (req, res) => {
         conversions: 0,
         callClicks: 0,
         websiteClicks: 0,
-        ctr: 0,
-        cpc: 0,
-        cpa: 0,
-        roas: 0
+        // Impression-share sums (averaged at the end)
+        _is_sum: 0,
+        _rank_lost_sum: 0,
+        _budget_lost_top_sum: 0
       };
-      campaignCounts[campaignId] = 0;
+      campaignISCounts[campaignId] = 0;
     }
     campaignMetrics[campaignId].impressions += metric.impressions || 0;
     campaignMetrics[campaignId].clicks += metric.clicks || 0;
@@ -297,50 +299,71 @@ router.get('/client/:clientId', async (req, res) => {
     campaignMetrics[campaignId].conversions += metric.conversions || 0;
     campaignMetrics[campaignId].callClicks += metric.click_breakdown?.call_clicks || 0;
     campaignMetrics[campaignId].websiteClicks += metric.click_breakdown?.website_clicks || 0;
-    campaignMetrics[campaignId].ctr += metric.ctr || 0;
-    campaignMetrics[campaignId].cpc += metric.cpc || 0;
-    campaignMetrics[campaignId].cpa += metric.cpa || 0;
-    campaignMetrics[campaignId].roas += metric.roas || 0;
-    campaignCounts[campaignId]++;
+
+    // Only count impression-share on days it actually had data (>0)
+    if ((metric.search_impression_share || 0) > 0 ||
+        (metric.search_rank_lost_impression_share || 0) > 0 ||
+        (metric.search_budget_lost_top_impression_share || 0) > 0) {
+      campaignMetrics[campaignId]._is_sum += metric.search_impression_share || 0;
+      campaignMetrics[campaignId]._rank_lost_sum += metric.search_rank_lost_impression_share || 0;
+      campaignMetrics[campaignId]._budget_lost_top_sum += metric.search_budget_lost_top_impression_share || 0;
+      campaignISCounts[campaignId]++;
+    }
   });
 
-  // Calculate averages for campaign KPIs
+  // Derive KPIs from totals (more accurate than averaging daily rates)
   Object.keys(campaignMetrics).forEach(campaignId => {
-    const count = campaignCounts[campaignId];
-    campaignMetrics[campaignId].ctr = count > 0 ? campaignMetrics[campaignId].ctr / count : 0;
-    campaignMetrics[campaignId].cpc = count > 0 ? campaignMetrics[campaignId].cpc / count : 0;
-    campaignMetrics[campaignId].cpa = count > 0 ? campaignMetrics[campaignId].cpa / count : 0;
-    campaignMetrics[campaignId].roas = count > 0 ? campaignMetrics[campaignId].roas / count : 0;
+    const c = campaignMetrics[campaignId];
+    const isCount = campaignISCounts[campaignId] || 0;
 
-    // Round to 2 decimal places
-    campaignMetrics[campaignId].ctr = Math.round(campaignMetrics[campaignId].ctr * 100) / 100;
-    campaignMetrics[campaignId].cpc = Math.round(campaignMetrics[campaignId].cpc * 100) / 100;
-    campaignMetrics[campaignId].cpa = Math.round(campaignMetrics[campaignId].cpa * 100) / 100;
-    campaignMetrics[campaignId].roas = Math.round(campaignMetrics[campaignId].roas * 100) / 100;
+    const ctr = c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0;
+    const cpc = c.clicks > 0 ? c.cost / c.clicks : 0;
+    const cpa = c.conversions > 0 ? c.cost / c.conversions : 0;
+    const convRate = c.clicks > 0 ? (c.conversions / c.clicks) * 100 : 0;
+    const roas = c.cost > 0 ? (c.conversions * 100) / c.cost : 0;
 
-    // Add click types for this campaign
+    c.ctr = Math.round(ctr * 100) / 100;
+    c.cpc = Math.round(cpc * 100) / 100;
+    c.cpa = Math.round(cpa * 100) / 100;
+    c.conversion_rate = Math.round(convRate * 100) / 100;
+    c.roas = Math.round(roas * 100) / 100;
+    c.cost_per_conversion = c.cpa; // alias for the UI label "Cost/Conversions"
+
+    // Impression-share: average across days that reported it
+    c.search_impression_share = isCount > 0
+      ? Math.round((c._is_sum / isCount) * 100) / 100
+      : 0;
+    c.search_rank_lost_impression_share = isCount > 0
+      ? Math.round((c._rank_lost_sum / isCount) * 100) / 100
+      : 0;
+    c.search_budget_lost_top_impression_share = isCount > 0
+      ? Math.round((c._budget_lost_top_sum / isCount) * 100) / 100
+      : 0;
+    delete c._is_sum;
+    delete c._rank_lost_sum;
+    delete c._budget_lost_top_sum;
+
+    // Click-type breakdown (unchanged)
     const campaignClickTypes = {};
-    if (campaignMetrics[campaignId].websiteClicks > 0) {
-      campaignClickTypes[25] = campaignMetrics[campaignId].websiteClicks;
+    if (c.websiteClicks > 0) {
+      campaignClickTypes[25] = c.websiteClicks;
     }
-
-    const knownClicks = campaignMetrics[campaignId].websiteClicks + campaignMetrics[campaignId].callClicks;
-    const unknownClicks = campaignMetrics[campaignId].clicks - knownClicks;
-
+    const knownClicks = c.websiteClicks + c.callClicks;
+    const unknownClicks = c.clicks - knownClicks;
     if (unknownClicks > 0) {
       campaignClickTypes["unknown_click_types"] = unknownClicks;
     }
-
-    campaignMetrics[campaignId].clickTypes = campaignClickTypes;
+    c.clickTypes = campaignClickTypes;
   });
 
   // Billing ledger — load fresh client (balance may have changed during sync)
-  const freshClient = await Client.findById(clientId).select('billing');
+  const freshClient = await Client.findById(clientId).select('billing onboardDate');
   const billingLedger = await buildBillingLedger(
     clientId,
     start_date,
     end_date,
-    freshClient?.billing
+    freshClient?.billing,
+    freshClient?.onboardDate
   );
 
   const responseData = {
@@ -403,8 +426,23 @@ router.get('/client/:clientId', async (req, res) => {
       };
     }),
     campaignMetrics: Object.values(campaignMetrics),
-    campaigns: campaigns
+    campaigns: campaigns,
+    keywords: await buildKeywordAggregates(clientId, dateFilter, req.query.keywords_limit)
   };
+
+  // Attach per-campaign top keywords
+  const perCampaignLimit = (() => {
+    const p = parseInt(req.query.campaign_keywords_limit, 10);
+    return Number.isFinite(p) && p >= 0 ? p : 20;
+  })();
+  const campaignKeywordMap = await buildCampaignKeywordAggregates(
+    clientId,
+    dateFilter,
+    perCampaignLimit
+  );
+  responseData.campaignMetrics.forEach(c => {
+    c.top_keywords = campaignKeywordMap[c.campaignId] || [];
+  });
 
   // Cache the response
   setCachedData(cacheKey, responseData);
@@ -417,14 +455,243 @@ router.get('/client/:clientId', async (req, res) => {
 });
 
 /**
+ * Aggregate keyword-level metrics for a client within the requested date range.
+ * Returns the TOP N keywords (default 20) by cost desc within the range.
+ *
+ * Pass `?keywords_limit=100` to change the cap, or `?keywords_limit=0` for all.
+ */
+async function buildKeywordAggregates(clientId, dateFilter, limitParam) {
+  const match = { client_id: new mongoose.Types.ObjectId(clientId) };
+  if (dateFilter.date) match.date = dateFilter.date;
+
+  let limit = 20;
+  if (limitParam !== undefined) {
+    const parsed = parseInt(limitParam, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) limit = parsed;
+  }
+
+  const rows = await Keyword.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: {
+          campaign_id: '$campaign_id',
+          criterion_id: '$criterion_id'
+        },
+        keyword_text: { $last: '$keyword_text' },
+        match_type: { $last: '$match_type' },
+        status: { $last: '$status' },
+        campaign_id: { $last: '$campaign_id' },
+        campaign_name: { $last: '$campaign_name' },
+        ad_group_id: { $last: '$ad_group_id' },
+        ad_group_name: { $last: '$ad_group_name' },
+        impressions: { $sum: '$impressions' },
+        clicks: { $sum: '$clicks' },
+        cost: { $sum: '$cost' },
+        conversions: { $sum: '$conversions' }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        campaign_id: 1,
+        campaign_name: 1,
+        ad_group_id: 1,
+        ad_group_name: 1,
+        criterion_id: '$_id.criterion_id',
+        keyword_text: 1,
+        match_type: 1,
+        status: 1,
+        impressions: 1,
+        clicks: 1,
+        cost: { $round: ['$cost', 2] },
+        conversions: 1,
+        ctr: {
+          $cond: [
+            { $gt: ['$impressions', 0] },
+            { $round: [{ $multiply: [{ $divide: ['$clicks', '$impressions'] }, 100] }, 2] },
+            0
+          ]
+        },
+        cpc: {
+          $cond: [
+            { $gt: ['$clicks', 0] },
+            { $round: [{ $divide: ['$cost', '$clicks'] }, 2] },
+            0
+          ]
+        },
+        cpa: {
+          $cond: [
+            { $gt: ['$conversions', 0] },
+            { $round: [{ $divide: ['$cost', '$conversions'] }, 2] },
+            0
+          ]
+        }
+      }
+    },
+    { $sort: { cost: -1, clicks: -1 } },
+    ...(limit > 0 ? [{ $limit: limit }] : [])
+  ]);
+
+  return rows;
+}
+
+/**
+ * Per-campaign top-N keywords (default 20 per campaign).
+ * Returns a map of campaign_id -> keyword[] sorted by cost desc.
+ *
+ * Pass `?campaign_keywords_limit=N` to change the cap, or `=0` for all.
+ */
+async function buildCampaignKeywordAggregates(clientId, dateFilter, limit = 20) {
+  const match = { client_id: new mongoose.Types.ObjectId(clientId) };
+  if (dateFilter.date) match.date = dateFilter.date;
+
+  const rows = await Keyword.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: {
+          campaign_id: '$campaign_id',
+          criterion_id: '$criterion_id'
+        },
+        keyword_text: { $last: '$keyword_text' },
+        match_type: { $last: '$match_type' },
+        status: { $last: '$status' },
+        campaign_id: { $last: '$campaign_id' },
+        campaign_name: { $last: '$campaign_name' },
+        ad_group_id: { $last: '$ad_group_id' },
+        ad_group_name: { $last: '$ad_group_name' },
+        impressions: { $sum: '$impressions' },
+        clicks: { $sum: '$clicks' },
+        cost: { $sum: '$cost' },
+        conversions: { $sum: '$conversions' }
+      }
+    },
+    { $sort: { cost: -1, clicks: -1 } },
+    {
+      $group: {
+        _id: '$campaign_id',
+        keywords: {
+          $push: {
+            criterion_id: '$_id.criterion_id',
+            ad_group_id: '$ad_group_id',
+            ad_group_name: '$ad_group_name',
+            keyword_text: '$keyword_text',
+            match_type: '$match_type',
+            status: '$status',
+            impressions: '$impressions',
+            clicks: '$clicks',
+            cost: '$cost',
+            conversions: '$conversions'
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        campaign_id: '$_id',
+        keywords: limit > 0 ? { $slice: ['$keywords', limit] } : '$keywords'
+      }
+    }
+  ]);
+
+  // Convert to a map keyed by campaign_id, and compute per-keyword KPIs.
+  const map = {};
+  for (const row of rows) {
+    map[row.campaign_id] = row.keywords.map(k => {
+      const impressions = k.impressions || 0;
+      const clicks = k.clicks || 0;
+      const cost = k.cost || 0;
+      const conversions = k.conversions || 0;
+      return {
+        criterion_id: k.criterion_id,
+        ad_group_id: k.ad_group_id,
+        ad_group_name: k.ad_group_name,
+        keyword_text: k.keyword_text,
+        match_type: k.match_type,
+        status: k.status,
+        impressions,
+        clicks,
+        cost: Math.round(cost * 100) / 100,
+        conversions,
+        ctr: impressions > 0
+          ? Math.round((clicks / impressions) * 10000) / 100
+          : 0,
+        cpc: clicks > 0
+          ? Math.round((cost / clicks) * 100) / 100
+          : 0,
+        cpa: conversions > 0
+          ? Math.round((cost / conversions) * 100) / 100
+          : 0,
+        conversion_rate: clicks > 0
+          ? Math.round((conversions / clicks) * 10000) / 100
+          : 0
+      };
+    });
+  }
+  return map;
+}
+
+/**
  * Build the billing section of the analytics response.
  * - Summary fields come from the cached `client.billing` doc.
  * - `transactions`, `balance_timeline`, `spend_by_day`, `credits_by_day`
  *   are derived from the BillingTransaction ledger, filtered to the
  *   requested date range (or today if none given).
  */
-async function buildBillingLedger(clientId, start_date, end_date, billingCache) {
+async function buildBillingLedger(clientId, start_date, end_date, billingCache, onboardDate) {
   const clientObjectId = new mongoose.Types.ObjectId(clientId);
+
+  // Live total_spend = sum of Google Ads cost since onboardDate (not ledger-derived).
+  // This makes the number meaningful even right after a reset, when the ledger
+  // has no debits yet (existing metrics were marked as "already in opening balance").
+  const spendMatch = { client_id: clientObjectId };
+  if (onboardDate) {
+    const onboardStart = new Date(onboardDate);
+    onboardStart.setUTCHours(0, 0, 0, 0);
+    spendMatch.date = { $gte: onboardStart };
+  }
+  const spendAgg = await Metric.aggregate([
+    { $match: spendMatch },
+    { $group: { _id: null, total: { $sum: '$cost' } } }
+  ]);
+  const liveTotalSpend = Math.round((spendAgg[0]?.total || 0) * 100) / 100;
+
+  // Live total_added_funds = sum(ledger credits + positive adjustments) since onboardDate.
+  // Covers manual payments AND reconcile/reset opening balances.
+  const addedMatch = { client_id: clientObjectId };
+  if (onboardDate) {
+    const onboardStart = new Date(onboardDate);
+    onboardStart.setUTCHours(0, 0, 0, 0);
+    addedMatch.occurred_at = { $gte: onboardStart };
+  }
+  const addedAgg = await BillingTransaction.aggregate([
+    { $match: addedMatch },
+    {
+      $group: {
+        _id: null,
+        credits: { $sum: { $cond: [{ $eq: ['$type', 'credit'] }, '$amount', 0] } },
+        positiveAdjustments: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ['$type', 'adjustment'] },
+                  { $gt: ['$balance_after', { $subtract: ['$balance_after', '$amount'] }] }
+                ]
+              },
+              '$amount',
+              0
+            ]
+          }
+        }
+      }
+    }
+  ]);
+  const liveTotalAddedFunds = Math.round(
+    ((addedAgg[0]?.credits || 0) + (addedAgg[0]?.positiveAdjustments || 0)) * 100
+  ) / 100;
 
   let rangeStart;
   let rangeEnd;
@@ -488,8 +755,8 @@ async function buildBillingLedger(clientId, start_date, end_date, billingCache) 
     billing_type: billingCache?.billing_type || 'monthly',
     low_balance_threshold: billingCache?.low_balance_threshold ?? 100,
     available_balance: Math.round((billingCache?.available_balance || 0) * 100) / 100,
-    total_spend: Math.round((billingCache?.total_spend || 0) * 100) / 100,
-    total_added_funds: Math.round((billingCache?.total_added_funds || 0) * 100) / 100,
+    total_spend: liveTotalSpend,
+    total_added_funds: liveTotalAddedFunds,
     range: {
       start_date: rangeStart.toISOString().split('T')[0],
       end_date: rangeEnd.toISOString().split('T')[0],

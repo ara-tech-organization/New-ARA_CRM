@@ -1,7 +1,7 @@
-import cron from 'node-cron';
 import Client from '../models/Client.js';
 import Campaign from '../models/Campaign.js';
 import Metric from '../models/Metric.js';
+import Keyword from '../models/Keyword.js';
 import BillingTransaction from '../models/BillingTransaction.js';
 import DailyDebitSnapshot from '../models/DailyDebitSnapshot.js';
 import googleAdsService from '../services/googleAdsService.js';
@@ -16,13 +16,10 @@ function startOfUtcDay(date) {
 }
 
 class SyncService {
-  constructor() {
-    // Schedule to run every 15 minutes for near real-time data updates
-    cron.schedule('*/15 * * * *', () => {
-      console.log('Starting Google Ads sync...');
-      this.syncAllClients();
-    });
-  }
+  // Sync is triggered on-demand only:
+  //   - analytics endpoint calls manualSync(clientId) before responding
+  //   - /api/billing/:id/deep-sync and /reconcile call manualSync explicitly
+  // No background cron is scheduled here.
 
   async syncAllClients() {
     try {
@@ -104,7 +101,45 @@ class SyncService {
         );
       }
 
-      // 3. Reconcile billing ledger (delta-debit per campaign/day)
+      // 3. Fetch and store keyword-level metrics (same date window as campaign metrics)
+      try {
+        const keywordRows = await googleAdsService.fetchKeywordMetrics(
+          client.google_ads_customer_id,
+          fromDate
+        );
+        for (const kw of keywordRows) {
+          const impressions = kw.impressions || 0;
+          const clicks = kw.clicks || 0;
+          const cost = kw.cost || 0;
+          const conversions = kw.conversions || 0;
+          const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+          const cpc = clicks > 0 ? cost / clicks : 0;
+          const cpa = conversions > 0 ? cost / conversions : 0;
+
+          await Keyword.findOneAndUpdate(
+            {
+              client_id: client._id,
+              campaign_id: kw.campaign_id,
+              criterion_id: kw.criterion_id,
+              date: new Date(kw.date)
+            },
+            {
+              client_id: client._id,
+              ...kw,
+              date: new Date(kw.date),
+              ctr: Math.round(ctr * 100) / 100,
+              cpc: Math.round(cpc * 100) / 100,
+              cpa: Math.round(cpa * 100) / 100
+            },
+            { upsert: true, returnDocument: 'after' }
+          );
+        }
+      } catch (keywordErr) {
+        console.error(`Keyword sync failed for ${client.clientName}:`, keywordErr.message);
+        // Don't fail the whole sync if keyword fetch errors out
+      }
+
+      // 4. Reconcile billing ledger (delta-debit per campaign/day)
       await this.updateClientBilling(client._id, { deep });
 
       console.log(`Sync completed for client: ${client.clientName}`);

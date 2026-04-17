@@ -6,12 +6,14 @@ class AnalyticsService {
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
     const cpc = clicks > 0 ? cost / clicks : 0;
     const cpa = conversions > 0 ? cost / conversions : 0;
+    const conversion_rate = clicks > 0 ? (conversions / clicks) * 100 : 0;
     const roas = cost > 0 ? (conversions * 100) / cost : 0; // Assuming conversion value = 100 for now
 
     return {
       ctr: Math.round(ctr * 100) / 100,
       cpc: Math.round(cpc * 100) / 100,
       cpa: Math.round(cpa * 100) / 100,
+      conversion_rate: Math.round(conversion_rate * 100) / 100,
       roas: Math.round(roas * 100) / 100
     };
   }
