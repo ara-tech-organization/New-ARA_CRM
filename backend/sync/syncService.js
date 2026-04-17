@@ -2,9 +2,18 @@ import cron from 'node-cron';
 import Client from '../models/Client.js';
 import Campaign from '../models/Campaign.js';
 import Metric from '../models/Metric.js';
-import Payment from '../models/Payment.js';
+import BillingTransaction from '../models/BillingTransaction.js';
+import DailyDebitSnapshot from '../models/DailyDebitSnapshot.js';
 import googleAdsService from '../services/googleAdsService.js';
 import analyticsService from '../services/analyticsService.js';
+
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+function startOfUtcDay(date) {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
 
 class SyncService {
   constructor() {
@@ -54,7 +63,6 @@ class SyncService {
       // 2. Fetch and store metrics (last 30 days)
       const metrics = await googleAdsService.fetchMetricsWithClicks(client.google_ads_customer_id);
       for (const metricData of metrics) {
-        // Calculate KPIs for this metric
         const kpis = analyticsService.calculateKPIs(metricData);
 
         await Metric.findOneAndUpdate(
@@ -72,50 +80,130 @@ class SyncService {
         );
       }
 
-      // 3. Update client billing info
+      // 3. Reconcile billing ledger (delta-debit per campaign/day)
       await this.updateClientBilling(client._id);
 
       console.log(`Sync completed for client: ${client.clientName}`);
     } catch (error) {
       console.error(`Sync failed for client ${client.clientName}:`, error);
-      // Could implement retry logic here
     }
   }
 
   async updateClientBilling(clientId) {
-    // Get the date of the most recent payment
-    const latestPayment = await Payment.findOne({ client_id: clientId }).sort({ date: -1 });
-    const lastPaymentDate = latestPayment ? latestPayment.date : new Date(0); // If no payments, use epoch
+    // Only reconcile metrics within the sync window (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
+    thirtyDaysAgo.setUTCHours(0, 0, 0, 0);
 
-    // Calculate total spend from metrics after the last payment
-    const totalSpendResult = await Metric.aggregate([
-      { $match: { client_id: clientId, date: { $gte: lastPaymentDate } } },
-      { $group: { _id: null, total: { $sum: '$cost' } } }
-    ]);
+    const metrics = await Metric.find({
+      client_id: clientId,
+      date: { $gte: thirtyDaysAgo }
+    }).sort({ date: 1 });
 
-    // Calculate total added funds from payments
-    const totalFundsResult = await Payment.aggregate([
-      { $match: { client_id: clientId } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
+    for (const metric of metrics) {
+      try {
+        await this.reconcileDailyDebit(clientId, metric);
+      } catch (err) {
+        console.error(
+          `Ledger reconcile failed (client=${clientId}, campaign=${metric.campaign_id}, date=${metric.date?.toISOString?.()}):`,
+          err
+        );
+      }
+    }
+  }
 
-    const totalSpend = totalSpendResult[0]?.total || 0;
+  /**
+   * For a single (client, campaign, day) metric row, compute the delta between
+   * what Google Ads currently reports and what we've already debited, then
+   * insert a ledger row for the delta (positive -> debit, negative -> refund).
+   */
+  async reconcileDailyDebit(clientId, metric) {
+    const reportedCost = round2(metric.cost);
+    const dateKey = startOfUtcDay(metric.date);
 
-    const totalAddedFunds = totalFundsResult[0]?.total || 0;
-
-    // Calculate available balance (prevent negative values)
-    const availableBalance = Math.max(0, totalAddedFunds - totalSpend);
-
-    // Round to 2 decimal places for currency precision
-    const roundedTotalSpend = Math.round(totalSpend * 100) / 100;
-    const roundedAvailableBalance = Math.round(availableBalance * 100) / 100;
-
-    // Update client billing
-    await Client.findByIdAndUpdate(clientId, {
-      'billing.total_added_funds': totalAddedFunds,
-      'billing.total_spend': roundedTotalSpend,
-      'billing.available_balance': roundedAvailableBalance
+    const snapshot = await DailyDebitSnapshot.findOne({
+      client_id: clientId,
+      campaign_id: metric.campaign_id,
+      date: dateKey
     });
+
+    const debitedSoFar = snapshot ? round2(snapshot.debited_amount) : 0;
+    const delta = round2(reportedCost - debitedSoFar);
+
+    if (delta === 0) {
+      if (snapshot) {
+        snapshot.reported_amount = reportedCost;
+        snapshot.last_synced_at = new Date();
+        await snapshot.save();
+      }
+      return;
+    }
+
+    const isDebit = delta > 0;
+    const absAmount = round2(Math.abs(delta));
+    const balanceChange = isDebit ? -absAmount : absAmount;
+    const totalSpendChange = delta;
+
+    const updatedClient = await Client.findByIdAndUpdate(
+      clientId,
+      {
+        $inc: {
+          'billing.available_balance': balanceChange,
+          'billing.total_spend': totalSpendChange
+        }
+      },
+      { new: true }
+    );
+
+    const newBalance = round2(updatedClient?.billing?.available_balance);
+
+    try {
+      await BillingTransaction.create({
+        client_id: clientId,
+        type: isDebit ? 'debit' : 'credit',
+        amount: absAmount,
+        balance_after: newBalance,
+        occurred_at: new Date(),
+        source: isDebit ? 'google_ads_daily_spend' : 'google_ads_refund',
+        reference: {
+          campaign_id: metric.campaign_id,
+          campaign_name: metric.campaign_name,
+          metric_date: dateKey
+        },
+        description: isDebit
+          ? `Google Ads spend (${metric.campaign_name}) on ${dateKey.toISOString().slice(0, 10)}`
+          : `Google Ads cost revision / refund (${metric.campaign_name}) on ${dateKey.toISOString().slice(0, 10)}`
+      });
+    } catch (err) {
+      // Roll back the cache inc to prevent drift
+      await Client.findByIdAndUpdate(clientId, {
+        $inc: {
+          'billing.available_balance': -balanceChange,
+          'billing.total_spend': -totalSpendChange
+        }
+      });
+      throw err;
+    }
+
+    if (snapshot) {
+      snapshot.debited_amount = reportedCost;
+      snapshot.reported_amount = reportedCost;
+      snapshot.last_synced_at = new Date();
+      await snapshot.save();
+    } else {
+      try {
+        await DailyDebitSnapshot.create({
+          client_id: clientId,
+          campaign_id: metric.campaign_id,
+          date: dateKey,
+          debited_amount: reportedCost,
+          reported_amount: reportedCost,
+          last_synced_at: new Date()
+        });
+      } catch (err) {
+        if (err?.code !== 11000) throw err;
+      }
+    }
   }
 
   // Manual trigger method for testing

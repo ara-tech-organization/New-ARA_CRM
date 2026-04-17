@@ -1,33 +1,80 @@
 import express from 'express';
 import Payment from '../models/Payment.js';
 import Client from '../models/Client.js';
+import BillingTransaction from '../models/BillingTransaction.js';
 
 const router = express.Router();
+
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 // POST /api/payments - Add payment/funds to a client
 router.post('/', async (req, res) => {
   try {
     const { clientId, amount, method, notes } = req.body;
 
-    if (!clientId || !amount) {
+    if (!clientId || amount === undefined || amount === null) {
       return res.status(400).json({ error: 'Client ID and amount are required' });
     }
 
-    // Validate client exists
+    const amountNum = round2(amount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      return res.status(400).json({ error: 'Amount must be a positive number' });
+    }
+
     const client = await Client.findById(clientId);
     if (!client) {
       return res.status(404).json({ error: 'Client not found' });
     }
 
-    // Create payment
-    const payment = new Payment({
+    const payment = await Payment.create({
       client_id: clientId,
-      amount: parseFloat(amount),
+      amount: amountNum,
       method: method || 'bank_transfer',
       notes: notes || ''
     });
 
-    await payment.save();
+    let updatedClient;
+    try {
+      updatedClient = await Client.findByIdAndUpdate(
+        clientId,
+        {
+          $inc: {
+            'billing.available_balance': amountNum,
+            'billing.total_added_funds': amountNum
+          }
+        },
+        { new: true }
+      );
+    } catch (err) {
+      await Payment.deleteOne({ _id: payment._id });
+      throw err;
+    }
+
+    const newBalance = round2(updatedClient?.billing?.available_balance);
+
+    try {
+      await BillingTransaction.create({
+        client_id: clientId,
+        type: 'credit',
+        amount: amountNum,
+        balance_after: newBalance,
+        occurred_at: payment.date || new Date(),
+        source: 'manual_payment',
+        reference: { payment_id: payment._id },
+        description: notes ? `Funds added: ${notes}` : 'Funds added',
+        idempotency_key: `payment:${payment._id}`
+      });
+    } catch (err) {
+      // Roll back the balance increment to prevent cache drift
+      await Client.findByIdAndUpdate(clientId, {
+        $inc: {
+          'billing.available_balance': -amountNum,
+          'billing.total_added_funds': -amountNum
+        }
+      });
+      await Payment.deleteOne({ _id: payment._id });
+      throw err;
+    }
 
     res.status(201).json({
       message: 'Payment added successfully',
@@ -36,7 +83,8 @@ router.post('/', async (req, res) => {
         amount: payment.amount,
         method: payment.method,
         date: payment.date,
-        notes: payment.notes
+        notes: payment.notes,
+        balance_after: newBalance
       }
     });
   } catch (error) {

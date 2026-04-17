@@ -1,7 +1,9 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Client from '../models/Client.js';
 import Metric from '../models/Metric.js';
 import Campaign from '../models/Campaign.js';
+import BillingTransaction from '../models/BillingTransaction.js';
 import syncService from '../sync/syncService.js';
 
 // Simple in-memory cache with TTL
@@ -332,13 +334,22 @@ router.get('/client/:clientId', async (req, res) => {
     campaignMetrics[campaignId].clickTypes = campaignClickTypes;
   });
 
+  // Billing ledger — load fresh client (balance may have changed during sync)
+  const freshClient = await Client.findById(clientId).select('billing');
+  const billingLedger = await buildBillingLedger(
+    clientId,
+    start_date,
+    end_date,
+    freshClient?.billing
+  );
+
   const responseData = {
     client: {
       clientId: client._id,
       clientName: client.clientName,
       googleAdsCustomerId: client.google_ads_customer_id,
       googleAdsAccountName: client.google_ads_account_name,
-      billing: client.billing
+      billing: billingLedger
     },
     dateRange: {
       start_date: start_date || new Date().toISOString().split('T')[0],
@@ -404,5 +415,102 @@ router.get('/client/:clientId', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+/**
+ * Build the billing section of the analytics response.
+ * - Summary fields come from the cached `client.billing` doc.
+ * - `transactions`, `balance_timeline`, `spend_by_day`, `credits_by_day`
+ *   are derived from the BillingTransaction ledger, filtered to the
+ *   requested date range (or today if none given).
+ */
+async function buildBillingLedger(clientId, start_date, end_date, billingCache) {
+  const clientObjectId = new mongoose.Types.ObjectId(clientId);
+
+  let rangeStart;
+  let rangeEnd;
+  if (start_date && end_date) {
+    rangeStart = new Date(start_date);
+    rangeEnd = new Date(end_date + 'T23:59:59.999Z');
+  } else {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    rangeStart = new Date(todayStr);
+    rangeEnd = new Date(todayStr + 'T23:59:59.999Z');
+  }
+
+  const transactions = await BillingTransaction.find({
+    client_id: clientObjectId,
+    occurred_at: { $gte: rangeStart, $lte: rangeEnd }
+  })
+    .sort({ occurred_at: -1 })
+    .limit(500)
+    .lean();
+
+  const dailyAgg = await BillingTransaction.aggregate([
+    {
+      $match: {
+        client_id: clientObjectId,
+        occurred_at: { $gte: rangeStart, $lte: rangeEnd }
+      }
+    },
+    { $sort: { occurred_at: 1 } },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurred_at' } },
+        balance_eod: { $last: '$balance_after' },
+        debit_total: {
+          $sum: { $cond: [{ $eq: ['$type', 'debit'] }, '$amount', 0] }
+        },
+        credit_total: {
+          $sum: { $cond: [{ $eq: ['$type', 'credit'] }, '$amount', 0] }
+        }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  const balance_timeline = dailyAgg.map(d => ({
+    date: d._id,
+    balance: Math.round(d.balance_eod * 100) / 100
+  }));
+  const spend_by_day = dailyAgg
+    .filter(d => d.debit_total > 0)
+    .map(d => ({ date: d._id, amount: Math.round(d.debit_total * 100) / 100 }));
+  const credits_by_day = dailyAgg
+    .filter(d => d.credit_total > 0)
+    .map(d => ({ date: d._id, amount: Math.round(d.credit_total * 100) / 100 }));
+
+  // Totals within the selected range
+  const rangeCredits = credits_by_day.reduce((sum, d) => sum + d.amount, 0);
+  const rangeDebits = spend_by_day.reduce((sum, d) => sum + d.amount, 0);
+
+  return {
+    billing_type: billingCache?.billing_type || 'monthly',
+    low_balance_threshold: billingCache?.low_balance_threshold ?? 100,
+    available_balance: Math.round((billingCache?.available_balance || 0) * 100) / 100,
+    total_spend: Math.round((billingCache?.total_spend || 0) * 100) / 100,
+    total_added_funds: Math.round((billingCache?.total_added_funds || 0) * 100) / 100,
+    range: {
+      start_date: rangeStart.toISOString().split('T')[0],
+      end_date: rangeEnd.toISOString().split('T')[0],
+      credits_in_range: Math.round(rangeCredits * 100) / 100,
+      debits_in_range: Math.round(rangeDebits * 100) / 100,
+      net_change_in_range: Math.round((rangeCredits - rangeDebits) * 100) / 100
+    },
+    transactions: transactions.map(tx => ({
+      id: tx._id,
+      type: tx.type,
+      amount: tx.amount,
+      balance_after: tx.balance_after,
+      occurred_at: tx.occurred_at,
+      source: tx.source,
+      description: tx.description,
+      reference: tx.reference || {}
+    })),
+    balance_timeline,
+    spend_by_day,
+    credits_by_day
+  };
+}
 
 export default router;
