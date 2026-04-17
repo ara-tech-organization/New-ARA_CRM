@@ -146,9 +146,14 @@ export const updateClient = asyncHandler(async (req, res) => {
     });
   }
 
+  // Never allow the generic client-update endpoint to write billing fields.
+  // Billing state is ledger-managed and must go through /api/payments,
+  // /api/billing/:id/reset, or /api/billing/:id/reconcile.
+  const { billing, ...safeBody } = req.body || {};
+
   client = await Client.findByIdAndUpdate(
     req.params.id,
-    { $set: req.body },
+    { $set: safeBody },
     { new: true }
   );
 
