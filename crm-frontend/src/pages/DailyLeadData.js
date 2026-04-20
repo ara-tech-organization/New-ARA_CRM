@@ -52,6 +52,9 @@ const DailyLeadData = () => {
 
   const { leads: allCachedLeads, clients: cachedClients, leadsLoading: loading, clientsLoading, fetchLeads } = useDataCache();
 
+  // Trigger the lazy all-leads fetch when this page mounts
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
   // Filter leads by date range from cache (no API call)
   const mainApiLeads = useMemo(() => {
     return allCachedLeads.filter(lead => {

@@ -151,7 +151,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { accentColor } = useContext(ThemeContext);
   const tealAccent = accentColor?.secondary || '#C08552';
-  const { leads: cachedLeads, clients: cachedClients, leadsLoading, clientsLoading, refreshAll } = useDataCache();
+  const { todayLeads, clients: cachedClients, todayLeadsLoading: leadsLoading, clientsLoading, refreshAll } = useDataCache();
 
   const [clientSearch, setClientSearch] = useState('');
 
@@ -166,22 +166,28 @@ const Dashboard = () => {
     cachedClients.map(c => ({ _id: c._id, name: c.clientName, status: c.status, googleAdsEnabled: c.googleAdsEnabled || c.google_ads_enabled })),
   [cachedClients]);
 
-  // Fetch leads for the selected date directly from API
-  const [dateLeads, setDateLeads] = useState([]);
-  const [dateLeadsLoading, setDateLeadsLoading] = useState(false);
+  // If the user picks today, use the eager today cache; otherwise fetch on demand.
+  const [otherDateLeads, setOtherDateLeads] = useState([]);
+  const [otherDateLoading, setOtherDateLoading] = useState(false);
   useEffect(() => {
-    setDateLeadsLoading(true);
-    api.get(`/leads`, { params: { date: selectedDate, limit: 10000, _t: Date.now() }, timeout: 8000 })
+    if (selectedDate === today) {
+      setOtherDateLeads([]);
+      return;
+    }
+    setOtherDateLoading(true);
+    api.get('/leads', { params: { date: selectedDate, limit: 10000 }, timeout: 15000 })
       .then(res => {
         const data = res.data?.data || res.data || [];
-        setDateLeads(Array.isArray(data) ? data.filter(l => l.date === selectedDate) : []);
+        setOtherDateLeads(Array.isArray(data) ? data : []);
       })
-      .catch(() => {
-        // Fallback to cached leads
-        setDateLeads(cachedLeads.filter(l => l.date === selectedDate));
-      })
-      .finally(() => setDateLeadsLoading(false));
-  }, [selectedDate, cachedLeads]);
+      .catch(() => setOtherDateLeads([]))
+      .finally(() => setOtherDateLoading(false));
+  }, [selectedDate, today]);
+
+  const dateLeads = useMemo(
+    () => (selectedDate === today ? todayLeads : otherDateLeads),
+    [selectedDate, today, todayLeads, otherDateLeads]
+  );
 
   // Fetch Google Ads summary for linked accounts (keyed by clientId)
   const [adsDataMap, setAdsDataMap] = useState({});
@@ -201,7 +207,7 @@ const Dashboard = () => {
       .finally(() => setAdsLoading(false));
   }, [cachedClients, selectedDate]);
 
-  const loading = leadsLoading || clientsLoading || dateLeadsLoading || adsLoading;
+  const loading = leadsLoading || clientsLoading || adsLoading || otherDateLoading;
 
   const dateByClient = useMemo(() => {
     const map = {};

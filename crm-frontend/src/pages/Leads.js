@@ -38,6 +38,9 @@ const Leads = () => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const { leads, leadsLoading: loading, fetchLeads: refreshLeads } = useDataCache();
 
+  // Trigger the lazy all-leads fetch when this page mounts
+  useEffect(() => { refreshLeads(); }, [refreshLeads]);
+
   const fetchLeads = () => refreshLeads(true);
 
   // Get unique clients, dates, and months for the pivot table
