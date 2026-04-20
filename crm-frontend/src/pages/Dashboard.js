@@ -207,6 +207,8 @@ const Dashboard = () => {
       .finally(() => setAdsLoading(false));
   }, [cachedClients, selectedDate]);
 
+  // Only block the page on essentials (clients list). Everything else loads progressively.
+  const initialLoading = clientsLoading && cachedClients.length === 0;
   const loading = leadsLoading || clientsLoading || adsLoading || otherDateLoading;
 
   const dateByClient = useMemo(() => {
