@@ -145,7 +145,7 @@ export const createClient = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updateClient = asyncHandler(async (req, res) => {
-  let client = await Client.findById(req.params.id);
+  const client = await Client.findById(req.params.id).select('+portalPassword');
 
   if (!client) {
     return res.status(404).json({
@@ -154,15 +154,35 @@ export const updateClient = asyncHandler(async (req, res) => {
     });
   }
 
-  client = await Client.findByIdAndUpdate(
+  // If portalPassword is being set, use save() so the pre-save hash runs
+  const hasPortalPassword = req.body.portalPassword && req.body.portalPassword.trim();
+
+  if (hasPortalPassword) {
+    // Apply all fields from body to the document
+    Object.keys(req.body).forEach(key => {
+      client[key] = req.body[key];
+    });
+    await client.save();
+    // Remove portalPassword from response
+    const result = client.toObject();
+    delete result.portalPassword;
+    return res.status(200).json({ success: true, data: result });
+  }
+
+  // No password change — use findByIdAndUpdate for efficiency
+  // Remove empty portalPassword to avoid overwriting hash with empty string
+  const updateData = { ...req.body };
+  delete updateData.portalPassword;
+
+  const updated = await Client.findByIdAndUpdate(
     req.params.id,
-    { $set: req.body },
+    { $set: updateData },
     { new: true }
   );
 
   res.status(200).json({
     success: true,
-    data: client,
+    data: updated,
   });
 });
 

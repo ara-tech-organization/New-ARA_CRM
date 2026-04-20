@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Grid, Card, CardContent, Typography, Box, CircularProgress,
-  Chip, Avatar, Button, Divider,
+  Chip, Avatar, Button, Divider, TextField, InputAdornment,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
 import {
   Facebook, Google, People, Refresh as RefreshIcon,
   TrendingUp as TrendingUpIcon, Circle as CircleIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
+import api from '../api/axios';
 import { PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useDataCache } from '../contexts/DataCacheContext';
@@ -40,11 +43,12 @@ const GlassTooltip = ({ active, payload }) => {
   );
 };
 
-// --- Client Performance Card (clean horizontal layout like DashboardPro but with glass) ---
-const ClientCard = ({ client, data, color, todayStr }) => {
+// --- Client Performance Card — clickable, navigates to client ads detail page ---
+const ClientCard = ({ client, data, color, dateStr, onClick, adsData }) => {
   const metaLeads = (data.metaForm || 0) + (data.metaWhatsapp || 0);
   const googleLeads = (data.googleCall || 0) + (data.googleWebsite || 0);
   const totalLeads = metaLeads + googleLeads;
+  const isLinked = client.googleAdsEnabled && adsData;
 
   const MetricBox = ({ value, label }) => (
     <Box sx={{ flex: 1, textAlign: 'center', py: 0.8, px: 1, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1.5 }}>
@@ -58,7 +62,19 @@ const ClientCard = ({ client, data, color, todayStr }) => {
   );
 
   return (
-    <Card sx={{ height: '100%', overflow: 'hidden' }}>
+    <Card
+      onClick={onClick}
+      sx={{
+        height: '100%',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        '&:hover': {
+          transform: 'translateY(-2px)',
+          boxShadow: '0 4px 16px rgba(192, 133, 82, 0.25)',
+          borderColor: color,
+        },
+      }}>
       {/* Colored header with client name */}
       <Box sx={{
         background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`,
@@ -69,11 +85,11 @@ const ClientCard = ({ client, data, color, todayStr }) => {
           <Avatar sx={{ width: 30, height: 30, bgcolor: 'rgba(255,255,255,0.25)', fontSize: '0.8rem', fontWeight: 700, color: 'white' }}>
             {client.name?.charAt(0)}
           </Avatar>
-          <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: 'white' }}>
+          <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '0.92rem', color: 'white' }}>
             {client.name}
           </Typography>
         </Box>
-        <Chip label={todayStr} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontSize: '0.68rem', height: 22 }} />
+        <Chip label={dateStr} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontSize: '0.68rem', height: 22 }} />
       </Box>
 
       <CardContent sx={{ px: 2, py: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -99,11 +115,19 @@ const ClientCard = ({ client, data, color, todayStr }) => {
             <Google sx={{ color: '#3E2723', fontSize: 18 }} />
             <Typography sx={{ fontWeight: 700, color: '#3E2723', fontSize: '0.78rem' }}>GOOGLE</Typography>
           </Box>
-          <Box sx={{ display: 'flex', flex: 1, gap: 0.8 }}>
-            <MetricBox value={data.googleCall || 0} label="Call" />
-            <MetricBox value={data.googleWebsite || 0} label="Website" />
-            <MetricBox value={(data.googleFund || 0).toLocaleString()} label="Fund" />
-            <MetricBox value={(data.googleCPL || 0).toFixed(0)} label="CPL" />
+          <Box sx={{ display: 'flex', flex: 1, gap: 0.8, alignItems: 'center' }}>
+            {isLinked ? (
+              <>
+                <MetricBox value={`${(adsData.totalClicks > 0 ? ((adsData.totalConversions || 0) / adsData.totalClicks * 100) : 0).toFixed(2)}%`} label="Conv. Rate" />
+                <MetricBox value={`₹${(adsData.fund ?? adsData.totalCost ?? 0).toLocaleString()}`} label="Fund" />
+                <MetricBox value={(adsData.totalClicks || 0).toLocaleString()} label="Clicks" />
+                <MetricBox value={(adsData.totalImpressions || 0).toLocaleString()} label="Impr." />
+              </>
+            ) : (
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontStyle: 'italic', textAlign: 'center', width: '100%', py: 0.5 }}>
+                Not linked to Google Ads
+              </Typography>
+            )}
           </Box>
         </Box>
 
@@ -124,27 +148,64 @@ const ClientCard = ({ client, data, color, todayStr }) => {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { accentColor } = useContext(ThemeContext);
   const tealAccent = accentColor?.secondary || '#C08552';
   const { leads: cachedLeads, clients: cachedClients, leadsLoading, clientsLoading, refreshAll } = useDataCache();
 
-  const loading = leadsLoading || clientsLoading;
-
-  // Transform clients to simple format
-  const clients = useMemo(() =>
-    cachedClients.map(c => ({ _id: c._id, name: c.clientName, status: c.status })),
-  [cachedClients]);
+  const [clientSearch, setClientSearch] = useState('');
 
   const today = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }, []);
+  const [selectedDate, setSelectedDate] = useState(today);
 
-  const todayLeads = useMemo(() => cachedLeads.filter(l => l.date === today), [cachedLeads, today]);
+  // Transform clients to simple format
+  const clients = useMemo(() =>
+    cachedClients.map(c => ({ _id: c._id, name: c.clientName, status: c.status, googleAdsEnabled: c.googleAdsEnabled || c.google_ads_enabled })),
+  [cachedClients]);
 
-  const todayByClient = useMemo(() => {
+  // Fetch leads for the selected date directly from API
+  const [dateLeads, setDateLeads] = useState([]);
+  const [dateLeadsLoading, setDateLeadsLoading] = useState(false);
+  useEffect(() => {
+    setDateLeadsLoading(true);
+    api.get(`/leads`, { params: { date: selectedDate, limit: 10000, _t: Date.now() }, timeout: 8000 })
+      .then(res => {
+        const data = res.data?.data || res.data || [];
+        setDateLeads(Array.isArray(data) ? data.filter(l => l.date === selectedDate) : []);
+      })
+      .catch(() => {
+        // Fallback to cached leads
+        setDateLeads(cachedLeads.filter(l => l.date === selectedDate));
+      })
+      .finally(() => setDateLeadsLoading(false));
+  }, [selectedDate, cachedLeads]);
+
+  // Fetch Google Ads summary for linked accounts (keyed by clientId)
+  const [adsDataMap, setAdsDataMap] = useState({});
+  const [adsLoading, setAdsLoading] = useState(false);
+  useEffect(() => {
+    const hasLinked = cachedClients.some(c => c.googleAdsEnabled || c.google_ads_enabled);
+    if (!hasLinked) return;
+    setAdsLoading(true);
+    api.get('/analytics/clients', { params: { start_date: selectedDate, end_date: selectedDate }, timeout: 8000 })
+      .then(res => {
+        const list = res.data?.clients || res.data?.data || res.data || [];
+        const map = {};
+        (Array.isArray(list) ? list : []).forEach(c => { if (c.clientId) map[c.clientId] = c; });
+        setAdsDataMap(map);
+      })
+      .catch(() => {})
+      .finally(() => setAdsLoading(false));
+  }, [cachedClients, selectedDate]);
+
+  const loading = leadsLoading || clientsLoading || dateLeadsLoading || adsLoading;
+
+  const dateByClient = useMemo(() => {
     const map = {};
-    todayLeads.forEach(lead => {
+    dateLeads.forEach(lead => {
       map[lead.clientId] = {
         metaForm: lead.metaFormLead || 0, metaWhatsapp: lead.metaWhatsappLead || 0,
         metaFund: lead.metaFund || 0, metaCPL: lead.metaCpl || 0,
@@ -153,14 +214,14 @@ const Dashboard = () => {
       };
     });
     return map;
-  }, [todayLeads]);
+  }, [dateLeads]);
 
   const emptyData = { metaForm: 0, metaWhatsapp: 0, metaFund: 0, metaCPL: 0, googleCall: 0, googleWebsite: 0, googleFund: 0, googleCPL: 0 };
 
   // Aggregated totals
   const totals = useMemo(() => {
     const t = { metaForm: 0, metaWhatsapp: 0, metaFund: 0, googleCall: 0, googleWebsite: 0, googleFund: 0 };
-    todayLeads.forEach(l => {
+    dateLeads.forEach(l => {
       t.metaForm += l.metaFormLead || 0;
       t.metaWhatsapp += l.metaWhatsappLead || 0;
       t.metaFund += l.metaFund || 0;
@@ -173,39 +234,41 @@ const Dashboard = () => {
     t.totalLeads = t.metaLeads + t.googleLeads;
     t.totalSpend = t.metaFund + t.googleFund;
     return t;
-  }, [todayLeads]);
+  }, [dateLeads]);
 
   // Bar chart — clients with data
   const clientBarData = useMemo(() => {
     return clients.map(c => {
-      const d = todayByClient[c._id] || emptyData;
+      const d = dateByClient[c._id] || emptyData;
       const meta = (d.metaForm || 0) + (d.metaWhatsapp || 0);
       const google = (d.googleCall || 0) + (d.googleWebsite || 0);
       // Short label for X-axis, full name for tooltip
       const short = c.name?.length > 12 ? c.name.substring(0, 12) + '…' : c.name;
       return { name: c.name, short, meta, google, total: meta + google };
     }).filter(d => d.total > 0).sort((a, b) => b.total - a.total);
-  }, [clients, todayByClient]);
+  }, [clients, dateByClient]);
 
   // Top clients for table
   const topClients = useMemo(() => {
     return clients.map(c => {
-      const d = todayByClient[c._id] || emptyData;
+      const d = dateByClient[c._id] || emptyData;
       const meta = (d.metaForm || 0) + (d.metaWhatsapp || 0);
       const google = (d.googleCall || 0) + (d.googleWebsite || 0);
       const total = meta + google;
       const spend = (d.metaFund || 0) + (d.googleFund || 0);
       return { name: c.name, meta, google, total, spend, cpl: total > 0 ? Math.round(spend / total) : 0 };
     }).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
-  }, [clients, todayByClient]);
+  }, [clients, dateByClient]);
 
   if (loading) {
     return <PageLoader message="Loading dashboard..." />;
   }
 
   const activeClients = clients.filter(c => c.status === 'Active' || c.status === 'active').length;
-  const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const todayLong = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  const selDateObj = new Date(selectedDate + 'T00:00:00');
+  const dateStr = selDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const dateLong = selDateObj.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  const isToday = selectedDate === today;
 
   return (
     <Box>
@@ -214,12 +277,25 @@ const Dashboard = () => {
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 700 }}>Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
-            Today's Client Performance — {todayLong}
+            {isToday ? "Today's" : ''} Client Performance — {dateLong}
           </Typography>
         </Box>
-        <Button variant="outlined" startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />} onClick={refreshAll} disabled={loading}>
-          Refresh
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <TextField
+            type="date"
+            size="small"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true }, input: { max: today } }}
+            sx={{ minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem' } }}
+          />
+          {!isToday && (
+            <Button size="small" variant="outlined" onClick={() => setSelectedDate(today)}>Today</Button>
+          )}
+          <Button variant="outlined" startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />} onClick={refreshAll} disabled={loading}>
+            Refresh
+          </Button>
+        </Box>
       </Box>
 
       {/* ── Row 1: Summary Stats ── */}
@@ -274,24 +350,36 @@ const Dashboard = () => {
       </Card>
 
       {/* ── Row 3: Client Performance Cards ── */}
-      <Typography variant="h6" sx={{ fontWeight: 600, mb: 1.5 }}>
-        Client-wise Performance
-        <Typography component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary', ml: 1 }}>
-          {clients.length} clients
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          Client-wise Performance
+          <Typography component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary', ml: 1 }}>
+            {clients.length} clients
+          </Typography>
         </Typography>
-      </Typography>
+        <TextField
+          size="small"
+          placeholder="Search clients..."
+          value={clientSearch}
+          onChange={(e) => setClientSearch(e.target.value)}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} /></InputAdornment> } }}
+          sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem' } }}
+        />
+      </Box>
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {[...clients].sort((a, b) => {
-          const aLeads = todayByClient[a._id] ? ((todayByClient[a._id].metaForm || 0) + (todayByClient[a._id].metaWhatsapp || 0) + (todayByClient[a._id].googleCall || 0) + (todayByClient[a._id].googleWebsite || 0)) : 0;
-          const bLeads = todayByClient[b._id] ? ((todayByClient[b._id].metaForm || 0) + (todayByClient[b._id].metaWhatsapp || 0) + (todayByClient[b._id].googleCall || 0) + (todayByClient[b._id].googleWebsite || 0)) : 0;
+        {[...clients].filter(c => !clientSearch || c.name?.toLowerCase().includes(clientSearch.toLowerCase())).sort((a, b) => {
+          const aLeads = dateByClient[a._id] ? ((dateByClient[a._id].metaForm || 0) + (dateByClient[a._id].metaWhatsapp || 0) + (dateByClient[a._id].googleCall || 0) + (dateByClient[a._id].googleWebsite || 0)) : 0;
+          const bLeads = dateByClient[b._id] ? ((dateByClient[b._id].metaForm || 0) + (dateByClient[b._id].metaWhatsapp || 0) + (dateByClient[b._id].googleCall || 0) + (dateByClient[b._id].googleWebsite || 0)) : 0;
           return bLeads - aLeads;
         }).map((client, i) => (
           <Grid key={client._id} size={{ xs: 12, md: 6, lg: 4 }}>
             <ClientCard
               client={client}
-              data={todayByClient[client._id] || emptyData}
+              data={dateByClient[client._id] || emptyData}
               color={CLIENT_COLORS[i % CLIENT_COLORS.length]}
-              todayStr={todayStr}
+              dateStr={dateStr}
+              onClick={() => navigate(`/client-ads/${client._id}`)}
+              adsData={adsDataMap[client._id]}
             />
           </Grid>
         ))}

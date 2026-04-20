@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import Client from '../models/Client.js';
 import { asyncHandler } from './errorHandler.js';
 
 // ============================================
@@ -103,6 +104,34 @@ export const protect = asyncHandler(async (req, res, next) => {
       success: false,
       message: 'Not authorized to access this route',
     });
+  }
+});
+
+/**
+ * Protect client portal routes — verify JWT with role: 'client'
+ */
+export const protectClient = asyncHandler(async (req, res, next) => {
+  let token;
+  if (req.headers.authorization?.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Not authorized' });
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'client' || !decoded.clientId) {
+      return res.status(403).json({ success: false, message: 'Not a client token' });
+    }
+    const client = await Client.findById(decoded.clientId).select('clientName portalEnabled google_ads_enabled google_ads_customer_id').lean();
+    if (!client || !client.portalEnabled) {
+      return res.status(401).json({ success: false, message: 'Portal access disabled' });
+    }
+    req.clientId = decoded.clientId;
+    req.clientData = client;
+    next();
+  } catch (error) {
+    return res.status(401).json({ success: false, message: 'Token invalid or expired' });
   }
 });
 

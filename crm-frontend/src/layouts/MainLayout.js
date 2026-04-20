@@ -54,6 +54,7 @@ import {
   Campaign as CampaignIcon,
   Lock as LockIcon,
   Article as ArticleIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from '@mui/icons-material';
 
 // Map routes to permission IDs for access control
@@ -251,6 +252,14 @@ const MainLayout = () => {
       path: '/personal-vault',
       badge: null,
       permissionId: 'personal-vault'
+    },
+    {
+      text: 'Client Portal',
+      icon: <ManageAccountsIcon />,
+      path: '/client-portal-access',
+      badge: null,
+      permissionId: 'client-portal-access',
+      adminOnly: true
     },
     {
       text: 'Access Management',

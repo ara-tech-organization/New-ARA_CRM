@@ -38,6 +38,8 @@ import {
   Refresh as RefreshIcon,
   Add as AddIcon,
   Edit as EditIcon,
+  Google as GoogleIcon,
+  Link as LinkIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { MenuItem, Select, InputLabel, FormControl } from '@mui/material';
@@ -73,6 +75,7 @@ const Clients = () => {
     address: '',
     gstNumber: '',
     accountId: '',
+    googleCustomerId: '',
     onboardedDate: new Date().toISOString().split('T')[0],
     status: 'active',
     team: '',
@@ -93,6 +96,12 @@ const Clients = () => {
   const [clientToDelete, setClientToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Merge Duplicates state
+  const [dupDialogOpen, setDupDialogOpen] = useState(false);
+  const [dupGroups, setDupGroups] = useState([]);
+  const [mergeSelection, setMergeSelection] = useState({}); // { normalizedKey: keepId }
+  const [merging, setMerging] = useState(false);
+
   // Fetch clients from main API
   const fetchClients = async () => {
     setLoading(true);
@@ -109,6 +118,9 @@ const Clients = () => {
         address: client.address || '',
         gstNumber: client.gstNumber || '',
         accountId: client.accountId || '',
+        // Backend uses snake_case: google_ads_customer_id + google_ads_enabled
+        googleCustomerId: client.google_ads_customer_id || client.googleCustomerId || '',
+        googleAdsEnabled: client.google_ads_enabled || false,
         status: client.status || 'active',
         onboardedDate: client.onboardDate || client.createdAt,
         removalReason: client.removalReason || '',
@@ -178,6 +190,7 @@ const Clients = () => {
       address: '',
       gstNumber: '',
       accountId: '',
+      googleCustomerId: '',
       onboardedDate: new Date().toISOString().split('T')[0],
       status: 'active',
       team: '',
@@ -206,6 +219,7 @@ const Clients = () => {
       address: client.address || '',
       gstNumber: client.gstNumber || '',
       accountId: client.accountId || '',
+      googleCustomerId: client.googleCustomerId || '',
       onboardedDate: client.onboardedDate ? new Date(client.onboardedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       status: client.status || 'active',
       removalReason: client.removalReason || '',
@@ -298,6 +312,129 @@ const Clients = () => {
     setDeleteDialogOpen(true);
   };
 
+  // ── Detect & Merge Duplicates ──
+  const handleOpenDuplicates = () => {
+    // Group clients by normalized name (trimmed, lowercase, collapsed spaces)
+    const normalize = (s) => (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    const buckets = {};
+    clients.forEach(c => {
+      const key = normalize(c.name);
+      if (!key) return;
+      if (!buckets[key]) buckets[key] = [];
+      buckets[key].push(c);
+    });
+    const dupes = Object.entries(buckets)
+      .filter(([, arr]) => arr.length > 1)
+      .map(([key, arr]) => ({ key, clients: arr }));
+
+    if (dupes.length === 0) {
+      setSnackbar({ open: true, message: 'No duplicate clients found', severity: 'info' });
+      return;
+    }
+
+    // Default: pick the most-complete record (prefer googleAdsEnabled, then most non-empty fields)
+    const scoreClient = (c) => {
+      let score = 0;
+      if (c.googleAdsEnabled) score += 100;
+      ['place', 'organisationType', 'address', 'gstNumber', 'accountId', 'assignedSMM', 'assignedSME', 'team', 'creativeCommitment', 'staticCommitment', 'motionCreative', 'notes'].forEach(f => {
+        if (c[f]) score += 1;
+      });
+      return score;
+    };
+    const defaults = {};
+    dupes.forEach(({ key, clients: group }) => {
+      const best = [...group].sort((a, b) => scoreClient(b) - scoreClient(a))[0];
+      defaults[key] = best._id;
+    });
+    setMergeSelection(defaults);
+    setDupGroups(dupes);
+    setDupDialogOpen(true);
+  };
+
+  const handleMergeGroup = async (group, keepId) => {
+    const keep = group.find(c => c._id === keepId);
+    const dupes = group.filter(c => c._id !== keepId);
+    if (!keep || dupes.length === 0) return;
+
+    // Build merged payload — take keep's values, fill empty fields from dupes
+    const mergedPayload = {
+      clientName: keep.name,
+      place: keep.place || dupes.find(d => d.place)?.place || '',
+      organisationType: keep.organisationType || dupes.find(d => d.organisationType)?.organisationType || '',
+      address: keep.address || dupes.find(d => d.address)?.address || '',
+      gstNumber: keep.gstNumber || dupes.find(d => d.gstNumber)?.gstNumber || '',
+      status: keep.status || 'active',
+      team: keep.team || dupes.find(d => d.team)?.team || '',
+      assignedSMM: keep.assignedSMM || dupes.find(d => d.assignedSMM)?.assignedSMM || '',
+      assignedSME: keep.assignedSME || dupes.find(d => d.assignedSME)?.assignedSME || '',
+      creativeCommitment: keep.creativeCommitment || dupes.find(d => d.creativeCommitment)?.creativeCommitment || '',
+      staticCommitment: keep.staticCommitment || dupes.find(d => d.staticCommitment)?.staticCommitment || '',
+      motionCreative: keep.motionCreative || dupes.find(d => d.motionCreative)?.motionCreative || '',
+      notes: keep.notes || dupes.find(d => d.notes)?.notes || '',
+    };
+    if (keep.accountId || dupes.find(d => d.accountId)) {
+      mergedPayload.accountId = keep.accountId || dupes.find(d => d.accountId)?.accountId || '';
+    }
+
+    // If keep isn't linked to Google Ads but a duplicate is, transfer the link
+    if (!keep.googleAdsEnabled) {
+      const linkedDupe = dupes.find(d => d.googleAdsEnabled && d.googleCustomerId);
+      if (linkedDupe) {
+        try {
+          await api.put(`/google-ads/client/${keep._id}/associate`, {
+            customerId: linkedDupe.googleCustomerId,
+            accountName: linkedDupe.name,
+          });
+        } catch (err) {
+          console.error('Failed to transfer Google Ads link:', err);
+        }
+      }
+    }
+
+    // Update kept record with merged fields
+    await api.put(`/clients/${keep._id}`, mergedPayload);
+
+    // Delete duplicates
+    for (const d of dupes) {
+      try {
+        await api.delete(`/clients/${d._id}`);
+      } catch (err) {
+        console.error(`Failed to delete duplicate ${d._id}:`, err);
+      }
+    }
+  };
+
+  const handleMergeAll = async () => {
+    setMerging(true);
+    let mergedCount = 0;
+    let errorCount = 0;
+    try {
+      for (const { key, clients: group } of dupGroups) {
+        const keepId = mergeSelection[key];
+        if (!keepId) continue;
+        try {
+          await handleMergeGroup(group, keepId);
+          mergedCount++;
+        } catch (err) {
+          console.error(`Merge failed for group "${key}":`, err);
+          errorCount++;
+        }
+      }
+      setSnackbar({
+        open: true,
+        message: errorCount > 0
+          ? `Merged ${mergedCount} group(s), ${errorCount} failed`
+          : `Successfully merged ${mergedCount} duplicate group(s)`,
+        severity: errorCount > 0 ? 'warning' : 'success',
+      });
+      setDupDialogOpen(false);
+      setDupGroups([]);
+      await fetchClients();
+    } finally {
+      setMerging(false);
+    }
+  };
+
   // Handle delete client
   const handleDeleteClient = async () => {
     if (!clientToDelete) return;
@@ -372,6 +509,7 @@ const Clients = () => {
         payload.accountId = accountIdTrimmed;
       }
 
+
       const response = await api.post('/clients', payload);
       console.log('API Response:', response.data);
 
@@ -433,7 +571,7 @@ const Clients = () => {
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Clients Management
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -441,6 +579,14 @@ const Clients = () => {
             sx={{ bgcolor: primaryColor, '&:hover': { bgcolor: secondaryColor } }}
           >
             Add Client
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<LinkIcon />}
+            onClick={handleOpenDuplicates}
+            sx={{ borderColor: '#C08552', color: '#C08552' }}
+          >
+            Find Duplicates
           </Button>
           <Button
             variant="outlined"
@@ -578,6 +724,13 @@ const Clients = () => {
                               <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                          {client.googleAdsEnabled && (
+                            <Tooltip title={`Linked to Google Ads: ${client.googleCustomerId}`}>
+                              <IconButton size="small" sx={{ color: '#10b981' }} disabled>
+                                <GoogleIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Delete Client">
                             <IconButton
                               size="small"
@@ -656,6 +809,10 @@ const Clients = () => {
                 <Grid size={{xs: 6}}>
                   <Typography variant="caption" color="text.secondary">Account ID</Typography>
                   <Typography variant="body2">{selectedClient.accountId || '-'}</Typography>
+                </Grid>
+                <Grid size={{xs: 6}}>
+                  <Typography variant="caption" color="text.secondary">Google Ads Customer ID</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{selectedClient.googleCustomerId || '-'}</Typography>
                 </Grid>
                 <Grid size={{xs: 6}}>
                   <Typography variant="caption" color="text.secondary">Team</Typography>
@@ -1184,6 +1341,97 @@ const Clients = () => {
             startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
           >
             {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Merge Duplicates Dialog */}
+      <Dialog open={dupDialogOpen} onClose={() => !merging && setDupDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <LinkIcon sx={{ color: '#C08552' }} />
+          Merge Duplicate Clients
+          <Chip label={`${dupGroups.length} groups`} size="small" sx={{ ml: 'auto', bgcolor: '#C0855215', color: '#C08552' }} />
+        </DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>Review before merging</Typography>
+            <Typography sx={{ fontSize: '0.76rem' }}>
+              For each group, select the record to KEEP. All other duplicates will be deleted and their non-empty fields will be merged into the kept record. Google Ads links transfer automatically.
+            </Typography>
+          </Alert>
+
+          {dupGroups.map(({ key, clients: group }) => (
+            <Paper key={key} variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 1 }}>
+                {group[0].name}
+                <Chip label={`${group.length} records`} size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', bgcolor: '#ef444415', color: '#ef4444' }} />
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.8 }}>
+                {group.map((c) => {
+                  const isKeep = mergeSelection[key] === c._id;
+                  const fieldsFilled = ['place', 'organisationType', 'address', 'gstNumber', 'accountId', 'assignedSMM', 'assignedSME', 'team'].filter(f => c[f]).length;
+                  return (
+                    <Box
+                      key={c._id}
+                      onClick={() => setMergeSelection(prev => ({ ...prev, [key]: c._id }))}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 1.5, p: 1.2,
+                        border: isKeep ? '2px solid #10b981' : '1px solid',
+                        borderColor: isKeep ? '#10b981' : 'divider',
+                        borderRadius: 1.5, cursor: 'pointer',
+                        bgcolor: isKeep ? '#10b98110' : 'transparent',
+                        transition: 'all 0.15s',
+                        '&:hover': { borderColor: isKeep ? '#10b981' : '#C08552' },
+                      }}
+                    >
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.4, flexWrap: 'wrap' }}>
+                          <Typography sx={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'text.secondary' }}>
+                            {c._id}
+                          </Typography>
+                          {c.googleAdsEnabled && (
+                            <Chip
+                              icon={<GoogleIcon sx={{ fontSize: 11 }} />}
+                              label={`Linked: ${c.googleCustomerId}`}
+                              size="small"
+                              sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#10b98115', color: '#10b981', fontWeight: 600 }}
+                            />
+                          )}
+                          <Chip
+                            label={`${fieldsFilled} fields filled`}
+                            size="small"
+                            sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#C0855215', color: '#C08552' }}
+                          />
+                          {c.status && (
+                            <Chip label={c.status} size="small" sx={{ height: 18, fontSize: '0.65rem', textTransform: 'capitalize' }} />
+                          )}
+                        </Box>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+                          {[c.team, c.assignedSME, c.place, c.organisationType].filter(Boolean).join(' • ') || 'No additional info'}
+                        </Typography>
+                      </Box>
+                      {isKeep ? (
+                        <Chip label="KEEP" size="small" sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 700, height: 22 }} />
+                      ) : (
+                        <Chip label="Delete" size="small" variant="outlined" sx={{ color: '#ef4444', borderColor: '#ef4444', height: 22 }} />
+                      )}
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Paper>
+          ))}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDupDialogOpen(false)} disabled={merging}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleMergeAll}
+            disabled={merging}
+            startIcon={merging ? <CircularProgress size={14} color="inherit" /> : <LinkIcon />}
+            sx={{ bgcolor: '#C08552', '&:hover': { bgcolor: '#8B5E3C' } }}
+          >
+            {merging ? 'Merging...' : `Merge ${dupGroups.length} Group(s)`}
           </Button>
         </DialogActions>
       </Dialog>

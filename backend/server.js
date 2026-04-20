@@ -23,6 +23,7 @@ import personalVaultRoutes from './routes/personalVault.js';
 import contentEntryRoutes from './routes/contentEntries.js';
 import metricsRoutes from './routes/metrics.js';
 import googleAdsRoutes from './routes/googleAds.js';
+import clientPortalRoutes from './routes/clientPortal.js';
 import syncService from './sync/syncService.js';
 
 // Load environment variables
@@ -106,6 +107,7 @@ app.use('/api/personal-vault', personalVaultRoutes);
 app.use('/api/content-entries', contentEntryRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/google-ads', googleAdsRoutes);
+app.use('/api/client-portal', clientPortalRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
@@ -140,7 +142,7 @@ const server = app.listen(PORT, () => {
     ==========================================
     Server is running in ${process.env.NODE_ENV} mode
     Port: ${PORT}
-    API URL: http://localhost:${PORT}
+    API URL: ${process.env.NODE_ENV === 'production' ? 'https://crm.aradiscoveries.com' : `http://localhost:${PORT}`}
     ==========================================
   `);
 });

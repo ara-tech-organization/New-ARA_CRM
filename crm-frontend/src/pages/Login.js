@@ -39,6 +39,10 @@ const validationSchema = Yup.object({
     .required('Password is required'),
 });
 
+const COPPER = '#C08552';
+const BROWN = '#3E2723';
+const CREAM = '#FFF8F0';
+
 const Login = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -83,7 +87,7 @@ const Login = () => {
         minHeight: '100vh',
         display: 'flex',
         position: 'relative',
-        bgcolor: mode === 'light' ? 'grey.50' : 'grey.900',
+        bgcolor: mode === 'light' ? CREAM : 'grey.900',
       }}
     >
       {/* Theme Toggle Button */}
@@ -112,7 +116,7 @@ const Login = () => {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          background: BROWN,
           color: 'white',
           p: 6,
           position: 'relative',
@@ -156,7 +160,7 @@ const Login = () => {
             >
               {/* Dashboard/Screen */}
               <rect x="50" y="40" width="300" height="180" rx="8" fill="white" fillOpacity="0.95" />
-              <rect x="50" y="40" width="300" height="40" rx="8" fill="#667eea" />
+              <rect x="50" y="40" width="300" height="40" rx="8" fill={COPPER} />
 
               {/* Header dots */}
               <circle cx="70" cy="60" r="4" fill="white" fillOpacity="0.8" />
@@ -164,31 +168,31 @@ const Login = () => {
               <circle cx="100" cy="60" r="4" fill="white" fillOpacity="0.8" />
 
               {/* Chart/Analytics */}
-              <rect x="70" y="100" width="120" height="100" rx="4" fill="#f0f4ff" />
-              <path d="M 80 180 L 100 160 L 120 170 L 140 145 L 160 150 L 180 130" stroke="#667eea" strokeWidth="3" fill="none" />
-              <circle cx="80" cy="180" r="4" fill="#667eea" />
-              <circle cx="100" cy="160" r="4" fill="#667eea" />
-              <circle cx="120" cy="170" r="4" fill="#667eea" />
-              <circle cx="140" cy="145" r="4" fill="#667eea" />
-              <circle cx="160" cy="150" r="4" fill="#667eea" />
-              <circle cx="180" cy="130" r="4" fill="#667eea" />
+              <rect x="70" y="100" width="120" height="100" rx="4" fill={CREAM} />
+              <path d="M 80 180 L 100 160 L 120 170 L 140 145 L 160 150 L 180 130" stroke={COPPER} strokeWidth="3" fill="none" />
+              <circle cx="80" cy="180" r="4" fill={COPPER} />
+              <circle cx="100" cy="160" r="4" fill={COPPER} />
+              <circle cx="120" cy="170" r="4" fill={COPPER} />
+              <circle cx="140" cy="145" r="4" fill={COPPER} />
+              <circle cx="160" cy="150" r="4" fill={COPPER} />
+              <circle cx="180" cy="130" r="4" fill={COPPER} />
 
               {/* Cards/Info boxes */}
-              <rect x="210" y="100" width="120" height="45" rx="4" fill="#e8f0fe" />
-              <rect x="210" y="155" width="120" height="45" rx="4" fill="#fce8f3" />
+              <rect x="210" y="100" width="120" height="45" rx="4" fill={CREAM} />
+              <rect x="210" y="155" width="120" height="45" rx="4" fill="#F5E6D3" />
 
               {/* People/Users */}
               <circle cx="100" cy="250" r="20" fill="white" fillOpacity="0.9" />
-              <circle cx="100" cy="245" r="7" fill="#667eea" />
-              <path d="M 85 260 Q 100 255 115 260" fill="#667eea" />
+              <circle cx="100" cy="245" r="7" fill={COPPER} />
+              <path d="M 85 260 Q 100 255 115 260" fill={COPPER} />
 
               <circle cx="150" cy="250" r="20" fill="white" fillOpacity="0.9" />
-              <circle cx="150" cy="245" r="7" fill="#764ba2" />
-              <path d="M 135 260 Q 150 255 165 260" fill="#764ba2" />
+              <circle cx="150" cy="245" r="7" fill={BROWN} />
+              <path d="M 135 260 Q 150 255 165 260" fill={BROWN} />
 
               <circle cx="200" cy="250" r="20" fill="white" fillOpacity="0.9" />
-              <circle cx="200" cy="245" r="7" fill="#667eea" />
-              <path d="M 185 260 Q 200 255 215 260" fill="#667eea" />
+              <circle cx="200" cy="245" r="7" fill={COPPER} />
+              <path d="M 185 260 Q 200 255 215 260" fill={COPPER} />
 
               {/* Connection lines */}
               <path d="M 120 250 L 130 250" stroke="white" strokeWidth="2" strokeDasharray="4 2" />
@@ -202,10 +206,10 @@ const Login = () => {
 
           {/* Branding Text */}
           <Typography variant="h3" fontWeight={800} gutterBottom>
-            CRM Pro
+            ARA CRM
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.95, fontWeight: 400 }}>
-            Streamline Your Customer Relationships
+            ARA Discoveries Pvt. Ltd.
           </Typography>
 
           {/* Features */}
@@ -246,7 +250,7 @@ const Login = () => {
           justifyContent: 'center',
           alignItems: 'center',
           p: { xs: 3, sm: 4, md: 6 },
-          bgcolor: mode === 'light' ? 'white' : 'grey.900',
+          bgcolor: mode === 'light' ? CREAM : 'grey.900',
         }}
       >
         <Box sx={{ width: '100%', maxWidth: '480px' }}>
@@ -257,12 +261,12 @@ const Login = () => {
                 width: 72,
                 height: 72,
                 borderRadius: 2.5,
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: BROWN,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'white',
-                boxShadow: '0 8px 24px rgba(102, 126, 234, 0.3)',
+                boxShadow: `0 8px 24px ${COPPER}4D`,
               }}
             >
               <BusinessCenter sx={{ fontSize: 36 }} />
@@ -333,7 +337,7 @@ const Login = () => {
                       },
                       '&.Mui-focused': {
                         backgroundColor: mode === 'light' ? 'white' : 'grey.800',
-                        boxShadow: `0 0 0 3px ${alpha('#667eea', 0.1)}`,
+                        boxShadow: `0 0 0 3px ${alpha(COPPER, 0.12)}`,
                       },
                     },
                     '& .MuiOutlinedInput-input': {
@@ -379,7 +383,7 @@ const Login = () => {
                           disabled={isLoading}
                           sx={{
                             '&:hover': {
-                              backgroundColor: alpha('#667eea', 0.1),
+                              backgroundColor: alpha(COPPER, 0.12),
                             },
                           }}
                         >
@@ -398,7 +402,7 @@ const Login = () => {
                       },
                       '&.Mui-focused': {
                         backgroundColor: mode === 'light' ? 'white' : 'grey.800',
-                        boxShadow: `0 0 0 3px ${alpha('#667eea', 0.1)}`,
+                        boxShadow: `0 0 0 3px ${alpha(COPPER, 0.12)}`,
                       },
                     },
                     '& .MuiOutlinedInput-input': {
@@ -418,23 +422,23 @@ const Login = () => {
                 sx={{
                   py: 1.75,
                   mt: 2,
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  bgcolor: BROWN,
                   fontWeight: 700,
                   fontSize: '1.05rem',
                   textTransform: 'none',
                   borderRadius: 2,
-                  boxShadow: '0 8px 24px rgba(102, 126, 234, 0.35)',
+                  boxShadow: `0 8px 24px ${COPPER}59`,
                   transition: 'all 0.3s ease',
                   '&:hover': {
-                    background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
-                    boxShadow: '0 12px 32px rgba(102, 126, 234, 0.45)',
+                    bgcolor: COPPER,
+                    boxShadow: `0 12px 32px ${COPPER}73`,
                     transform: 'translateY(-2px)',
                   },
                   '&:active': {
                     transform: 'translateY(0)',
                   },
                   '&:disabled': {
-                    background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+                    bgcolor: '#9ca3af',
                     boxShadow: 'none',
                   },
                 }}
@@ -472,7 +476,7 @@ const Login = () => {
                 component="span"
                 variant="body2"
                 sx={{
-                  color: '#667eea',
+                  color: COPPER,
                   fontWeight: 600,
                   cursor: 'pointer',
                   '&:hover': {

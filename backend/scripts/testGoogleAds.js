@@ -13,7 +13,7 @@ import Payment from "../models/Payment.js";
 const connectDB = async () => {
   try {
     await mongoose.connect(
-      process.env.MONGODB_URI || "mongodb://localhost:27017/ara-crm",
+      process.env.MONGODB_URI,
     );
     console.log("MongoDB connected for testing");
   } catch (error) {

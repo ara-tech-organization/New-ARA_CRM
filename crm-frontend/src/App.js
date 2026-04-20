@@ -23,6 +23,10 @@ import PersonalVault from './pages/PersonalVault';
 import ContentManagement from './pages/ContentManagement';
 import Leads from './pages/Leads';
 import AdsDashboard from './pages/AdsDashboard';
+import ClientAdDetails from './pages/ClientAdDetails';
+import ClientPortalAccess from './pages/ClientPortalAccess';
+import ClientLogin from './pages/ClientLogin';
+import ClientPortalDashboard from './pages/ClientPortalDashboard';
 import { DataCacheProvider } from './contexts/DataCacheContext';
 
 function App() {
@@ -36,6 +40,8 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/client-login" element={<ClientLogin />} />
+        <Route path="/client-portal" element={<ClientPortalDashboard />} />
         <Route
           path="/"
           element={
@@ -49,6 +55,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="ads-dashboard" element={<AdsDashboard />} />
+          <Route path="client-ads/:clientId" element={<ClientAdDetails />} />
           <Route path="dashboard-v2" element={<DashboardEnhanced />} />
           <Route path="dashboard-old" element={<DashboardPro />} />
           <Route path="daily-entry" element={<DailyEntry />} />
@@ -67,6 +74,7 @@ function App() {
           <Route path="tasks" element={<Dashboard />} />
           <Route path="calendar" element={<Dashboard />} />
           <Route path="team" element={<Clients />} />
+          <Route path="client-portal-access" element={<ClientPortalAccess />} />
           <Route path="access-management" element={<AccessManagement />} />
           <Route path="personal-vault" element={<PersonalVault />} />
           <Route path="content-management" element={<ContentManagement />} />

@@ -7,7 +7,8 @@ import {
   updateDetails,
   updatePassword,
 } from '../controllers/authController.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { clientLogin, getClientMe } from '../controllers/clientAuthController.js';
+import { protect, protectClient, authorize } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
 import { registerValidation, loginValidation } from '../utils/validators.js';
 
@@ -15,6 +16,10 @@ const router = express.Router();
 
 // Public routes
 router.post('/login', loginValidation, validate, login);
+router.post('/client-login', clientLogin);
+
+// Client portal routes
+router.get('/client-me', protectClient, getClientMe);
 
 // Protected routes
 router.post('/register', protect, authorize('superadmin', 'admin'), registerValidation, validate, register);

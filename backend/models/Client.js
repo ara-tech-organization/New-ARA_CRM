@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const clientSchema = new mongoose.Schema(
   {
@@ -41,7 +42,17 @@ const clientSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    accountId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     customerID: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    googleCustomerId: {
       type: String,
       trim: true,
       default: '',
@@ -108,11 +119,41 @@ const clientSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Client Portal fields
+    portalEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: '',
+    },
+    portalPassword: {
+      type: String,
+      default: '',
+      select: false,
+    },
+    portalEnabled: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Hash portal password before save
+clientSchema.pre('save', async function (next) {
+  if (!this.isModified('portalPassword') || !this.portalPassword) return next();
+  const salt = await bcrypt.genSalt(10);
+  this.portalPassword = await bcrypt.hash(this.portalPassword, salt);
+  next();
+});
+
+// Compare portal password
+clientSchema.methods.matchPortalPassword = async function (enteredPassword) {
+  if (!this.portalPassword) return false;
+  return await bcrypt.compare(enteredPassword, this.portalPassword);
+};
 
 // Index for better query performance
 clientSchema.index({ clientName: 1 });
@@ -121,6 +162,7 @@ clientSchema.index({ accountID: 1 });
 clientSchema.index({ createdAt: -1 });
 // Text index for fast text search
 clientSchema.index({ clientName: 'text', place: 'text', organisationType: 'text', accountID: 'text' });
+clientSchema.index({ portalEmail: 1 }, { sparse: true });
 
 const Client = mongoose.model('Client', clientSchema);
 
