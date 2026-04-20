@@ -201,7 +201,10 @@ const Dashboard = () => {
       .finally(() => setAdsLoading(false));
   }, [cachedClients, selectedDate]);
 
-  const loading = leadsLoading || clientsLoading || dateLeadsLoading || adsLoading;
+  // Only block the page on essentials (clients + initial leads).
+  // Date-specific leads and Google Ads data load progressively in the background.
+  const initialLoading = clientsLoading && cachedClients.length === 0;
+  const loading = dateLeadsLoading || adsLoading; // used for inline spinners only
 
   const dateByClient = useMemo(() => {
     const map = {};
@@ -260,7 +263,7 @@ const Dashboard = () => {
     }).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
   }, [clients, dateByClient]);
 
-  if (loading) {
+  if (initialLoading) {
     return <PageLoader message="Loading dashboard..." />;
   }
 
