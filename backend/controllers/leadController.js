@@ -27,15 +27,19 @@ export const getLeads = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
   const skip = (page - 1) * limit;
 
-  const leads = await Lead.find()
+  const filter = {};
+  if (req.query.date) filter.date = req.query.date;
+
+  const leads = await Lead.find(filter)
     .populate('assignedTo', 'name email userID')
     .populate('client', 'name email company')
     .populate('createdBy', 'name email userID')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(limit);
+    .limit(limit)
+    .lean();
 
-  const total = await Lead.countDocuments();
+  const total = await Lead.countDocuments(filter);
 
   res.status(200).json({
     success: true,

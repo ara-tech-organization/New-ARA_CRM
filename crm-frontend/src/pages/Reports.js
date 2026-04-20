@@ -246,7 +246,10 @@ const MetricBarChart = ({ data, metricKey, title }) => {
 };
 
 const Reports = () => {
-  const { leads: cachedLeads, clients: cachedClients, leadsLoading: loading, refreshAll } = useDataCache();
+  const { leads: cachedLeads, clients: cachedClients, leadsLoading: loading, fetchLeads, refreshAll } = useDataCache();
+
+  // Trigger the lazy all-leads fetch when this page mounts
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
   // Transform cached data to match expected formats
   const clients = useMemo(() =>

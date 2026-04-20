@@ -58,8 +58,9 @@ router.get('/clients', async (req, res) => {
       };
     }
 
-    // Sync all clients before fetching analytics
-    await syncService.syncAllClients();
+    // Data freshness is maintained by the background sync scheduler
+    // (see backend/sync/scheduler.js) — the request no longer blocks on
+    // Google Ads API calls.
 
   // Get all clients with Google Ads enabled
   const clients = await Client.find({ google_ads_enabled: true })
@@ -188,8 +189,14 @@ router.get('/client/:clientId', async (req, res) => {
       return res.status(400).json({ error: 'Client does not have Google Ads enabled' });
     }
 
-    // Sync client data before fetching analytics
-    await syncService.manualSync(clientId);
+    // Data freshness is maintained by the background sync scheduler.
+    // Exception: if this client has never been synced (no metrics rows yet)
+    // we do a one-time blocking sync so freshly-linked clients aren't stuck
+    // showing empty data until the next scheduled tick.
+    const hasAnyMetrics = await Metric.exists({ client_id: client._id });
+    if (!hasAnyMetrics) {
+      await syncService.manualSync(clientId);
+    }
 
   // Build date filter - default to today if no dates provided
   let dateFilter = {};

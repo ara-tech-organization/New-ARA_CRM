@@ -26,7 +26,7 @@ import analyticsRoutes from "./routes/analytics.js";
 import paymentRoutes from "./routes/payments.js";
 import billingRoutes from "./routes/billing.js";
 import clientPortalRoutes from "./routes/clientPortal.js";
-import syncService from "./sync/syncService.js";
+import { startSyncScheduler } from "./sync/scheduler.js";
 
 // Load environment variables
 dotenv.config();
@@ -34,8 +34,8 @@ dotenv.config();
 // Connect to database
 connectDB();
 
-// Initialize sync service (starts cron job)
-syncService;
+// Kick off the background Google Ads sync scheduler
+startSyncScheduler();
 
 const app = express();
 
