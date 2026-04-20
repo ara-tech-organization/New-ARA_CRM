@@ -27,33 +27,25 @@ const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
  * @access  Private
  */
 export const getClients = asyncHandler(async (req, res) => {
-  try {
-    // Forward auth header to main API
-    const headers = {};
-    if (req.headers.authorization) headers.Authorization = req.headers.authorization;
-    if (req.headers.cookie) headers.cookie = req.headers.cookie;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 100;
+  const skip = (page - 1) * limit;
 
-    const qs = new URLSearchParams(req.query).toString();
-    const url = `${MAIN_API_URL}/api/clients${qs ? `?${qs}` : ''}`;
+  const clients = await Client.find()
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
-    const response = await fetchWithTimeout(url, { headers }, 20000);
+  const total = await Client.countDocuments();
 
-    if (!response.ok) {
-      console.error(`Client proxy: main API returned ${response.status}`);
-      return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
-    }
-    const clients = await response.json();
-    const data = Array.isArray(clients) ? clients : (clients.data || []);
-    return res.status(200).json({
-      success: true,
-      count: data.length,
-      total: data.length,
-      data,
-    });
-  } catch (error) {
-    console.error('Client proxy error:', error.message);
-    return res.status(200).json({ success: true, count: 0, total: 0, data: [] });
-  }
+  res.status(200).json({
+    success: true,
+    count: clients.length,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    data: clients,
+  });
 });
 
 /**
@@ -154,24 +146,26 @@ export const updateClient = asyncHandler(async (req, res) => {
     });
   }
 
+  // Never allow the generic client-update endpoint to write billing fields.
+  // Billing state is ledger-managed and must go through /api/payments,
+  // /api/billing/:id/reset, or /api/billing/:id/reconcile.
+  const { billing, ...safeBody } = req.body || {};
+
   // If portalPassword is being set, use save() so the pre-save hash runs
-  const hasPortalPassword = req.body.portalPassword && req.body.portalPassword.trim();
+  const hasPortalPassword = safeBody.portalPassword && safeBody.portalPassword.trim();
 
   if (hasPortalPassword) {
-    // Apply all fields from body to the document
-    Object.keys(req.body).forEach(key => {
-      client[key] = req.body[key];
+    Object.keys(safeBody).forEach(key => {
+      client[key] = safeBody[key];
     });
     await client.save();
-    // Remove portalPassword from response
     const result = client.toObject();
     delete result.portalPassword;
     return res.status(200).json({ success: true, data: result });
   }
 
-  // No password change — use findByIdAndUpdate for efficiency
-  // Remove empty portalPassword to avoid overwriting hash with empty string
-  const updateData = { ...req.body };
+  // No password change — strip empty portalPassword to avoid overwriting hash
+  const updateData = { ...safeBody };
   delete updateData.portalPassword;
 
   const updated = await Client.findByIdAndUpdate(
