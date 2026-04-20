@@ -33,7 +33,6 @@ const META_BLUE = '#1877f2';
 // Value: { data, ts } — ts = epoch ms. TTL 5 min.
 const analyticsCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 8000;
 
 const fmtNum = (n) => (n ?? 0).toLocaleString('en-IN');
 const fmtINR = (n) => `₹${Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -126,7 +125,6 @@ const ClientAdDetails = () => {
     try {
       const res = await api.get(`/analytics/client/${clientId}`, {
         params: { start_date: dateFrom, end_date: dateTo },
-        timeout: REQUEST_TIMEOUT_MS,
       });
       const payload = res.data || null;
       setData(payload);
@@ -152,8 +150,6 @@ const ClientAdDetails = () => {
       if (notLinked) {
         console.info(`Client ${clientId} is not linked to Google Ads:`, serverMsg);
         setError('This client is not linked to a Google Ads account yet');
-      } else if (err.code === 'ECONNABORTED' || lower.includes('timeout')) {
-        setError('Request took too long. Please try again.');
       } else {
         console.error('Failed to fetch Google Ads analytics:', err);
         setError(serverMsg || 'Failed to fetch Google Ads data');
