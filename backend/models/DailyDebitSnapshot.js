@@ -7,6 +7,12 @@ const dailyDebitSnapshotSchema = new mongoose.Schema(
       ref: 'Client',
       required: true
     },
+    platform: {
+      type: String,
+      enum: ['google', 'meta'],
+      required: true,
+      default: 'google'
+    },
     campaign_id: {
       type: String,
       required: true
@@ -32,7 +38,7 @@ const dailyDebitSnapshotSchema = new mongoose.Schema(
 );
 
 dailyDebitSnapshotSchema.index(
-  { client_id: 1, campaign_id: 1, date: 1 },
+  { client_id: 1, platform: 1, campaign_id: 1, date: 1 },
   { unique: true }
 );
 

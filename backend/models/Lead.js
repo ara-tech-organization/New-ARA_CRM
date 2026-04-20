@@ -50,8 +50,29 @@ const leadSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
     },
+
+    // Meta (Facebook / Instagram) lead fields
+    meta_leadgen_id: { type: String, trim: true, unique: true, sparse: true },
+    meta_form_id: { type: String, trim: true, default: '' },
+    meta_form_name: { type: String, trim: true, default: '' },
+    meta_campaign_id: { type: String, trim: true, default: '' },
+    meta_campaign_name: { type: String, trim: true, default: '' },
+    meta_adset_id: { type: String, trim: true, default: '' },
+    meta_adset_name: { type: String, trim: true, default: '' },
+    meta_ad_id: { type: String, trim: true, default: '' },
+    meta_ad_name: { type: String, trim: true, default: '' },
+    platform: {
+      type: String,
+      enum: ['facebook', 'instagram', 'messenger', 'whatsapp', 'unknown', ''],
+      default: '',
+    },
+    utm_source: { type: String, trim: true, default: '' },
+    utm_medium: { type: String, trim: true, default: '' },
+    utm_campaign: { type: String, trim: true, default: '' },
+    utm_content: { type: String, trim: true, default: '' },
+    utm_term: { type: String, trim: true, default: '' },
+    raw_field_data: { type: mongoose.Schema.Types.Mixed },
   },
   {
     timestamps: true,
@@ -63,6 +84,10 @@ leadSchema.index({ status: 1 });
 leadSchema.index({ source: 1 });
 leadSchema.index({ createdAt: -1 });
 leadSchema.index({ assignedTo: 1 });
+leadSchema.index({ client: 1, createdAt: -1 });
+leadSchema.index({ meta_form_id: 1, createdAt: -1 });
+leadSchema.index({ meta_campaign_id: 1 });
+leadSchema.index({ meta_ad_id: 1 });
 
 const Lead = mongoose.model('Lead', leadSchema);
 

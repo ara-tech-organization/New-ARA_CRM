@@ -132,6 +132,78 @@ const clientSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // Meta (Facebook / Instagram) Marketing API fields
+    meta_enabled: {
+      type: Boolean,
+      default: false,
+    },
+    meta_business_id: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    meta_ad_account_id: {
+      type: String,
+      trim: true,
+      default: '',
+      unique: true,
+      sparse: true,
+      validate: {
+        validator: function (v) {
+          return !v || /^act_\d+$/.test(v);
+        },
+        message: 'Meta Ad Account ID must start with "act_" followed by digits',
+      },
+    },
+    meta_ad_account_name: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    meta_ad_account_currency: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    meta_ad_account_timezone: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    meta_pages: {
+      type: [
+        {
+          page_id: { type: String, required: true },
+          page_name: { type: String, default: '' },
+          encrypted_access_token: { type: String, default: '' },
+          token_issued_at: { type: Date },
+          token_expires_at: { type: Date },
+          subscribed: { type: Boolean, default: false },
+        },
+      ],
+      default: [],
+    },
+    meta_instagram_account_ids: {
+      type: [String],
+      default: [],
+    },
+    meta_onboarded_at: {
+      type: Date,
+    },
+    meta_last_sync_at: {
+      type: Date,
+    },
+    meta_last_sync_status: {
+      type: String,
+      enum: ['success', 'partial', 'failed', ''],
+      default: '',
+    },
+    meta_last_sync_error: {
+      type: String,
+      default: '',
+    },
+
     // Client Portal fields
     portalEmail: {
       type: String,
@@ -175,6 +247,9 @@ clientSchema.index({ accountID: 1 });
 clientSchema.index({ createdAt: -1 });
 clientSchema.index({ google_ads_customer_id: 1 });
 clientSchema.index({ google_ads_enabled: 1 });
+clientSchema.index({ meta_ad_account_id: 1 });
+clientSchema.index({ meta_enabled: 1 });
+clientSchema.index({ 'meta_pages.page_id': 1 });
 clientSchema.index({ 'billing.available_balance': 1 });
 // Text index for fast text search
 clientSchema.index({ clientName: 'text', place: 'text', organisationType: 'text', accountID: 'text' });

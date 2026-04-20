@@ -1,6 +1,6 @@
-import DailyEntry from '../models/DailyEntry.js';
-import { asyncHandler } from '../middleware/errorHandler.js';
-import mongoose from 'mongoose';
+import DailyEntry from "../models/DailyEntry.js";
+import { asyncHandler } from "../middleware/errorHandler.js";
+import mongoose from "mongoose";
 
 // ============================================
 // In-Memory Cache for External API Data
@@ -14,7 +14,9 @@ const cache = {
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
 
 const isCacheValid = (cacheKey) => {
-  return cache[cacheKey].data && (Date.now() - cache[cacheKey].timestamp) < CACHE_TTL;
+  return (
+    cache[cacheKey].data && Date.now() - cache[cacheKey].timestamp < CACHE_TTL
+  );
 };
 
 const setCache = (cacheKey, data) => {
@@ -28,7 +30,7 @@ export const clearCache = (cacheKey = null) => {
   if (cacheKey) {
     cache[cacheKey] = { data: null, timestamp: 0 };
   } else {
-    Object.keys(cache).forEach(key => {
+    Object.keys(cache).forEach((key) => {
       cache[key] = { data: null, timestamp: 0 };
     });
   }
@@ -53,30 +55,36 @@ const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
 };
 
 // Main API base URL for fetching synced data
-const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api';
+const MAIN_API_URL =
+  process.env.MAIN_API_URL ||
+  "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api";
 
 // Helper function to get client name from main API
 const getClientNameFromMainApi = async (clientId) => {
   try {
     let clients;
-    if (isCacheValid('clients')) {
-      clients = getCache('clients');
+    if (isCacheValid("clients")) {
+      clients = getCache("clients");
     } else {
-      const response = await fetchWithTimeout(`${MAIN_API_URL}/api/clients`, {}, 10000);
+      const response = await fetchWithTimeout(
+        `${MAIN_API_URL}/api/clients`,
+        {},
+        10000,
+      );
       if (response.ok) {
         clients = await response.json();
-        setCache('clients', clients);
+        setCache("clients", clients);
       }
     }
 
     if (clients) {
-      const client = clients.find(c => c._id === clientId);
-      return client?.clientName || '';
+      const client = clients.find((c) => c._id === clientId);
+      return client?.clientName || "";
     }
   } catch (error) {
-    console.error('Error fetching client name:', error.message);
+    console.error("Error fetching client name:", error.message);
   }
-  return '';
+  return "";
 };
 
 /**
@@ -100,7 +108,7 @@ export const getDailyEntries = asyncHandler(async (req, res) => {
   }
 
   const entries = await DailyEntry.find(query)
-    .populate('recordedBy', 'name email userID')
+    .populate("recordedBy", "name email userID")
     .limit(limit * 1)
     .skip((page - 1) * limit)
     .sort({ date: -1 })
@@ -125,13 +133,13 @@ export const getDailyEntries = asyncHandler(async (req, res) => {
  */
 export const getDailyEntry = asyncHandler(async (req, res) => {
   const entry = await DailyEntry.findById(req.params.id)
-    .populate('recordedBy', 'name email userID')
+    .populate("recordedBy", "name email userID")
     .lean();
 
   if (!entry) {
     return res.status(404).json({
       success: false,
-      message: 'Daily entry not found',
+      message: "Daily entry not found",
     });
   }
 
@@ -155,7 +163,7 @@ export const getDailyEntryByDate = asyncHandler(async (req, res) => {
   }
 
   const entry = await DailyEntry.findOne(query)
-    .populate('recordedBy', 'name email userID')
+    .populate("recordedBy", "name email userID")
     .lean();
 
   res.status(200).json({
@@ -193,29 +201,30 @@ export const createDailyEntry = asyncHandler(async (req, res) => {
     const entry = await DailyEntry.create(entryData);
 
     // Populate for response
-    await entry.populate('recordedBy', 'name email userID');
+    await entry.populate("recordedBy", "name email userID");
 
     res.status(201).json({
       success: true,
       data: entry,
     });
   } catch (error) {
-    console.error('Create daily entry error:', error.message, error.code);
+    console.error("Create daily entry error:", error.message, error.code);
 
     // Handle duplicate key error (same client + date combination)
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: 'An entry already exists for this client on the selected date. Please edit the existing entry or choose a different date.',
+        message:
+          "An entry already exists for this client on the selected date. Please edit the existing entry or choose a different date.",
       });
     }
 
     // Handle validation errors
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(e => e.message);
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({
         success: false,
-        message: messages.join(', '),
+        message: messages.join(", "),
       });
     }
 
@@ -234,7 +243,7 @@ export const updateDailyEntry = asyncHandler(async (req, res) => {
   if (!entry) {
     return res.status(404).json({
       success: false,
-      message: 'Daily entry not found',
+      message: "Daily entry not found",
     });
   }
 
@@ -247,11 +256,19 @@ export const updateDailyEntry = asyncHandler(async (req, res) => {
 
   // Update fields
   const allowedFields = [
-    'date', 'clientId', 'clientName', 'metaForm', 'metaWhatsapp', 'metaFund',
-    'googleCall', 'googleWebsite', 'googleFund', 'notes'
+    "date",
+    "clientId",
+    "clientName",
+    "metaForm",
+    "metaWhatsapp",
+    "metaFund",
+    "googleCall",
+    "googleWebsite",
+    "googleFund",
+    "notes",
   ];
 
-  allowedFields.forEach(field => {
+  allowedFields.forEach((field) => {
     if (updateData[field] !== undefined) {
       entry[field] = updateData[field];
     }
@@ -266,7 +283,7 @@ export const updateDailyEntry = asyncHandler(async (req, res) => {
   await entry.save();
 
   // Populate for response
-  await entry.populate('recordedBy', 'name email userID');
+  await entry.populate("recordedBy", "name email userID");
 
   res.status(200).json({
     success: true,
@@ -285,7 +302,7 @@ export const deleteDailyEntry = asyncHandler(async (req, res) => {
   if (!entry) {
     return res.status(404).json({
       success: false,
-      message: 'Daily entry not found',
+      message: "Daily entry not found",
     });
   }
 
@@ -293,7 +310,7 @@ export const deleteDailyEntry = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Daily entry deleted successfully',
+    message: "Daily entry deleted successfully",
   });
 });
 
@@ -317,23 +334,23 @@ export const getDailyEntryStats = asyncHandler(async (req, res) => {
     {
       $group: {
         _id: null,
-        totalMetaForm: { $sum: '$metaForm' },
-        totalMetaWhatsapp: { $sum: '$metaWhatsapp' },
-        totalMetaFund: { $sum: '$metaFund' },
-        totalGoogleCall: { $sum: '$googleCall' },
-        totalGoogleWebsite: { $sum: '$googleWebsite' },
-        totalGoogleFund: { $sum: '$googleFund' },
+        totalMetaForm: { $sum: "$metaForm" },
+        totalMetaWhatsapp: { $sum: "$metaWhatsapp" },
+        totalMetaFund: { $sum: "$metaFund" },
+        totalGoogleCall: { $sum: "$googleCall" },
+        totalGoogleWebsite: { $sum: "$googleWebsite" },
+        totalGoogleFund: { $sum: "$googleFund" },
         entriesCount: { $sum: 1 },
       },
     },
     {
       $project: {
         _id: 0,
-        totalMetaLeads: { $add: ['$totalMetaForm', '$totalMetaWhatsapp'] },
-        totalGoogleLeads: { $add: ['$totalGoogleCall', '$totalGoogleWebsite'] },
+        totalMetaLeads: { $add: ["$totalMetaForm", "$totalMetaWhatsapp"] },
+        totalGoogleLeads: { $add: ["$totalGoogleCall", "$totalGoogleWebsite"] },
         totalMetaFund: 1,
         totalGoogleFund: 1,
-        totalSpend: { $add: ['$totalMetaFund', '$totalGoogleFund'] },
+        totalSpend: { $add: ["$totalMetaFund", "$totalGoogleFund"] },
         entriesCount: 1,
       },
     },
@@ -374,11 +391,11 @@ export const getTodayStats = asyncHandler(async (req, res) => {
           {
             $group: {
               _id: null,
-              todayLeads: { $sum: '$totalLeads' },
-              todaySpend: { $sum: '$totalSpend' },
+              todayLeads: { $sum: "$totalLeads" },
+              todaySpend: { $sum: "$totalSpend" },
               todayEntries: { $sum: 1 },
-              todayClients: { $addToSet: '$clientId' }
-            }
+              todayClients: { $addToSet: "$clientId" },
+            },
           },
           {
             $project: {
@@ -386,9 +403,9 @@ export const getTodayStats = asyncHandler(async (req, res) => {
               todayLeads: 1,
               todaySpend: 1,
               todayEntries: 1,
-              todayClients: { $size: '$todayClients' }
-            }
-          }
+              todayClients: { $size: "$todayClients" },
+            },
+          },
         ],
         // All-time stats
         allTimeStats: [
@@ -396,23 +413,30 @@ export const getTodayStats = asyncHandler(async (req, res) => {
             $group: {
               _id: null,
               totalEntries: { $sum: 1 },
-              uniqueClients: { $addToSet: '$clientId' }
-            }
+              uniqueClients: { $addToSet: "$clientId" },
+            },
           },
           {
             $project: {
               _id: 0,
               totalEntries: 1,
-              activeClients: { $size: '$uniqueClients' }
-            }
-          }
-        ]
-      }
-    }
+              activeClients: { $size: "$uniqueClients" },
+            },
+          },
+        ],
+      },
+    },
   ]);
 
-  const todayData = stats[0]?.todayStats[0] || { todayLeads: 0, todaySpend: 0, todayEntries: 0 };
-  const allTimeData = stats[0]?.allTimeStats[0] || { totalEntries: 0, activeClients: 0 };
+  const todayData = stats[0]?.todayStats[0] || {
+    todayLeads: 0,
+    todaySpend: 0,
+    todayEntries: 0,
+  };
+  const allTimeData = stats[0]?.allTimeStats[0] || {
+    totalEntries: 0,
+    activeClients: 0,
+  };
 
   res.status(200).json({
     success: true,
@@ -437,32 +461,37 @@ export const getMetaLeadData = asyncHandler(async (req, res) => {
     let leads;
 
     // Check cache first
-    if (isCacheValid('leads')) {
-      leads = getCache('leads');
+    if (isCacheValid("leads")) {
+      leads = getCache("leads");
     } else {
       // Fetch leads from the main API with timeout
-      const response = await fetchWithTimeout(`${MAIN_API_URL}/api/leads`, {}, 15000);
+      const response = await fetchWithTimeout(
+        `${MAIN_API_URL}/api/leads`,
+        {},
+        15000,
+      );
 
       if (!response.ok) {
         return res.status(response.status).json({
           success: false,
-          message: 'Failed to fetch leads from main API',
+          message: "Failed to fetch leads from main API",
         });
       }
 
       leads = await response.json();
-      setCache('leads', leads);
+      setCache("leads", leads);
     }
 
     // Find lead document by clientId and date
-    const leadDoc = leads.find(lead =>
-      lead.clientId === clientId && lead.date === date
+    const leadDoc = leads.find(
+      (lead) => lead.clientId === clientId && lead.date === date,
     );
 
     if (!leadDoc) {
       return res.status(404).json({
         success: false,
-        message: 'No Meta lead data found for this client and date. Please run Meta Sync first.',
+        message:
+          "No Meta lead data found for this client and date. Please run Meta Sync first.",
       });
     }
 
@@ -477,7 +506,7 @@ export const getMetaLeadData = asyncHandler(async (req, res) => {
         googleWebsite: leadDoc.googleWebsiteLead || 0,
         googleFund: leadDoc.googleFund || 0,
         googleCPL: leadDoc.googleCpl || 0,
-        clientName: leadDoc.clientName || '',
+        clientName: leadDoc.clientName || "",
         syncedAt: leadDoc.updatedAt || leadDoc.createdAt,
       },
     });
@@ -501,26 +530,30 @@ export const getMetaFundData = asyncHandler(async (req, res) => {
     let funds;
 
     // Check cache first
-    if (isCacheValid('funds')) {
-      funds = getCache('funds');
+    if (isCacheValid("funds")) {
+      funds = getCache("funds");
     } else {
       // Fetch funds from the main API with timeout
-      const response = await fetchWithTimeout(`${MAIN_API_URL}/api/funds`, {}, 15000);
+      const response = await fetchWithTimeout(
+        `${MAIN_API_URL}/api/funds`,
+        {},
+        15000,
+      );
 
       if (!response.ok) {
         return res.status(response.status).json({
           success: false,
-          message: 'Failed to fetch funds from main API',
+          message: "Failed to fetch funds from main API",
         });
       }
 
       funds = await response.json();
-      setCache('funds', funds);
+      setCache("funds", funds);
     }
 
     // Find fund entry by clientId and date
     // clientId in funds is an object with _id field
-    const fundDoc = funds.find(fund => {
+    const fundDoc = funds.find((fund) => {
       const fundClientId = fund.clientId?._id || fund.clientId;
       return fundClientId === clientId && fund.date === date;
     });
@@ -528,7 +561,7 @@ export const getMetaFundData = asyncHandler(async (req, res) => {
     if (!fundDoc) {
       return res.status(404).json({
         success: false,
-        message: 'No fund data found for this client and date.',
+        message: "No fund data found for this client and date.",
       });
     }
 
@@ -539,10 +572,10 @@ export const getMetaFundData = asyncHandler(async (req, res) => {
         googleBalance: fundDoc.googleBalance || 0,
         metaAmount: fundDoc.metaAmount || 0,
         googleAmount: fundDoc.googleAmount || 0,
-        metaPaymentMode: fundDoc.metaPaymentMode || '',
-        googlePaymentMode: fundDoc.googlePaymentMode || '',
-        metaPaymentDetails: fundDoc.metaPaymentDetails || '',
-        googlePaymentDetails: fundDoc.googlePaymentDetails || '',
+        metaPaymentMode: fundDoc.metaPaymentMode || "",
+        googlePaymentMode: fundDoc.googlePaymentMode || "",
+        metaPaymentDetails: fundDoc.metaPaymentDetails || "",
+        googlePaymentDetails: fundDoc.googlePaymentDetails || "",
         fundAdded: fundDoc.fundAdded || false,
         syncedAt: fundDoc.updatedAt || fundDoc.createdAt,
       },
@@ -561,15 +594,21 @@ export const getMetaFundData = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const triggerMetaSync = asyncHandler(async (req, res) => {
-  const META_SYNC_URL = process.env.META_SYNC_API_URL || 'https://crmasdmanager-amh2amgzd3e6dzc8.canadacentral-01.azurewebsites.net';
+  const META_SYNC_URL =
+    process.env.META_SYNC_API_URL ||
+    "https://crmasdmanager20260420165826-b5eefne4ghf2e7b7.canadacentral-01.azurewebsites.net";
 
   try {
-    const response = await fetchWithTimeout(`${META_SYNC_URL}/api/meta-sync/today`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithTimeout(
+      `${META_SYNC_URL}/api/meta-sync/today`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       },
-    }, 60000); // 60 second timeout for sync operations
+      60000,
+    ); // 60 second timeout for sync operations
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -586,7 +625,7 @@ export const triggerMetaSync = asyncHandler(async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Meta sync completed successfully',
+      message: "Meta sync completed successfully",
       data: result,
     });
   } catch (error) {
@@ -607,25 +646,29 @@ export const getMainApiClients = asyncHandler(async (req, res) => {
     let clients;
 
     // Check cache first
-    if (isCacheValid('clients')) {
-      clients = getCache('clients');
+    if (isCacheValid("clients")) {
+      clients = getCache("clients");
     } else {
-      const response = await fetchWithTimeout(`${MAIN_API_URL}/api/clients`, {}, 15000);
+      const response = await fetchWithTimeout(
+        `${MAIN_API_URL}/api/clients`,
+        {},
+        15000,
+      );
 
       if (!response.ok) {
         return res.status(response.status).json({
           success: false,
-          message: 'Failed to fetch clients from main API',
+          message: "Failed to fetch clients from main API",
         });
       }
 
       clients = await response.json();
-      setCache('clients', clients);
+      setCache("clients", clients);
     }
 
     res.status(200).json({
       success: true,
-      data: clients.map(client => ({
+      data: clients.map((client) => ({
         _id: client._id,
         clientName: client.clientName,
         accountID: client.accountID || client.accountId,
@@ -653,24 +696,28 @@ export const getMainApiLeadsByDate = asyncHandler(async (req, res) => {
     let leads;
 
     // Check cache first
-    if (isCacheValid('leads')) {
-      leads = getCache('leads');
+    if (isCacheValid("leads")) {
+      leads = getCache("leads");
     } else {
-      const response = await fetchWithTimeout(`${MAIN_API_URL}/api/leads`, {}, 15000);
+      const response = await fetchWithTimeout(
+        `${MAIN_API_URL}/api/leads`,
+        {},
+        15000,
+      );
 
       if (!response.ok) {
         return res.status(response.status).json({
           success: false,
-          message: 'Failed to fetch leads from main API',
+          message: "Failed to fetch leads from main API",
         });
       }
 
       leads = await response.json();
-      setCache('leads', leads);
+      setCache("leads", leads);
     }
 
     // Filter leads for the specified date
-    const filteredLeads = leads.filter(lead => lead.date === date);
+    const filteredLeads = leads.filter((lead) => lead.date === date);
 
     res.status(200).json({
       success: true,
@@ -696,31 +743,35 @@ export const getMainApiFundsByDate = asyncHandler(async (req, res) => {
     let funds;
 
     // Check cache first
-    if (isCacheValid('funds')) {
-      funds = getCache('funds');
+    if (isCacheValid("funds")) {
+      funds = getCache("funds");
     } else {
-      const response = await fetchWithTimeout(`${MAIN_API_URL}/api/funds`, {}, 15000);
+      const response = await fetchWithTimeout(
+        `${MAIN_API_URL}/api/funds`,
+        {},
+        15000,
+      );
 
       if (!response.ok) {
         return res.status(response.status).json({
           success: false,
-          message: 'Failed to fetch funds from main API',
+          message: "Failed to fetch funds from main API",
         });
       }
 
       funds = await response.json();
-      setCache('funds', funds);
+      setCache("funds", funds);
     }
 
     // Filter funds for the specified date
-    const filteredFunds = funds.filter(fund => fund.date === date);
+    const filteredFunds = funds.filter((fund) => fund.date === date);
 
     res.status(200).json({
       success: true,
-      data: filteredFunds.map(fund => ({
+      data: filteredFunds.map((fund) => ({
         ...fund,
         clientId: fund.clientId?._id || fund.clientId,
-        clientName: fund.clientId?.clientName || '',
+        clientName: fund.clientId?.clientName || "",
       })),
     });
   } catch (error) {

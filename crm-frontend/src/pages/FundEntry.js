@@ -45,7 +45,7 @@ import { saveAs } from 'file-saver';
 import api from '../api/axios';
 import { useDataCache } from '../contexts/DataCacheContext';
 
-const META_SYNC_API_URL = 'https://crmasdmanager-amh2amgzd3e6dzc8.canadacentral-01.azurewebsites.net';
+const META_SYNC_API_URL = 'https://crmasdmanager20260420165826-b5eefne4ghf2e7b7.canadacentral-01.azurewebsites.net';
 
 const paymentModes = ['Net Banking', 'QR Code', 'Card'];
 

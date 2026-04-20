@@ -36,6 +36,9 @@ const billingTransactionSchema = new mongoose.Schema(
         'manual_payment',
         'google_ads_daily_spend',
         'google_ads_refund',
+        'meta_ads_daily_spend',
+        'meta_ads_refund',
+        'meta_ads_adjustment',
         'admin_adjustment',
         'backfill_payment',
         'backfill_spend'
