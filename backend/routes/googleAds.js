@@ -1,5 +1,6 @@
 import express from 'express';
 import syncService from '../sync/syncService.js';
+import { triggerClientSync } from '../sync/scheduler.js';
 import Client from '../models/Client.js';
 import Campaign from '../models/Campaign.js';
 import googleAdsService from '../services/googleAdsService.js';
@@ -137,6 +138,10 @@ router.put('/client/:clientId/associate', async (req, res) => {
     if (!client) {
       return res.status(404).json({ error: 'Client not found' });
     }
+
+    // Kick off a background sync for just this client so their analytics
+    // page has data ready quickly, without blocking this response.
+    triggerClientSync(client._id);
 
     res.json({
       message: 'Google Ads account associated successfully',

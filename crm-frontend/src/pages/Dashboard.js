@@ -175,7 +175,7 @@ const Dashboard = () => {
       return;
     }
     setOtherDateLoading(true);
-    api.get('/leads', { params: { date: selectedDate, limit: 10000 }, timeout: 15000 })
+    api.get('/leads', { params: { date: selectedDate, limit: 10000 } })
       .then(res => {
         const data = res.data?.data || res.data || [];
         setOtherDateLeads(Array.isArray(data) ? data : []);
@@ -196,7 +196,7 @@ const Dashboard = () => {
     const hasLinked = cachedClients.some(c => c.googleAdsEnabled || c.google_ads_enabled);
     if (!hasLinked) return;
     setAdsLoading(true);
-    api.get('/analytics/clients', { params: { start_date: selectedDate, end_date: selectedDate }, timeout: 8000 })
+    api.get('/analytics/clients', { params: { start_date: selectedDate, end_date: selectedDate } })
       .then(res => {
         const list = res.data?.clients || res.data?.data || res.data || [];
         const map = {};
