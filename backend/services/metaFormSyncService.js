@@ -55,7 +55,7 @@ const upsertForm = async ({ clientId, pageId, form }) => {
         last_seen_at: new Date(),
       },
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: "after" }
   );
 };
 

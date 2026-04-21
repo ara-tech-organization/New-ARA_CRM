@@ -309,7 +309,7 @@ export const postAssignForm = async (req, res) => {
   const form = await MetaLeadForm.findOneAndUpdate(
     { form_id: formId },
     { $set: { client_id } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!form) {
     return res.status(404).json({ success: false, message: 'Form not found' });

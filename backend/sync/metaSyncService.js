@@ -106,7 +106,7 @@ const upsertCampaigns = async (clientId, adAccountId, campaigns) => {
         stop_time: toDateOrNull(c.stop_time),
         last_synced_at: new Date(),
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
     count++;
   }
@@ -137,7 +137,7 @@ const upsertAdSets = async (clientId, adAccountId, adsets) => {
         end_time: toDateOrNull(s.end_time),
         last_synced_at: new Date(),
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
     count++;
   }
@@ -164,7 +164,7 @@ const upsertAds = async (clientId, adAccountId, ads) => {
         tracking_specs: a.tracking_specs || null,
         last_synced_at: new Date(),
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
     count++;
   }
@@ -224,7 +224,7 @@ const upsertInsights = async (clientId, adAccountId, rows, level) => {
         currency: r.account_currency || '',
         last_synced_at: new Date(),
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
     count++;
   }

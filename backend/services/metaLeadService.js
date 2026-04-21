@@ -82,7 +82,7 @@ const upsertRaw = async ({
   };
   return MetaLeadRaw.findOneAndUpdate({ leadgen_id: leadgenId }, update, {
     upsert: true,
-    new: true,
+    returnDocument: "after",
   });
 };
 
@@ -132,7 +132,7 @@ const writeLead = async ({ raw, client, formDoc, apiLead }) => {
 
   return Lead.findOneAndUpdate({ meta_leadgen_id: raw.leadgen_id }, update, {
     upsert: true,
-    new: true,
+    returnDocument: "after",
   });
 };
 
