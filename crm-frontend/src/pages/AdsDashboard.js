@@ -5,9 +5,10 @@ import {
   Box, Card, CardContent, Typography, Grid, Chip, Avatar, Button,
   TextField, LinearProgress, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, InputAdornment, CircularProgress, Alert, Paper,
+  Tabs, Tab,
 } from '@mui/material';
 import {
-  Google as GoogleIcon, Search as SearchIcon,
+  Google as GoogleIcon, Facebook as FacebookIcon, Search as SearchIcon,
   TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon,
   AttachMoney as MoneyIcon, ShowChart as ShowChartIcon,
   Warning as WarningIcon, AccountBalanceWallet as WalletIcon,
@@ -22,6 +23,7 @@ import {
 const COPPER = '#C08552';
 const BROWN = '#3E2723';
 const GOOGLE_GREEN = '#34a853';
+const META_BLUE = '#1877f2';
 
 const fmtNum = (n) => (n ?? 0).toLocaleString('en-IN');
 const fmtINR = (n) => `₹${Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -68,10 +70,14 @@ const KpiCard = ({ label, value, color, icon, sublabel }) => (
 
 const AdsDashboard = () => {
   const navigate = useNavigate();
+  const [tab, setTab] = useState(0); // 0 = Google, 1 = Meta
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Meta Ads placeholder — wire up when API is available
+  const metaClients = []; // TODO: fetch from /meta-analytics/clients endpoint when ready
 
   const today = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(today);
@@ -171,14 +177,17 @@ const AdsDashboard = () => {
       .map(([k, v]) => ({ name: k.replace(/_/g, ' '), value: v }));
   }, [filteredClients]);
 
+  const currentColor = tab === 0 ? GOOGLE_GREEN : META_BLUE;
+  const currentIcon = tab === 0 ? <GoogleIcon sx={{ fontSize: 28, color: GOOGLE_GREEN }} /> : <FacebookIcon sx={{ fontSize: 28, color: META_BLUE }} />;
+
   return (
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <GoogleIcon sx={{ fontSize: 28, color: GOOGLE_GREEN }} />
+          {currentIcon}
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>Google Ads Dashboard</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>{tab === 0 ? 'Google Ads Dashboard' : 'Meta Ads Dashboard'}</Typography>
             <Typography variant="body2" color="text.secondary">
               Performance analytics across all linked client accounts
             </Typography>
@@ -189,11 +198,30 @@ const AdsDashboard = () => {
           size="small"
           startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
           onClick={fetchAnalytics}
-          disabled={loading}
+          disabled={loading || tab !== 0}
         >
           {loading ? 'Loading...' : 'Refresh'}
         </Button>
       </Box>
+
+      {/* Platform Tabs */}
+      <Card variant="outlined" sx={{ mb: 2 }}>
+        <Tabs
+          value={tab}
+          onChange={(e, v) => setTab(v)}
+          sx={{
+            px: 2,
+            '& .MuiTabs-indicator': { bgcolor: currentColor, height: 3 },
+            '& .Mui-selected': { color: `${currentColor} !important` },
+          }}
+        >
+          <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+          <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+        </Tabs>
+      </Card>
+
+      {/* GOOGLE ADS TAB */}
+      {tab === 0 && (<>
 
       {/* Date filter */}
       <Card variant="outlined" sx={{ mb: 2 }}>
@@ -364,6 +392,150 @@ const AdsDashboard = () => {
               )}
             </CardContent>
           </Card>
+        </>
+      )}
+
+      </>)}
+
+      {/* META ADS TAB — UI scaffold ready for Meta Marketing API integration */}
+      {tab === 1 && (
+        <>
+          <Alert severity="info" icon={<FacebookIcon sx={{ color: META_BLUE }} />} sx={{ mb: 2 }}>
+            <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.3 }}>Meta Ads API Integration Pending</Typography>
+            <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
+              UI is ready. Connect the Meta Marketing API and map the response to render live data below.
+            </Typography>
+          </Alert>
+
+          {/* Date filter */}
+          <Card variant="outlined" sx={{ mb: 2 }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
+              <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.secondary' }}>Date Range:</Typography>
+              <TextField type="date" size="small" label="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} />
+              <TextField type="date" size="small" label="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} />
+              <Box sx={{ display: 'flex', gap: 0.8 }}>
+                <Button size="small" variant="outlined" onClick={() => { const d = new Date().toISOString().split('T')[0]; setDateFrom(d); setDateTo(d); }}>Today</Button>
+                <Button size="small" variant="outlined" onClick={() => { const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 6); setDateFrom(from.toISOString().split('T')[0]); setDateTo(to.toISOString().split('T')[0]); }}>Last 7 Days</Button>
+                <Button size="small" variant="outlined" onClick={() => { const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 29); setDateFrom(from.toISOString().split('T')[0]); setDateTo(to.toISOString().split('T')[0]); }}>Last 30 Days</Button>
+              </Box>
+              <TextField
+                size="small" placeholder="Search account..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                sx={{ minWidth: 220, ml: 'auto' }}
+              />
+            </CardContent>
+          </Card>
+
+          {metaClients.length === 0 ? (
+            <Card variant="outlined">
+              <CardContent sx={{ textAlign: 'center', py: 6 }}>
+                <FacebookIcon sx={{ fontSize: 48, color: META_BLUE, mb: 1 }} />
+                <Typography sx={{ fontWeight: 600, fontSize: '1rem', mb: 0.5 }}>No Linked Meta Accounts</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  No clients are linked to Meta Ads yet. Integration is pending Meta Marketing API access.
+                </Typography>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card variant="outlined">
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.92rem' }}>All Linked Meta Accounts</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Click a row to view detailed analytics</Typography>
+                  </Box>
+                  <Chip label={`${metaClients.length} account${metaClients.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
+                </Box>
+
+                <TableContainer>
+                  <Table size="small" sx={{ minWidth: 1300 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Account</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Ad Account ID</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Budget</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Spend</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Available</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Reach</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impressions</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Frequency</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPC</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPM</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPL</TableCell>
+                        <TableCell sx={{ bgcolor: `${META_BLUE}10` }}></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {metaClients.map((c) => (
+                        <TableRow
+                          key={c.clientId}
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => navigate(`/client-ads/${c.clientId}`)}
+                        >
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', fontWeight: 700, bgcolor: META_BLUE }}>
+                                {c.metaAccountName?.charAt(0) || c.clientName?.charAt(0)}
+                              </Avatar>
+                              <Box>
+                                <Typography sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{c.metaAccountName || c.clientName}</Typography>
+                                {c.pageName && (
+                                  <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary' }}>{c.pageName}</Typography>
+                                )}
+                              </Box>
+                            </Box>
+                          </TableCell>
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'text.secondary' }}>{c.metaAdAccountId}</TableCell>
+                          <TableCell align="right">{fmtINR(c.totalBudget)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: META_BLUE }}>{fmtINR(c.spend)}</TableCell>
+                          <TableCell align="right">
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
+                              {c.availableBalance < 100 && <WarningIcon sx={{ fontSize: 14, color: '#ef4444' }} />}
+                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: c.availableBalance < 100 ? '#ef4444' : '#10b981' }}>
+                                {fmtINR(c.availableBalance)}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                          <TableCell align="right">{fmtNum(c.reach)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.impressions)}</TableCell>
+                          <TableCell align="right">{c.frequency != null ? Number(c.frequency).toFixed(2) : '—'}</TableCell>
+                          <TableCell align="right">{fmtNum(c.clicks)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, color: BROWN }}>{fmtPct(c.ctr)}</TableCell>
+                          <TableCell align="right">{fmtINR2(c.cpc)}</TableCell>
+                          <TableCell align="right">{fmtINR(c.cpm)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.leads)}</TableCell>
+                          <TableCell align="right">
+                            {c.cpl > 0 ? (
+                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: c.cpl > 500 ? '#ef4444' : '#10b981' }}>
+                                {fmtINR(c.cpl)}
+                              </Typography>
+                            ) : '—'}
+                          </TableCell>
+                          <TableCell align="right">
+                            <OpenInNewIcon sx={{ fontSize: 16, color: META_BLUE }} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </Box>

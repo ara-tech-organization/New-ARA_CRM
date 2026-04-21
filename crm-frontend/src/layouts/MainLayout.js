@@ -176,13 +176,13 @@ const MainLayout = () => {
       badge: null,
       permissionId: 'dashboard'
     },
-    {
-      text: 'Daily Entry',
-      icon: <EditNoteIcon />,
-      path: '/daily-entry',
-      badge: null,
-      permissionId: 'daily-entry'
-    },
+    // {
+    //   text: 'Daily Entry',
+    //   icon: <EditNoteIcon />,
+    //   path: '/daily-entry',
+    //   badge: null,
+    //   permissionId: 'daily-entry'
+    // },
     {
       text: 'Leads',
       icon: <InsightsIcon />,
@@ -211,27 +211,27 @@ const MainLayout = () => {
       badge: null,
       permissionId: 'ads-dashboard'
     },
-    {
-      text: 'Client Vault',
-      icon: <ShieldIcon />,
-      path: '/client-vault',
-      badge: null,
-      permissionId: 'client-vault'
-    },
-    {
-      text: 'Content',
-      icon: <ArticleIcon />,
-      path: '/content-management',
-      badge: null,
-      permissionId: 'content-management'
-    },
-    {
-      text: 'Fund Entry',
-      icon: <AccountBalanceIcon />,
-      path: '/fund-entry',
-      badge: null,
-      permissionId: 'fund-entry'
-    },
+    // {
+    //   text: 'Client Vault',
+    //   icon: <ShieldIcon />,
+    //   path: '/client-vault',
+    //   badge: null,
+    //   permissionId: 'client-vault'
+    // },
+    // {
+    //   text: 'Content',
+    //   icon: <ArticleIcon />,
+    //   path: '/content-management',
+    //   badge: null,
+    //   permissionId: 'content-management'
+    // },
+    // {
+    //   text: 'Fund Entry',
+    //   icon: <AccountBalanceIcon />,
+    //   path: '/fund-entry',
+    //   badge: null,
+    //   permissionId: 'fund-entry'
+    // },
     {
       text: 'Reports',
       icon: <ReportsIcon />,
@@ -246,13 +246,13 @@ const MainLayout = () => {
       badge: null,
       permissionId: 'settings'
     },
-    {
-      text: 'Personal Vault',
-      icon: <LockIcon />,
-      path: '/personal-vault',
-      badge: null,
-      permissionId: 'personal-vault'
-    },
+    // {
+    //   text: 'Personal Vault',
+    //   icon: <LockIcon />,
+    //   path: '/personal-vault',
+    //   badge: null,
+    //   permissionId: 'personal-vault'
+    // },
     {
       text: 'Client Portal',
       icon: <ManageAccountsIcon />,

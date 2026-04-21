@@ -5,13 +5,16 @@ import {
   Box, Card, CardContent, Typography, Grid, Chip, Button, Avatar,
   TextField, LinearProgress, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, CircularProgress, Alert, IconButton, Collapse,
+  Tabs, Tab,
 } from '@mui/material';
 import {
-  Google as GoogleIcon, Logout as LogoutIcon, Refresh as RefreshIcon,
+  Google as GoogleIcon, Facebook as FacebookIcon, Logout as LogoutIcon, Refresh as RefreshIcon,
   ShowChart as ShowChartIcon, TrendingUp as TrendingUpIcon,
   AccountBalanceWallet as WalletIcon, AttachMoney as MoneyIcon,
   Campaign as CampaignIcon, Warning as WarningIcon,
   KeyboardArrowDown as ArrowDownIcon, KeyboardArrowUp as ArrowUpIcon,
+  People as PeopleIcon, Visibility as VisibilityIcon,
+  Groups as GroupsIcon, Chat as ChatIcon,
 } from '@mui/icons-material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -22,8 +25,11 @@ const COPPER = '#C08552';
 const BROWN = '#3E2723';
 const CREAM = '#FFF8F0';
 const GOOGLE_GREEN = '#34a853';
+const META_BLUE = '#1877f2';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api';
+const API_URL = process.env.NODE_ENV === 'development'
+  ? '/api'
+  : (process.env.REACT_APP_API_URL || '/api');
 
 const fmtNum = (n) => (n ?? 0).toLocaleString('en-IN');
 const fmtINR = (n) => `₹${Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -56,6 +62,7 @@ const ClientPortalDashboard = () => {
   });
   const token = localStorage.getItem('clientToken');
 
+  const [tab, setTab] = useState(0); // 0 = Google, 1 = Meta
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -63,6 +70,7 @@ const ClientPortalDashboard = () => {
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [expandedCampaigns, setExpandedCampaigns] = useState({});
+  const metaData = null; // TODO: wire up when Meta API is ready
 
   const clientApi = useMemo(() => {
     const instance = axios.create({ baseURL: API_URL, headers: { 'Content-Type': 'application/json' } });
@@ -201,6 +209,24 @@ const ClientPortalDashboard = () => {
 
       {/* Content */}
       <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 } }}>
+        {/* Platform Tabs */}
+        <Card variant="outlined" sx={{ mb: 2 }}>
+          <Tabs
+            value={tab}
+            onChange={(e, v) => setTab(v)}
+            sx={{
+              px: 2,
+              '& .MuiTabs-indicator': { bgcolor: tab === 0 ? GOOGLE_GREEN : META_BLUE, height: 3 },
+              '& .Mui-selected': { color: `${tab === 0 ? GOOGLE_GREEN : META_BLUE} !important` },
+            }}
+          >
+            <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+            <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+          </Tabs>
+        </Card>
+
+        {/* GOOGLE ADS TAB */}
+        {tab === 0 && (<>
         {/* Date Filter */}
         <Card variant="outlined" sx={{ mb: 2, position: 'relative', overflow: 'hidden' }}>
           {loading && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, bgcolor: `${GOOGLE_GREEN}20`, '& .MuiLinearProgress-bar': { bgcolor: GOOGLE_GREEN } }} />}
@@ -398,6 +424,277 @@ const ClientPortalDashboard = () => {
             )}
           </Box>
         )}
+        </>)}
+
+        {/* META ADS TAB — UI scaffold ready for Meta Marketing API integration */}
+        {tab === 1 && (() => {
+          const metaAccount = metaData?.account;
+          const metaBilling = metaData?.billing;
+          const metaSummary = metaData?.summary;
+          const metaCampaigns = metaData?.campaigns || [];
+          const metaPlacements = metaData?.placements || [];
+          const metaDemographics = metaData?.demographics || [];
+          const metaDaily = metaData?.dailyMetrics || [];
+
+          return (
+            <>
+              {!metaData && (
+                <Alert severity="info" icon={<FacebookIcon sx={{ color: META_BLUE }} />} sx={{ mb: 2 }}>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.3 }}>Meta Ads Coming Soon</Typography>
+                  <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
+                    Your Meta Ads performance will appear here once integration is complete.
+                  </Typography>
+                </Alert>
+              )}
+
+              {/* Date filter */}
+              <Card variant="outlined" sx={{ mb: 2 }}>
+                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
+                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.secondary' }}>Date Range:</Typography>
+                  <TextField type="date" size="small" label="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 150 }} />
+                  <TextField type="date" size="small" label="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 150 }} />
+                  <Box sx={{ display: 'flex', gap: 0.8 }}>
+                    {(() => {
+                      const iso = (d) => d.toISOString().split('T')[0];
+                      const t = iso(new Date());
+                      const d7 = new Date(); d7.setDate(new Date().getDate() - 6);
+                      const d30 = new Date(); d30.setDate(new Date().getDate() - 29);
+                      const aSx = { bgcolor: META_BLUE, color: '#fff', borderColor: META_BLUE, '&:hover': { bgcolor: '#0c5cb8' } };
+                      const isT = dateFrom === t && dateTo === t;
+                      const is7 = dateFrom === iso(d7) && dateTo === t;
+                      const is30 = dateFrom === iso(d30) && dateTo === t;
+                      return (
+                        <>
+                          <Button size="small" variant={isT ? 'contained' : 'outlined'} sx={isT ? aSx : undefined} onClick={() => { setDateFrom(t); setDateTo(t); }}>Today</Button>
+                          <Button size="small" variant={is7 ? 'contained' : 'outlined'} sx={is7 ? aSx : undefined} onClick={() => { setDateFrom(iso(d7)); setDateTo(t); }}>7 Days</Button>
+                          <Button size="small" variant={is30 ? 'contained' : 'outlined'} sx={is30 ? aSx : undefined} onClick={() => { setDateFrom(iso(d30)); setDateTo(t); }}>30 Days</Button>
+                        </>
+                      );
+                    })()}
+                  </Box>
+                </CardContent>
+              </Card>
+
+              {/* Account Info */}
+              <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: `${META_BLUE}06` }}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Page Name</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.pageName || '—'}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account ID</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, fontFamily: 'monospace' }}>{metaAccount?.adAccountId || '—'}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.currency || '—'}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Time Zone</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.timezone || '—'}</Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {/* Billing */}
+              <Card variant="outlined" sx={{ borderLeft: `3px solid ${META_BLUE}`, mb: 2 }}>
+                <CardContent>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1.5 }}>Billing & Budget</Typography>
+                  <Grid container spacing={1.5}>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Total Added</Typography>
+                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: BROWN }}>{metaBilling?.total_added_funds != null ? fmtINR(metaBilling.total_added_funds) : '—'}</Typography>
+                    </Grid>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Spent</Typography>
+                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: META_BLUE }}>{metaBilling?.total_spend != null ? fmtINR(metaBilling.total_spend) : '—'}</Typography>
+                    </Grid>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Available</Typography>
+                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#10b981' }}>{metaBilling?.available_balance != null ? fmtINR(metaBilling.available_balance) : '—'}</Typography>
+                    </Grid>
+                    <Grid size={{ xs: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Daily Budget</Typography>
+                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: COPPER }}>{metaBilling?.daily_budget != null ? fmtINR(metaBilling.daily_budget) : '—'}</Typography>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+
+              {/* KPIs */}
+              <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Spend" value={metaSummary?.spend != null ? fmtINR(metaSummary.spend) : '—'} color={META_BLUE} icon={<WalletIcon />} /></Grid>
+                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Reach" value={metaSummary?.reach != null ? fmtNum(metaSummary.reach) : '—'} color={COPPER} icon={<PeopleIcon />} /></Grid>
+                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Impressions" value={metaSummary?.impressions != null ? fmtNum(metaSummary.impressions) : '—'} color={META_BLUE} icon={<VisibilityIcon />} /></Grid>
+                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Clicks" value={metaSummary?.clicks != null ? fmtNum(metaSummary.clicks) : '—'} color={COPPER} icon={<TrendingUpIcon />} /></Grid>
+                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CTR" value={metaSummary?.ctr != null ? fmtPct(metaSummary.ctr) : '—'} color={BROWN} icon={<ShowChartIcon />} /></Grid>
+                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPC" value={metaSummary?.cpc != null ? fmtINR(metaSummary.cpc) : '—'} color={META_BLUE} icon={<MoneyIcon />} /></Grid>
+              </Grid>
+
+              <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Conversions" value={metaSummary?.conversions != null ? fmtNum(metaSummary.conversions) : '—'} color={BROWN} icon={<CampaignIcon />} sublabel={metaSummary?.cpa ? `${fmtINR(metaSummary.cpa)}/conv` : null} /></Grid>
+                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Leads" value={metaSummary?.leads != null ? fmtNum(metaSummary.leads) : '—'} color={META_BLUE} icon={<GroupsIcon />} sublabel={metaSummary?.cpl ? `${fmtINR(metaSummary.cpl)}/lead` : null} /></Grid>
+                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Messages" value={metaSummary?.messaging_conversations != null ? fmtNum(metaSummary.messaging_conversations) : '—'} color={COPPER} icon={<ChatIcon />} /></Grid>
+                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Frequency" value={metaSummary?.frequency != null ? Number(metaSummary.frequency).toFixed(2) : '—'} color={BROWN} icon={<ShowChartIcon />} /></Grid>
+              </Grid>
+
+              {/* Campaigns Table */}
+              <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                Campaigns {metaCampaigns.length > 0 && `(${metaCampaigns.length})`}
+              </Typography>
+              <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                <Table size="small" sx={{ minWidth: 1100 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Campaign</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Objective</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Spend</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Reach</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impr.</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPC</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Results</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Cost/Result</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {metaCampaigns.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={11} align="center" sx={{ py: 3, color: 'text.secondary', fontStyle: 'italic' }}>
+                          No campaign data yet
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      metaCampaigns.map(c => (
+                        <TableRow key={c.campaignId} hover>
+                          <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                              <CampaignIcon sx={{ fontSize: 14, color: META_BLUE }} />
+                              {c.campaignName}
+                            </Box>
+                          </TableCell>
+                          <TableCell><Chip label={c.objective} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600 }} /></TableCell>
+                          <TableCell><Chip label={c.status} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: c.status === 'ACTIVE' ? '#10b98115' : '#ef444415', color: c.status === 'ACTIVE' ? '#10b981' : '#ef4444' }} /></TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtINR(c.spend)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.reach)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.impressions)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.clicks)}</TableCell>
+                          <TableCell align="right">{fmtPct(c.ctr)}</TableCell>
+                          <TableCell align="right">{fmtINR(c.cpc)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.results)}</TableCell>
+                          <TableCell align="right">{c.costPerResult != null ? fmtINR(c.costPerResult) : '—'}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Placement + Demographics */}
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1 }}>Placement Breakdown</Typography>
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }}>Placement</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Impr.</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Clicks</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Spend</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {metaPlacements.length === 0 ? (
+                              <TableRow><TableCell colSpan={4} align="center" sx={{ py: 2, color: 'text.secondary', fontStyle: 'italic', fontSize: '0.78rem' }}>No placement data</TableCell></TableRow>
+                            ) : (
+                              metaPlacements.map((p, i) => (
+                                <TableRow key={i}>
+                                  <TableCell sx={{ fontSize: '0.78rem', fontWeight: 600, textTransform: 'capitalize' }}>{p.placement}</TableCell>
+                                  <TableCell align="right" sx={{ fontSize: '0.78rem' }}>{fmtNum(p.impressions)}</TableCell>
+                                  <TableCell align="right" sx={{ fontSize: '0.78rem' }}>{fmtNum(p.clicks)}</TableCell>
+                                  <TableCell align="right" sx={{ fontSize: '0.78rem', fontWeight: 600, color: META_BLUE }}>{fmtINR(p.spend)}</TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1 }}>Demographics</Typography>
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }}>Age</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }}>Gender</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Reach</TableCell>
+                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Spend</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {metaDemographics.length === 0 ? (
+                              <TableRow><TableCell colSpan={4} align="center" sx={{ py: 2, color: 'text.secondary', fontStyle: 'italic', fontSize: '0.78rem' }}>No demographics data</TableCell></TableRow>
+                            ) : (
+                              metaDemographics.map((d, i) => (
+                                <TableRow key={i}>
+                                  <TableCell sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{d.age}</TableCell>
+                                  <TableCell sx={{ fontSize: '0.78rem', textTransform: 'capitalize' }}>{d.gender}</TableCell>
+                                  <TableCell align="right" sx={{ fontSize: '0.78rem' }}>{fmtNum(d.reach)}</TableCell>
+                                  <TableCell align="right" sx={{ fontSize: '0.78rem', fontWeight: 600, color: META_BLUE }}>{fmtINR(d.spend)}</TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+
+              {/* Spike Chart */}
+              <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                Campaign Performance
+              </Typography>
+              <Paper variant="outlined" sx={{ p: 1.5 }}>
+                {metaDaily.length === 0 ? (
+                  <Box sx={{ py: 4, textAlign: 'center' }}>
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.82rem', fontStyle: 'italic' }}>
+                      Daily spend chart will appear here once data is available
+                    </Typography>
+                  </Box>
+                ) : (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <AreaChart data={metaDaily} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                      <defs>
+                        <linearGradient id="cpMetaGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={META_BLUE} stopOpacity={0.35} />
+                          <stop offset="95%" stopColor={META_BLUE} stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `₹${v}`} />
+                      <RechartsTooltip />
+                      <Area type="linear" dataKey="spend" stroke={META_BLUE} fill="url(#cpMetaGrad)" strokeWidth={2.5} dot={{ r: 5, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </Paper>
+            </>
+          );
+        })()}
       </Box>
     </Box>
   );
