@@ -44,8 +44,13 @@ const GlassTooltip = ({ active, payload }) => {
 };
 
 // --- Client Performance Card — clickable, navigates to client ads detail page ---
-const ClientCard = ({ client, data, color, dateStr, onClick, adsData }) => {
-  const metaLeads = (data.metaForm || 0) + (data.metaWhatsapp || 0);
+const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi }) => {
+  // Prefer live Meta API summary when available; fall back to DailyEntry tracking.
+  const metaForm = metaApi?.form_leads != null ? metaApi.form_leads : (data.metaForm || 0);
+  const metaWhats = metaApi?.whatsapp_leads != null ? metaApi.whatsapp_leads : (data.metaWhatsapp || 0);
+  const metaSpent = metaApi?.spend != null ? metaApi.spend : (data.metaFund || 0);
+  const metaCpl = metaApi?.cpl != null ? metaApi.cpl : (data.metaCPL || 0);
+  const metaLeads = metaApi?.total_leads != null ? metaApi.total_leads : (metaForm + metaWhats);
   const googleLeads = (data.googleCall || 0) + (data.googleWebsite || 0);
   const totalLeads = metaLeads + googleLeads;
   const isLinked = client.googleAdsEnabled && adsData;
@@ -100,10 +105,10 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData }) => {
             <Typography sx={{ fontWeight: 700, color: '#C08552', fontSize: '0.78rem' }}>META</Typography>
           </Box>
           <Box sx={{ display: 'flex', flex: 1, gap: 0.8 }}>
-            <MetricBox value={data.metaForm || 0} label="Form" />
-            <MetricBox value={data.metaWhatsapp || 0} label="WhatsApp" />
-            <MetricBox value={(data.metaFund || 0).toLocaleString()} label="Fund" />
-            <MetricBox value={(data.metaCPL || 0).toFixed(0)} label="CPL" />
+            <MetricBox value={metaForm} label="Form" />
+            <MetricBox value={metaWhats} label="WhatsApp" />
+            <MetricBox value={`₹${Number(metaSpent).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} label="Spent" />
+            <MetricBox value={`₹${Number(metaCpl).toFixed(0)}`} label="CPL" />
           </Box>
         </Box>
 
@@ -163,7 +168,13 @@ const Dashboard = () => {
 
   // Transform clients to simple format
   const clients = useMemo(() =>
-    cachedClients.map(c => ({ _id: c._id, name: c.clientName, status: c.status, googleAdsEnabled: c.googleAdsEnabled || c.google_ads_enabled })),
+    cachedClients.map(c => ({
+      _id: c._id,
+      name: c.clientName,
+      status: c.status,
+      googleAdsEnabled: c.googleAdsEnabled || c.google_ads_enabled,
+      metaEnabled: c.meta_enabled || c.metaEnabled,
+    })),
   [cachedClients]);
 
   // If the user picks today, use the eager today cache; otherwise fetch on demand.
@@ -207,9 +218,33 @@ const Dashboard = () => {
       .finally(() => setAdsLoading(false));
   }, [cachedClients, selectedDate]);
 
+  // Fetch Meta Ads summary per Meta-enabled client (keyed by clientId)
+  const [metaDataMap, setMetaDataMap] = useState({});
+  const [metaLoading, setMetaLoading] = useState(false);
+  useEffect(() => {
+    const metaClients = cachedClients.filter(c => c.meta_enabled || c.metaEnabled);
+    if (metaClients.length === 0) { setMetaDataMap({}); return; }
+    let cancelled = false;
+    setMetaLoading(true);
+    Promise.allSettled(
+      metaClients.map(c =>
+        api.get(`/meta/client/${c._id}/analytics`, { params: { from: selectedDate, to: selectedDate } })
+          .then(res => ({ clientId: c._id, summary: res.data?.summary }))
+      )
+    ).then(results => {
+      if (cancelled) return;
+      const map = {};
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value?.summary) map[r.value.clientId] = r.value.summary;
+      });
+      setMetaDataMap(map);
+    }).finally(() => { if (!cancelled) setMetaLoading(false); });
+    return () => { cancelled = true; };
+  }, [cachedClients, selectedDate]);
+
   // Only block the page on essentials (clients list). Everything else loads progressively.
   const initialLoading = clientsLoading && cachedClients.length === 0;
-  const loading = leadsLoading || clientsLoading || adsLoading || otherDateLoading;
+  const loading = leadsLoading || clientsLoading || adsLoading || metaLoading || otherDateLoading;
 
   const dateByClient = useMemo(() => {
     const map = {};
@@ -388,6 +423,7 @@ const Dashboard = () => {
               dateStr={dateStr}
               onClick={() => navigate(`/client-ads/${client._id}`)}
               adsData={adsDataMap[client._id]}
+              metaApi={metaDataMap[client._id]}
             />
           </Grid>
         ))}

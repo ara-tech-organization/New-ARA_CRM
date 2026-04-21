@@ -16,6 +16,8 @@ import {
   Link as LinkIcon,
   KeyboardArrowDown as ArrowDownIcon,
   KeyboardArrowUp as ArrowUpIcon,
+  People as PeopleIcon, Visibility as VisibilityIcon,
+  Chat as ChatIcon, Groups as GroupsIcon,
 } from '@mui/icons-material';
 import { PageLoader } from '../components/Loading';
 import { useDataCache } from '../contexts/DataCacheContext';
@@ -32,6 +34,7 @@ const META_BLUE = '#1877f2';
 // Module-level cache shared across mounts: key = `${clientId}_${from}_${to}`
 // Value: { data, ts } — ts = epoch ms. TTL 5 min.
 const analyticsCache = new Map();
+const metaAnalyticsCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const fmtNum = (n) => (n ?? 0).toLocaleString('en-IN');
@@ -67,6 +70,9 @@ const ClientAdDetails = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [metaData, setMetaData] = useState(null);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [metaError, setMetaError] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(today);
@@ -160,10 +166,57 @@ const ClientAdDetails = () => {
     }
   };
 
+  const fetchMetaAnalytics = async ({ force = false } = {}) => {
+    if (!clientId) return;
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = dateFrom === today && dateTo === today;
+    const granularity = isToday ? 'hourly' : 'daily';
+    const cacheKey = `${clientId}_${dateFrom}_${dateTo}_${granularity}`;
+    const cached = metaAnalyticsCache.get(cacheKey);
+    const hasFreshCache = cached && (Date.now() - cached.ts) < CACHE_TTL_MS;
+
+    if (cached && !force) {
+      setMetaData(cached.data);
+      setMetaError(null);
+    }
+    setMetaLoading(true);
+    if (!cached) setMetaError(null);
+
+    try {
+      const res = await api.get(`/meta/client/${clientId}/analytics`, {
+        params: { from: dateFrom, to: dateTo, granularity },
+      });
+      const payload = res.data || null;
+      setMetaData(payload);
+      setMetaError(null);
+      if (payload) metaAnalyticsCache.set(cacheKey, { data: payload, ts: Date.now() });
+    } catch (err) {
+      if (hasFreshCache) {
+        console.warn('Meta background refresh failed, keeping cached data:', err.message);
+        return;
+      }
+      const body = err.response?.data || {};
+      const serverMsg = body.error || body.message || err.message || '';
+      const lower = serverMsg.toLowerCase();
+      const notLinked =
+        err.response?.status === 404 ||
+        lower.includes('not linked') ||
+        lower.includes('not associated') ||
+        lower.includes('no meta') ||
+        lower.includes('not enabled');
+      setMetaError(notLinked ? 'This client is not linked to a Meta ad account yet' : (serverMsg || 'Failed to fetch Meta Ads data'));
+      setMetaData(null);
+    } finally {
+      setMetaLoading(false);
+    }
+  };
+
   // Fetch analytics as soon as we have a clientId — don't wait for the cached client record
   useEffect(() => {
     if (tab === 0 && clientId) {
       fetchGoogleAnalytics();
+    } else if (tab === 1 && clientId) {
+      fetchMetaAnalytics();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, clientId, dateFrom, dateTo]);
@@ -242,69 +295,74 @@ const ClientAdDetails = () => {
         <Button
           variant="outlined"
           size="small"
-          startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
-          onClick={() => fetchGoogleAnalytics({ force: true })}
-          disabled={loading || tab !== 0}
+          startIcon={(tab === 0 ? loading : metaLoading) ? <CircularProgress size={14} /> : <RefreshIcon />}
+          onClick={() => (tab === 0 ? fetchGoogleAnalytics({ force: true }) : fetchMetaAnalytics({ force: true }))}
+          disabled={tab === 0 ? loading : metaLoading}
         >
-          {loading ? 'Syncing...' : 'Refresh'}
+          {(tab === 0 ? loading : metaLoading) ? 'Syncing...' : 'Refresh'}
         </Button>
       </Box>
 
-      {/* Date Filter */}
-      {tab === 0 && (
-        <Card variant="outlined" sx={{ mb: 2, position: 'relative', overflow: 'hidden' }}>
-          {loading && (
-            <LinearProgress
-              sx={{
-                position: 'absolute', top: 0, left: 0, right: 0,
-                height: 3,
-                bgcolor: `${GOOGLE_GREEN}20`,
-                '& .MuiLinearProgress-bar': { bgcolor: GOOGLE_GREEN },
-              }}
-            />
-          )}
-          <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
-            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.secondary' }}>Date Range:</Typography>
-            <TextField type="date" size="small" label="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} disabled={loading} />
-            <TextField type="date" size="small" label="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} disabled={loading} />
-            <Box sx={{ display: 'flex', gap: 0.8 }}>
-              {(() => {
-                const iso = (d) => d.toISOString().split('T')[0];
-                const today = iso(new Date());
-                const d7 = new Date(); d7.setDate(new Date().getDate() - 6);
-                const d14 = new Date(); d14.setDate(new Date().getDate() - 13);
-                const d30 = new Date(); d30.setDate(new Date().getDate() - 29);
-                const isToday = dateFrom === today && dateTo === today;
-                const is7 = dateFrom === iso(d7) && dateTo === today;
-                const is14 = dateFrom === iso(d14) && dateTo === today;
-                const is30 = dateFrom === iso(d30) && dateTo === today;
-                const activeSx = {
-                  bgcolor: GOOGLE_GREEN,
-                  color: '#fff',
-                  borderColor: GOOGLE_GREEN,
-                  '&:hover': { bgcolor: '#2c8f45', borderColor: '#2c8f45' },
-                };
-                return (
-                  <>
-                    <Button size="small" variant={isToday ? 'contained' : 'outlined'} disabled={loading} sx={isToday ? activeSx : undefined} onClick={() => { setDateFrom(today); setDateTo(today); }}>Today</Button>
-                    <Button size="small" variant={is7 ? 'contained' : 'outlined'} disabled={loading} sx={is7 ? activeSx : undefined} onClick={() => { setDateFrom(iso(d7)); setDateTo(today); }}>Last 7 Days</Button>
-                    <Button size="small" variant={is14 ? 'contained' : 'outlined'} disabled={loading} sx={is14 ? activeSx : undefined} onClick={() => { setDateFrom(iso(d14)); setDateTo(today); }}>Last 14 Days</Button>
-                    <Button size="small" variant={is30 ? 'contained' : 'outlined'} disabled={loading} sx={is30 ? activeSx : undefined} onClick={() => { setDateFrom(iso(d30)); setDateTo(today); }}>Last 30 Days</Button>
-                  </>
-                );
-              })()}
-            </Box>
-            {loading && (
-              <Chip
-                icon={<CircularProgress size={12} sx={{ color: `${GOOGLE_GREEN} !important` }} />}
-                label="Fetching data..."
-                size="small"
-                sx={{ ml: 'auto', bgcolor: `${GOOGLE_GREEN}15`, color: GOOGLE_GREEN, fontWeight: 600, '& .MuiChip-icon': { ml: 1 } }}
+      {/* Date Filter (shared across tabs) */}
+      {(() => {
+        const activeLoading = tab === 0 ? loading : metaLoading;
+        const accent = tab === 0 ? GOOGLE_GREEN : META_BLUE;
+        const accentHover = tab === 0 ? '#2c8f45' : '#0c5cb8';
+        return (
+          <Card variant="outlined" sx={{ mb: 2, position: 'relative', overflow: 'hidden' }}>
+            {activeLoading && (
+              <LinearProgress
+                sx={{
+                  position: 'absolute', top: 0, left: 0, right: 0,
+                  height: 3,
+                  bgcolor: `${accent}20`,
+                  '& .MuiLinearProgress-bar': { bgcolor: accent },
+                }}
               />
             )}
-          </CardContent>
-        </Card>
-      )}
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
+              <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.secondary' }}>Date Range:</Typography>
+              <TextField type="date" size="small" label="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} disabled={activeLoading} />
+              <TextField type="date" size="small" label="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} disabled={activeLoading} />
+              <Box sx={{ display: 'flex', gap: 0.8 }}>
+                {(() => {
+                  const iso = (d) => d.toISOString().split('T')[0];
+                  const today = iso(new Date());
+                  const d7 = new Date(); d7.setDate(new Date().getDate() - 6);
+                  const d14 = new Date(); d14.setDate(new Date().getDate() - 13);
+                  const d30 = new Date(); d30.setDate(new Date().getDate() - 29);
+                  const isToday = dateFrom === today && dateTo === today;
+                  const is7 = dateFrom === iso(d7) && dateTo === today;
+                  const is14 = dateFrom === iso(d14) && dateTo === today;
+                  const is30 = dateFrom === iso(d30) && dateTo === today;
+                  const activeSx = {
+                    bgcolor: accent,
+                    color: '#fff',
+                    borderColor: accent,
+                    '&:hover': { bgcolor: accentHover, borderColor: accentHover },
+                  };
+                  return (
+                    <>
+                      <Button size="small" variant={isToday ? 'contained' : 'outlined'} disabled={activeLoading} sx={isToday ? activeSx : undefined} onClick={() => { setDateFrom(today); setDateTo(today); }}>Today</Button>
+                      <Button size="small" variant={is7 ? 'contained' : 'outlined'} disabled={activeLoading} sx={is7 ? activeSx : undefined} onClick={() => { setDateFrom(iso(d7)); setDateTo(today); }}>Last 7 Days</Button>
+                      <Button size="small" variant={is14 ? 'contained' : 'outlined'} disabled={activeLoading} sx={is14 ? activeSx : undefined} onClick={() => { setDateFrom(iso(d14)); setDateTo(today); }}>Last 14 Days</Button>
+                      <Button size="small" variant={is30 ? 'contained' : 'outlined'} disabled={activeLoading} sx={is30 ? activeSx : undefined} onClick={() => { setDateFrom(iso(d30)); setDateTo(today); }}>Last 30 Days</Button>
+                    </>
+                  );
+                })()}
+              </Box>
+              {activeLoading && (
+                <Chip
+                  icon={<CircularProgress size={12} sx={{ color: `${accent} !important` }} />}
+                  label="Fetching data..."
+                  size="small"
+                  sx={{ ml: 'auto', bgcolor: `${accent}15`, color: accent, fontWeight: 600, '& .MuiChip-icon': { ml: 1 } }}
+                />
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Tabs */}
       <Card variant="outlined">
@@ -800,15 +858,400 @@ const ClientAdDetails = () => {
             </>
           )}
 
-          {/* META TAB */}
-          {tab === 1 && (
-            <Alert severity="info" icon={<FacebookIcon sx={{ color: META_BLUE }} />} sx={{ py: 3 }}>
-              <Typography sx={{ fontWeight: 600, mb: 0.5 }}>Meta Ads API Integration Pending</Typography>
-              <Typography variant="body2">
-                Once the Meta Marketing API is connected, Meta Ads analytics will display here.
-              </Typography>
-            </Alert>
-          )}
+          {/* META TAB — live Meta Marketing API data */}
+          {tab === 1 && (() => {
+            const metaBilling = metaData?.billing;
+            const metaAccount = metaData?.meta_account;
+            const metaSummary = metaData?.summary;
+            const metaCampaigns = metaData?.campaigns || [];
+            const metaDaily = [...(metaData?.daily_trend || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+            const metaLeadForms = metaData?.lead_forms || [];
+            const metaRecentLeads = metaData?.recent_leads || [];
+            const metaEntityCounts = metaData?.entity_counts || {};
+            const metaRange = metaData?.range;
+            const metaCurrency = metaAccount?.currency || client?.meta_ad_account_currency || 'INR';
+            const accountStatusMap = { 1: 'ACTIVE', 2: 'DISABLED', 3: 'UNSETTLED', 7: 'PENDING_RISK_REVIEW', 8: 'PENDING_SETTLEMENT', 9: 'IN_GRACE_PERIOD', 100: 'PENDING_CLOSURE', 101: 'CLOSED' };
+            const accountStatusLabel = accountStatusMap[metaAccount?.account_status] || (metaAccount?.account_status != null ? `STATUS ${metaAccount.account_status}` : null);
+            const isAccountActive = metaAccount?.account_status === 1;
+            const isLowAccountBalance = metaAccount?.balance != null
+              && metaBilling?.low_balance_threshold != null
+              && metaAccount.balance < metaBilling.low_balance_threshold;
+
+            return (
+              <>
+                {metaLoading && !metaData && (
+                  <Box sx={{ textAlign: 'center', py: 6 }}>
+                    <CircularProgress size={32} sx={{ color: META_BLUE }} />
+                    <Typography sx={{ mt: 2, color: 'text.secondary' }}>Fetching Meta Ads data...</Typography>
+                  </Box>
+                )}
+
+                {!metaLoading && metaError && (
+                  <Alert severity={metaError.includes('not linked') ? 'info' : 'error'} icon={<FacebookIcon sx={{ color: META_BLUE }} />} sx={{ mb: 2 }}>
+                    {metaError}
+                  </Alert>
+                )}
+
+                {metaData && (
+                <Box sx={{ opacity: metaLoading ? 0.55 : 1, pointerEvents: metaLoading ? 'none' : 'auto', transition: 'opacity 0.2s ease' }}>
+                {/* Ad Account info (from Client doc) + Analytics meta (range, entities) */}
+                <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: `${META_BLUE}06` }}>
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Page Name</Typography>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{client?.meta_pages?.[0]?.page_name || '—'}</Typography>
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account</Typography>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{client?.meta_ad_account_name || '—'}</Typography>
+                      {client?.meta_ad_account_id && (
+                        <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', fontFamily: 'monospace' }}>{client.meta_ad_account_id}</Typography>
+                      )}
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency / Time Zone</Typography>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                        {client?.meta_ad_account_currency || '—'} · {client?.meta_ad_account_timezone || '—'}
+                      </Typography>
+                    </Grid>
+                    {metaRange && (
+                      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Data Range</Typography>
+                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                          {fmtDate(metaRange.from)} – {fmtDate(metaRange.to)}
+                        </Typography>
+                      </Grid>
+                    )}
+                    <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Entities</Typography>
+                      <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+                        <Chip label={`${metaEntityCounts.campaigns ?? 0} campaigns`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
+                        <Chip label={`${metaEntityCounts.adsets ?? 0} ad sets`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${COPPER}15`, color: COPPER, fontWeight: 600 }} />
+                        <Chip label={`${metaEntityCounts.ads ?? 0} ads`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${BROWN}15`, color: BROWN, fontWeight: 600 }} />
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </Paper>
+
+                {/* Billing — from meta_account (live ad-account numbers) */}
+                {(metaAccount || metaBilling) && (
+                  <Card variant="outlined" sx={{ borderLeft: `3px solid ${META_BLUE}`, mb: 2 }}>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.9rem' }}>Billing</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          {accountStatusLabel && (
+                            <Chip
+                              label={accountStatusLabel}
+                              size="small"
+                              sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600,
+                                bgcolor: isAccountActive ? '#10b98115' : '#ef444415',
+                                color: isAccountActive ? '#10b981' : '#ef4444' }}
+                            />
+                          )}
+                          {metaAccount?.disable_reason > 0 && (
+                            <Chip label={`Disable Reason ${metaAccount.disable_reason}`} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600, bgcolor: '#ef444415', color: '#ef4444' }} />
+                          )}
+                          {metaAccount?.fetched_at && (
+                            <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                              Fetched {new Date(metaAccount.fetched_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                      <Grid container spacing={1.5}>
+                        {metaAccount?.balance != null && (
+                          <Grid size={{ xs: 6, md: 2 }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account Balance</Typography>
+                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: isLowAccountBalance ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {fmtINR(metaAccount.balance)}
+                              {isLowAccountBalance && <WarningIcon sx={{ fontSize: 14 }} />}
+                            </Typography>
+                          </Grid>
+                        )}
+                        {metaAccount?.amount_spent != null && (
+                          <Grid size={{ xs: 6, md: 2 }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Spent</Typography>
+                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: META_BLUE }}>{fmtINR(metaAccount.amount_spent)}</Typography>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Performance Summary */}
+                {metaSummary && (
+                  <>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                      Performance Summary
+                    </Typography>
+                    {/* Row 1 — Outcomes (spend + leads with paired CPL) */}
+                    <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                      {metaSummary.spend != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Spend" value={fmtINR(metaSummary.spend)} color={META_BLUE} icon={<WalletIcon />} /></Grid>}
+                      {metaSummary.total_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Total Leads" value={fmtNum(metaSummary.total_leads)} color={META_BLUE} icon={<GroupsIcon />} sublabel={metaSummary.cpl != null ? `${fmtINR(metaSummary.cpl)}/lead` : null} /></Grid>}
+                      {metaSummary.form_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Form Leads" value={fmtNum(metaSummary.form_leads)} color={COPPER} icon={<GroupsIcon />} sublabel={metaSummary.cpl_form != null ? `${fmtINR(metaSummary.cpl_form)}/lead` : null} /></Grid>}
+                      {metaSummary.whatsapp_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="WhatsApp Leads" value={fmtNum(metaSummary.whatsapp_leads)} color={BROWN} icon={<ChatIcon />} sublabel={metaSummary.cpl_whatsapp != null ? `${fmtINR(metaSummary.cpl_whatsapp)}/lead` : null} /></Grid>}
+                      {metaSummary.cpl != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPL (Overall)" value={fmtINR(metaSummary.cpl)} color={META_BLUE} icon={<MoneyIcon />} /></Grid>}
+                      {metaSummary.reach != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Reach" value={fmtNum(metaSummary.reach)} color={COPPER} icon={<PeopleIcon />} /></Grid>}
+                    </Grid>
+
+                    {/* Row 2 — Engagement & efficiency */}
+                    <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                      {metaSummary.impressions != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Impressions" value={fmtNum(metaSummary.impressions)} color={META_BLUE} icon={<VisibilityIcon />} /></Grid>}
+                      {metaSummary.clicks != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Clicks" value={fmtNum(metaSummary.clicks)} color={COPPER} icon={<TrendingUpIcon />} /></Grid>}
+                      {metaSummary.ctr != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CTR" value={fmtPct(metaSummary.ctr)} color={BROWN} icon={<ShowChartIcon />} /></Grid>}
+                      {metaSummary.cpc != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPC" value={fmtINR(metaSummary.cpc)} color={META_BLUE} icon={<MoneyIcon />} /></Grid>}
+                      {metaSummary.cpm != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPM" value={fmtINR(metaSummary.cpm)} color={COPPER} icon={<MoneyIcon />} /></Grid>}
+                    </Grid>
+                  </>
+                )}
+
+                {/* Campaigns */}
+                <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                  Campaigns {metaCampaigns.length > 0 && `(${metaCampaigns.length})`}
+                </Typography>
+                <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                  <Table size="small" sx={{ minWidth: 1200 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Campaign</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Objective</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Daily Budget</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Spend</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impr.</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPL</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Messages</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {metaCampaigns.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={11} align="center" sx={{ py: 3, color: 'text.secondary', fontStyle: 'italic' }}>
+                            No campaign data for this range
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        [...metaCampaigns].sort((a, b) => (Number(b.spend) || 0) - (Number(a.spend) || 0)).map(c => {
+                          const effStatus = c.effective_status || c.status;
+                          const isActive = effStatus === 'ACTIVE';
+                          return (
+                            <TableRow key={c.campaign_id} hover>
+                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                                  <CampaignIcon sx={{ fontSize: 14, color: META_BLUE }} />
+                                  {c.name}
+                                </Box>
+                              </TableCell>
+                              <TableCell>{c.objective ? <Chip label={c.objective} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600 }} /> : '—'}</TableCell>
+                              <TableCell>
+                                <Chip label={effStatus || '—'} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: isActive ? '#10b98115' : '#ef444415', color: isActive ? '#10b981' : '#ef4444' }} />
+                              </TableCell>
+                              <TableCell align="right">{c.daily_budget != null ? fmtINR(c.daily_budget) : '—'}</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtINR(c.spend)}</TableCell>
+                              <TableCell align="right">{fmtNum(c.impressions)}</TableCell>
+                              <TableCell align="right">{fmtNum(c.clicks)}</TableCell>
+                              <TableCell align="right">{fmtPct(c.ctr)}</TableCell>
+                              <TableCell align="right">{fmtNum(c.leads)}</TableCell>
+                              <TableCell align="right">{c.cpl != null && c.cpl > 0 ? fmtINR(c.cpl) : '—'}</TableCell>
+                              <TableCell align="right">{fmtNum(c.messaging_conversations_started)}</TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                {/* Daily / Hourly Trend Chart */}
+                {metaDaily.length > 0 && (() => {
+                  // Detect hourly data: either multiple rows sharing the same YYYY-MM-DD, or an `hour` field present, or ISO timestamps with time component.
+                  const datesSeen = new Set(metaDaily.map(d => String(d.date).slice(0, 10)));
+                  const hasHourField = metaDaily.some(d => d.hour != null);
+                  const hasTimeComponent = metaDaily.some(d => String(d.date).includes('T') || String(d.date).includes(':'));
+                  const isHourly = hasHourField || (metaDaily.length > 1 && datesSeen.size === 1) || hasTimeComponent;
+
+                  const chartRows = metaDaily.map(d => {
+                    const dt = new Date(d.date);
+                    const hour = d.hour != null ? Number(d.hour) : dt.getHours();
+                    return {
+                      ...d,
+                      day: dt.toLocaleDateString('en-GB', { weekday: 'short' }),
+                      datePart: dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+                      hourPart: `${String(hour).padStart(2, '0')}:00`,
+                      cpl: (Number(d.leads) || 0) > 0 ? (Number(d.spend) || 0) / Number(d.leads) : 0,
+                    };
+                  });
+                  const MetaSpikeTooltip = ({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0]?.payload;
+                    if (!d) return null;
+                    return (
+                      <Paper sx={{ p: 1.5, minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', mb: 1, borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
+                          {isHourly ? `${d.hourPart} · ${fmtDate(d.date)}` : `${d.day}, ${fmtDate(d.date)}`}
+                        </Typography>
+                        {[
+                          { label: 'Spend', value: fmtINR(d.spend), color: META_BLUE },
+                          { label: 'Impressions', value: fmtNum(d.impressions) },
+                          { label: 'Clicks', value: fmtNum(d.clicks) },
+                          { label: 'Leads', value: fmtNum(d.leads) },
+                          { label: 'CPL', value: d.leads > 0 ? fmtINR(d.cpl) : '—' },
+                        ].map((row, i) => (
+                          <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', gap: 3, mb: 0.4 }}>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{row.label}</Typography>
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: row.color }}>{row.value}</Typography>
+                          </Box>
+                        ))}
+                      </Paper>
+                    );
+                  };
+                  return (
+                    <>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                          Campaign Performance
+                        </Typography>
+                        {isHourly && (
+                          <Chip label="Hourly" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600, bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
+                        )}
+                      </Box>
+                      <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <AreaChart data={chartRows} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                            <defs>
+                              <linearGradient id="metaSpikeGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={META_BLUE} stopOpacity={0.35} />
+                                <stop offset="95%" stopColor={META_BLUE} stopOpacity={0.02} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                            <XAxis
+                              dataKey={isHourly ? 'hourPart' : 'datePart'}
+                              tickLine={false}
+                              axisLine={false}
+                              height={45}
+                              interval={isHourly ? Math.max(0, Math.floor(chartRows.length / 12) - 1) : 0}
+                              tick={({ x, y, index }) => {
+                                const row = chartRows[index];
+                                if (isHourly) {
+                                  return (
+                                    <g transform={`translate(${x},${y})`}>
+                                      <text x={0} y={0} dy={14} textAnchor="middle" fontSize={10.5} fill="#555">{row?.hourPart}</text>
+                                    </g>
+                                  );
+                                }
+                                return (
+                                  <g transform={`translate(${x},${y})`}>
+                                    <text x={0} y={0} dy={12} textAnchor="middle" fontSize={10.5} fill="#555">{row?.datePart}</text>
+                                    <text x={0} y={0} dy={25} textAnchor="middle" fontSize={9} fill="#999">({row?.day})</text>
+                                  </g>
+                                );
+                              }}
+                            />
+                            <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `₹${v}`} />
+                            <RechartsTooltip content={<MetaSpikeTooltip />} />
+                            <Area type="linear" dataKey="spend" stroke={META_BLUE} fill="url(#metaSpikeGrad)" strokeWidth={2.5} dot={{ r: 5, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </Paper>
+                    </>
+                  );
+                })()}
+
+                {/* Lead Forms */}
+                {metaLeadForms.length > 0 && (
+                  <>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                      Lead Forms ({metaLeadForms.length})
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads in Range</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Page ID</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Last Seen</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {[...metaLeadForms].sort((a, b) => (Number(b.leads_in_range) || 0) - (Number(a.leads_in_range) || 0)).map(f => {
+                            const isActive = f.status === 'ACTIVE';
+                            return (
+                              <TableRow key={f.form_id} hover>
+                                <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{f.name}</TableCell>
+                                <TableCell>
+                                  <Chip label={f.status || '—'} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: isActive ? '#10b98115' : '#ef444415', color: isActive ? '#10b981' : '#ef4444' }} />
+                                </TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtNum(f.leads_in_range)}</TableCell>
+                                <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>{f.page_id || '—'}</TableCell>
+                                <TableCell sx={{ fontSize: '0.78rem' }}>{fmtDate(f.last_seen_at)}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </>
+                )}
+
+                {/* Recent Leads */}
+                {metaRecentLeads.length > 0 && (
+                  <>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                      Recent Leads ({metaRecentLeads.length})
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Name</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Phone</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Platform</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {metaRecentLeads.map(l => (
+                            <TableRow key={l._id} hover>
+                              <TableCell sx={{ fontSize: '0.78rem' }}>{fmtDate(l.createdAt)}</TableCell>
+                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
+                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
+                              <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
+                              <TableCell>
+                                {l.platform && (
+                                  <Chip label={l.platform} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
+                                )}
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
+                              <TableCell>
+                                <Chip label={l.status || '—'} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize' }} />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </>
+                )}
+
+                {!metaSummary && !metaBilling && metaCampaigns.length === 0 && metaDaily.length === 0 && (
+                  <Alert severity="info">No Meta data returned for the selected date range.</Alert>
+                )}
+                </Box>
+                )}
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
     </Box>
