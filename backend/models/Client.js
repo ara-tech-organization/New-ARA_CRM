@@ -227,11 +227,10 @@ const clientSchema = new mongoose.Schema(
 );
 
 // Hash portal password before save
-clientSchema.pre('save', async function (next) {
-  if (!this.isModified('portalPassword') || !this.portalPassword) return next();
+clientSchema.pre('save', async function () {
+  if (!this.isModified('portalPassword') || !this.portalPassword) return;
   const salt = await bcrypt.genSalt(10);
   this.portalPassword = await bcrypt.hash(this.portalPassword, salt);
-  next();
 });
 
 // Compare portal password
@@ -245,9 +244,7 @@ clientSchema.index({ clientName: 1 });
 clientSchema.index({ status: 1 });
 clientSchema.index({ accountID: 1 });
 clientSchema.index({ createdAt: -1 });
-clientSchema.index({ google_ads_customer_id: 1 });
 clientSchema.index({ google_ads_enabled: 1 });
-clientSchema.index({ meta_ad_account_id: 1 });
 clientSchema.index({ meta_enabled: 1 });
 clientSchema.index({ 'meta_pages.page_id': 1 });
 clientSchema.index({ 'billing.available_balance': 1 });
