@@ -17,6 +17,7 @@ import {
   postAssignForm,
   postReprocessForm,
   getRetryQueue,
+  getRawLeads,
 } from '../controllers/metaController.js';
 
 const router = express.Router();
@@ -30,6 +31,7 @@ router.get('/health', getHealth);
 router.get('/sync-status', getStatus);
 router.get('/sync-runs', getRuns);
 router.get('/retry-queue', getRetryQueue);
+router.get('/raw-leads', getRawLeads);
 
 // Sync triggers
 router.post('/sync', postSyncAll);

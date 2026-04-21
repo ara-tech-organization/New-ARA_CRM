@@ -361,3 +361,40 @@ export const getRetryQueue = async (req, res) => {
     pending,
   });
 };
+
+// GET /api/meta/raw-leads?limit=50&processed=false&formId=... — inspect the
+// audit log of everything the webhook + poller have received.
+export const getRawLeads = async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 25, 200);
+  const filter = {};
+  if (req.query.processed === 'true') filter.processed = true;
+  if (req.query.processed === 'false') filter.processed = false;
+  if (req.query.formId) filter.form_id = String(req.query.formId);
+  if (req.query.pageId) filter.page_id = String(req.query.pageId);
+  if (req.query.source) filter.source = String(req.query.source);
+
+  const [total, processed, unprocessed, rows] = await Promise.all([
+    MetaLeadRaw.countDocuments({}),
+    MetaLeadRaw.countDocuments({ processed: true }),
+    MetaLeadRaw.countDocuments({ processed: false }),
+    MetaLeadRaw.find(filter).sort({ received_at: -1 }).limit(limit).lean(),
+  ]);
+
+  res.json({
+    totals: { all: total, processed, unprocessed },
+    shown: rows.length,
+    rows: rows.map((r) => ({
+      leadgen_id: r.leadgen_id,
+      received_at: r.received_at,
+      source: r.source,
+      page_id: r.page_id,
+      form_id: r.form_id,
+      ad_id: r.ad_id,
+      campaign_id: r.campaign_id,
+      processed: r.processed,
+      processed_at: r.processed_at,
+      lead_id: r.lead_id,
+      error: r.error,
+    })),
+  });
+};
