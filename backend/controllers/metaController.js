@@ -879,6 +879,31 @@ export const getClientAnalytics = async (req, res) => {
     { total_debits: 0, total_credits: 0 }
   );
 
+  // ---- Live Meta-side figures ------------------------------------------
+  // Meta exposes the prepaid balance + lifetime spend directly, unlike
+  // Google Ads. Pull them on every analytics fetch so the frontend always
+  // shows current values. `balance` and `amount_spent` come back as paise
+  // strings — convert to rupees with 2-decimal precision.
+  let meta_account = null;
+  if (client.meta_ad_account_id) {
+    try {
+      const { account } = await verifyAdAccountAccess(client.meta_ad_account_id);
+      meta_account = {
+        id: account.id,
+        name: account.name || '',
+        currency: account.currency || '',
+        timezone_name: account.timezone_name || '',
+        account_status: account.account_status,
+        balance: round2(Number(account.balance || 0) / 100),
+        amount_spent: round2(Number(account.amount_spent || 0) / 100),
+        disable_reason: account.disable_reason ?? 0,
+        fetched_at: new Date(),
+      };
+    } catch (err) {
+      meta_account = { error: err.message, fetched_at: new Date() };
+    }
+  }
+
   res.json({
     client_id: clientId,
     client_name: client.clientName,
@@ -897,6 +922,8 @@ export const getClientAnalytics = async (req, res) => {
       total_added_funds: round2(client.billing?.total_added_funds),
       total_spend: round2(client.billing?.total_spend),
       low_balance_threshold: client.billing?.low_balance_threshold || 0,
+      meta_live_balance: meta_account?.balance ?? null,
+      meta_lifetime_spend: meta_account?.amount_spent ?? null,
       transactions: billingTxns.map((t) => ({
         type: t.type,
         amount: t.amount,
@@ -907,6 +934,7 @@ export const getClientAnalytics = async (req, res) => {
         metric_date: t.reference?.metric_date,
       })),
     },
+    meta_account,
     entity_counts: {
       campaigns: await MetaCampaign.countDocuments({ client_id: clientId }),
       adsets: await MetaAdSet.countDocuments({ client_id: clientId }),

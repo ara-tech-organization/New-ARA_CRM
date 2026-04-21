@@ -27,7 +27,7 @@ import {
 } from '../services/metaFormSyncService.js';
 import { reconcileMetaSpend } from '../services/metaBillingService.js';
 
-const INSIGHTS_BACKFILL_DAYS = parseInt(process.env.META_INSIGHTS_BACKFILL_DAYS, 10) || 30;
+const INSIGHTS_BACKFILL_DAYS = parseInt(process.env.META_INSIGHTS_BACKFILL_DAYS, 10) || 90;
 
 const newRunId = () => `meta-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
@@ -69,20 +69,14 @@ const flattenActions = (actions) => {
   return out;
 };
 
-const pickInsightsWindow = (client, deep) => {
+// Always pull the last META_INSIGHTS_BACKFILL_DAYS (default 90).
+// Onboard date no longer floors the window — operators want full history
+// regardless of when a given client was linked in the CRM.
+const pickInsightsWindow = () => {
   const today = new Date();
   const until = ymd(today);
-
-  const backfill = new Date(today);
-  backfill.setUTCDate(backfill.getUTCDate() - INSIGHTS_BACKFILL_DAYS);
-
-  const onboardedAt = toDateOrNull(client.meta_onboarded_at) || toDateOrNull(client.onboardDate);
-
-  let since;
-  if (deep && onboardedAt) since = onboardedAt;
-  else if (onboardedAt && onboardedAt > backfill) since = onboardedAt;
-  else since = backfill;
-
+  const since = new Date(today);
+  since.setUTCDate(since.getUTCDate() - INSIGHTS_BACKFILL_DAYS);
   return { since: ymd(since), until };
 };
 
@@ -317,7 +311,7 @@ export const syncByAdAccount = async ({
   }
 
   // 4. Insights (campaign + adset + ad levels; daily rows)
-  const window = pickInsightsWindow({ meta_onboarded_at: onboardedAt }, deep);
+  const window = pickInsightsWindow();
   for (const level of ['campaign', 'adset', 'ad']) {
     try {
       const { data } = await fetchInsights(adAccountId, {
@@ -353,7 +347,12 @@ export const syncMetaClient = async (client, { deep = false, run } = {}) => {
   const result = await syncByAdAccount({
     adAccountId: client.meta_ad_account_id,
     clientId: client._id,
-    onboardedAt: client.meta_onboarded_at || client.onboardDate,
+    // Use CRM onboardDate (usually months/years old) as the floor — not
+    // meta_onboarded_at, which gets auto-stamped to *today* on first enable
+    // and would shrink the backfill window to zero. meta_onboarded_at
+    // remains useful as a "when did we turn on Meta integration" timestamp
+    // for operators; it just shouldn't constrain the sync window.
+    onboardedAt: client.onboardDate,
     deep,
     run,
     label: `${client.clientName || 'client'} (${client.meta_ad_account_id})`,
@@ -417,9 +416,9 @@ export const syncMetaClient = async (client, { deep = false, run } = {}) => {
   // Billing reconciliation — runs *after* insights are in DB so it reads
   // the freshly-upserted rows. Honors META_BILLING_DRY_RUN internally.
   try {
-    const backfillDays = parseInt(process.env.META_INSIGHTS_BACKFILL_DAYS, 10) || 30;
+    const backfillDays = parseInt(process.env.META_INSIGHTS_BACKFILL_DAYS, 10) || 90;
     const since = new Date();
-    since.setUTCDate(since.getUTCDate() - (deep ? 365 : backfillDays));
+    since.setUTCDate(since.getUTCDate() - backfillDays);
     const billing = await reconcileMetaSpend(client, { since });
     result.stages.push({
       stage: 'billing',

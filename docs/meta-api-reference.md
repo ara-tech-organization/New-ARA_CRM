@@ -965,3 +965,41 @@ These must be set in Azure App Service → Configuration → Application setting
 | `ENCRYPTION_KEY`              | AES-256 key for Page tokens at rest              | 64-char hex                  |
 
 Once all of these are live on Azure, every endpoint in this document works end-to-end.
+
+```
+
+
+1. Set the ad account
+
+curl -X PUT "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/68deb16211a12187d52ad0de/config" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "meta_enabled": true,
+    "meta_ad_account_id": "act_967896905356867"
+  }'
+
+
+Expected: {"success": true, "config": {"meta_ad_account_name": "Adgrohair Dharmapuri", "meta_ad_account_currency": "INR", ...}}
+
+2. Attach + subscribe the Page
+
+curl -X POST "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/68deb16211a12187d52ad0de/pages/723158910877351/subscribe"
+
+
+Expected: {"ok": true, "subscribed": true, "graph_response": {"success": true}}
+
+3. Kick initial sync (blocking — returns when done)
+
+curl -X POST "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/sync/68deb16211a12187d52ad0de"
+
+
+
+Expected: non-zero counts for campaigns, adsets, ads, insights_rows, forms, leads_fetched.
+
+4. Verify
+
+curl "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/68deb16211a12187d52ad0de/analytics?from=2026-03-22&to=2026-04-21"
+
+
+You'll get back summary.spend, campaigns[], daily_trend[], recent_leads[] populated for Dharmapuri only.
+```
