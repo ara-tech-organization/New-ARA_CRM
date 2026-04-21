@@ -707,6 +707,12 @@ export const getClientAnalytics = async (req, res) => {
   const dateRange = { $gte: since, $lte: until };
 
   // ---- Summary (campaign-level only — avoids double-counting adset/ad) ----
+  // We break leads into two buckets:
+  //   form_leads  = Meta "lead" action (Lead Ads form submissions)
+  //   whatsapp_leads = "onsite_conversion.messaging_conversation_started_7d"
+  //                    (CTWA conversations; includes Messenger too since Meta
+  //                    doesn't separate them without a breakdown parameter)
+  //   total_leads = form_leads + whatsapp_leads
   const [summaryAgg] = await MetaInsights.aggregate([
     {
       $match: {
@@ -723,28 +729,45 @@ export const getClientAnalytics = async (req, res) => {
         reach: { $sum: '$reach' },
         clicks: { $sum: '$clicks' },
         inline_link_clicks: { $sum: '$inline_link_clicks' },
-        leads: { $sum: '$leads' },
-        messaging_conversations_started: { $sum: '$messaging_conversations_started' },
+        form_leads: { $sum: '$leads' },
+        whatsapp_leads: { $sum: '$messaging_conversations_started' },
+        conversions: { $sum: '$conversions' },
+        video_thruplay: { $sum: '$video_thruplay' },
         rows: { $sum: 1 },
       },
     },
   ]);
   const sum = summaryAgg || {
     spend: 0, impressions: 0, reach: 0, clicks: 0, inline_link_clicks: 0,
-    leads: 0, messaging_conversations_started: 0, rows: 0,
+    form_leads: 0, whatsapp_leads: 0, conversions: 0, video_thruplay: 0, rows: 0,
   };
+  const totalLeads = (sum.form_leads || 0) + (sum.whatsapp_leads || 0);
   const summary = {
+    // Money
     spend: round2(sum.spend),
+    // Audience
     impressions: sum.impressions || 0,
     reach: sum.reach || 0,
+    // Actions
     clicks: sum.clicks || 0,
     inline_link_clicks: sum.inline_link_clicks || 0,
-    leads: sum.leads || 0,
-    messaging_conversations_started: sum.messaging_conversations_started || 0,
+    video_thruplay: sum.video_thruplay || 0,
+    // Lead breakdown
+    form_leads: sum.form_leads || 0,
+    whatsapp_leads: sum.whatsapp_leads || 0,
+    total_leads: totalLeads,
+    conversions: sum.conversions || 0,
+    // KPIs
     ctr: sum.impressions > 0 ? round2((sum.clicks / sum.impressions) * 100) : 0,
     cpc: sum.clicks > 0 ? round2(sum.spend / sum.clicks) : 0,
-    cpl: sum.leads > 0 ? round2(sum.spend / sum.leads) : 0,
     cpm: sum.impressions > 0 ? round2((sum.spend / sum.impressions) * 1000) : 0,
+    // Cost per lead, per bucket
+    cpl_form: sum.form_leads > 0 ? round2(sum.spend / sum.form_leads) : 0,
+    cpl_whatsapp: sum.whatsapp_leads > 0 ? round2(sum.spend / sum.whatsapp_leads) : 0,
+    cpl: totalLeads > 0 ? round2(sum.spend / totalLeads) : 0,
+    // Legacy aliases (old field names — keep until frontend migrates)
+    leads: totalLeads,
+    messaging_conversations_started: sum.whatsapp_leads || 0,
   };
 
   // ---- Daily trend (one row per day) ----
@@ -762,7 +785,8 @@ export const getClientAnalytics = async (req, res) => {
         spend: { $sum: '$spend' },
         impressions: { $sum: '$impressions' },
         clicks: { $sum: '$clicks' },
-        leads: { $sum: '$leads' },
+        form_leads: { $sum: '$leads' },
+        whatsapp_leads: { $sum: '$messaging_conversations_started' },
       },
     },
     { $sort: { _id: 1 } },
@@ -773,7 +797,11 @@ export const getClientAnalytics = async (req, res) => {
         spend: { $round: ['$spend', 2] },
         impressions: 1,
         clicks: 1,
-        leads: 1,
+        form_leads: 1,
+        whatsapp_leads: 1,
+        total_leads: { $add: ['$form_leads', '$whatsapp_leads'] },
+        // legacy alias
+        leads: { $add: ['$form_leads', '$whatsapp_leads'] },
       },
     },
   ]);
@@ -793,8 +821,8 @@ export const getClientAnalytics = async (req, res) => {
         spend: { $sum: '$spend' },
         impressions: { $sum: '$impressions' },
         clicks: { $sum: '$clicks' },
-        leads: { $sum: '$leads' },
-        messaging: { $sum: '$messaging_conversations_started' },
+        form_leads: { $sum: '$leads' },
+        whatsapp_leads: { $sum: '$messaging_conversations_started' },
       },
     },
     { $sort: { spend: -1 } },
@@ -808,6 +836,7 @@ export const getClientAnalytics = async (req, res) => {
 
   const campaigns = campaignAgg.map((c) => {
     const doc = campaignById.get(c._id) || {};
+    const totalLeads = (c.form_leads || 0) + (c.whatsapp_leads || 0);
     return {
       campaign_id: c._id,
       name: doc.name || '(unknown)',
@@ -818,10 +847,16 @@ export const getClientAnalytics = async (req, res) => {
       spend: round2(c.spend),
       impressions: c.impressions,
       clicks: c.clicks,
-      leads: c.leads,
-      messaging_conversations_started: c.messaging,
+      form_leads: c.form_leads || 0,
+      whatsapp_leads: c.whatsapp_leads || 0,
+      total_leads: totalLeads,
       ctr: c.impressions > 0 ? round2((c.clicks / c.impressions) * 100) : 0,
-      cpl: c.leads > 0 ? round2(c.spend / c.leads) : 0,
+      cpl_form: c.form_leads > 0 ? round2(c.spend / c.form_leads) : 0,
+      cpl_whatsapp: c.whatsapp_leads > 0 ? round2(c.spend / c.whatsapp_leads) : 0,
+      cpl: totalLeads > 0 ? round2(c.spend / totalLeads) : 0,
+      // legacy aliases
+      leads: totalLeads,
+      messaging_conversations_started: c.whatsapp_leads || 0,
     };
   });
 
