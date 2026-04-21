@@ -18,6 +18,13 @@ import {
   postReprocessForm,
   getRetryQueue,
   getRawLeads,
+  getClientConfig,
+  putClientConfig,
+  postTestConnection,
+  getClientAvailablePages,
+  postClientSubscribePage,
+  deleteClientSubscribePage,
+  getClientAnalytics,
 } from '../controllers/metaController.js';
 
 const router = express.Router();
@@ -42,6 +49,17 @@ router.post('/sync/ad-account/:adAccountId', postSyncAdAccount);
 router.get('/unassigned-forms', getUnassignedForms);
 router.post('/forms/:formId/assign', postAssignForm);
 router.post('/forms/:formId/reprocess', postReprocessForm);
+
+// Client config + onboarding
+router.get('/client/:clientId/config', getClientConfig);
+router.put('/client/:clientId/config', putClientConfig);
+router.post('/client/:clientId/test-connection', postTestConnection);
+router.get('/client/:clientId/available-pages', getClientAvailablePages);
+router.post('/client/:clientId/pages/:pageId/subscribe', postClientSubscribePage);
+router.delete('/client/:clientId/pages/:pageId/subscribe', deleteClientSubscribePage);
+
+// Per-client analytics (Meta-only; sibling to /api/analytics/client/:clientId for Google)
+router.get('/client/:clientId/analytics', getClientAnalytics);
 
 // Utilities
 router.get('/ad-account/:adAccountId/verify', getVerifyAdAccount);

@@ -25,6 +25,7 @@ import {
   syncFormsForClient,
   pollLeadsForClient,
 } from '../services/metaFormSyncService.js';
+import { reconcileMetaSpend } from '../services/metaBillingService.js';
 
 const INSIGHTS_BACKFILL_DAYS = parseInt(process.env.META_INSIGHTS_BACKFILL_DAYS, 10) || 30;
 
@@ -411,6 +412,38 @@ export const syncMetaClient = async (client, { deep = false, run } = {}) => {
       });
       result.stages.push({ stage: 'leads', status: 'failed', message: err?.message });
     }
+  }
+
+  // Billing reconciliation — runs *after* insights are in DB so it reads
+  // the freshly-upserted rows. Honors META_BILLING_DRY_RUN internally.
+  try {
+    const backfillDays = parseInt(process.env.META_INSIGHTS_BACKFILL_DAYS, 10) || 30;
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - (deep ? 365 : backfillDays));
+    const billing = await reconcileMetaSpend(client, { since });
+    result.stages.push({
+      stage: 'billing',
+      status: billing.errors.length ? 'partial' : 'ok',
+      debits: billing.debits,
+      credits: billing.credits,
+      dry_run: billing.dry_run,
+    });
+    for (const e of billing.errors) {
+      run?.errors.push({
+        client_id: client._id,
+        stage: 'billing',
+        message: `campaign=${e.campaign_id} — ${e.message}`,
+        at: new Date(),
+      });
+    }
+  } catch (err) {
+    run?.errors.push({
+      client_id: client._id,
+      stage: 'billing',
+      message: err?.message || String(err),
+      at: new Date(),
+    });
+    result.stages.push({ stage: 'billing', status: 'failed', message: err?.message });
   }
 
   try {
