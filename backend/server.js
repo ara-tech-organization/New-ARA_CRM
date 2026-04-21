@@ -22,6 +22,7 @@ import personalVaultRoutes from "./routes/personalVault.js";
 import contentEntryRoutes from "./routes/contentEntries.js";
 import metricsRoutes from "./routes/metrics.js";
 import googleAdsRoutes from "./routes/googleAds.js";
+import metaRoutes from "./routes/meta.js";
 import analyticsRoutes from "./routes/analytics.js";
 import paymentRoutes from "./routes/payments.js";
 import billingRoutes from "./routes/billing.js";
@@ -82,8 +83,20 @@ const limiter = rateLimit({
 // Apply rate limiting to all routes
 // app.use('/api/', limiter);
 
-// Body parser middleware
-app.use(express.json({ limit: "10mb" }));
+// Body parser middleware.
+// For Meta webhook verification we need the raw request body to compute
+// HMAC-SHA256 against X-Hub-Signature-256. Capture it only for that path —
+// the string copy is negligible but unnecessary elsewhere.
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req, _res, buf) => {
+      if (buf?.length && req.originalUrl?.startsWith("/api/meta/webhook")) {
+        req.rawBody = buf;
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Cookie parser middleware
@@ -111,6 +124,7 @@ app.use("/api/personal-vault", personalVaultRoutes);
 app.use("/api/content-entries", contentEntryRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/google-ads", googleAdsRoutes);
+app.use("/api/meta", metaRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/billing", billingRoutes);
