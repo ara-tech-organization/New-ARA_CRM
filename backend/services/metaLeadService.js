@@ -102,6 +102,11 @@ const writeLead = async ({ raw, client, formDoc, apiLead }) => {
   const email = mapped.email || `noemail+${raw.leadgen_id}@meta-lead.local`;
   const name = mapped.name || `Meta Lead ${raw.leadgen_id}`;
 
+  // Meta's `created_time` is ISO-8601 (e.g. "2026-04-20T23:56:24+0000").
+  const metaCreatedTime = apiLead?.created_time
+    ? new Date(apiLead.created_time)
+    : null;
+
   const update = {
     $setOnInsert: {
       meta_leadgen_id: raw.leadgen_id,
@@ -127,6 +132,9 @@ const writeLead = async ({ raw, client, formDoc, apiLead }) => {
       utm_content: utm.utm_content,
       utm_term: utm.utm_term,
       raw_field_data: apiLead?.field_data || [],
+      ...(metaCreatedTime && !Number.isNaN(metaCreatedTime.getTime())
+        ? { meta_created_time: metaCreatedTime }
+        : {}),
     },
   };
 
