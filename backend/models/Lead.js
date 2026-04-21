@@ -54,6 +54,11 @@ const leadSchema = new mongoose.Schema(
 
     // Meta (Facebook / Instagram) lead fields
     meta_leadgen_id: { type: String, trim: true, unique: true, sparse: true },
+    // Meta's authoritative form-submission timestamp (from leadgen.created_time).
+    // Use THIS for "when did the user actually fill the form" — `createdAt`
+    // reflects when our sync/webhook ingested it, which can be hours/days later
+    // for backfilled leads.
+    meta_created_time: { type: Date },
     meta_form_id: { type: String, trim: true, default: '' },
     meta_form_name: { type: String, trim: true, default: '' },
     meta_campaign_id: { type: String, trim: true, default: '' },
@@ -85,6 +90,8 @@ leadSchema.index({ source: 1 });
 leadSchema.index({ createdAt: -1 });
 leadSchema.index({ assignedTo: 1 });
 leadSchema.index({ client: 1, createdAt: -1 });
+leadSchema.index({ client: 1, meta_created_time: -1 });
+leadSchema.index({ meta_created_time: -1 });
 leadSchema.index({ meta_form_id: 1, createdAt: -1 });
 leadSchema.index({ meta_campaign_id: 1 });
 leadSchema.index({ meta_ad_id: 1 });

@@ -13,7 +13,6 @@ import MetaAdSet from '../models/MetaAdSet.js';
 import MetaAd from '../models/MetaAd.js';
 import MetaInsights from '../models/MetaInsights.js';
 import Lead from '../models/Lead.js';
-import BillingTransaction from '../models/BillingTransaction.js';
 import {
   syncAllMetaClients,
   syncSingleMetaClient,
@@ -895,25 +894,6 @@ export const getClientAnalytics = async (req, res) => {
     .limit(50)
     .lean();
 
-  // ---- Billing ----
-  const billingTxns = await BillingTransaction.find({
-    client_id: clientId,
-    source: { $in: ['meta_ads_daily_spend', 'meta_ads_refund', 'meta_ads_adjustment'] },
-    occurred_at: dateRange,
-  })
-    .sort({ occurred_at: -1 })
-    .limit(500)
-    .lean();
-
-  const billing_totals = billingTxns.reduce(
-    (acc, t) => {
-      if (t.type === 'debit') acc.total_debits = round2(acc.total_debits + t.amount);
-      else if (t.type === 'credit') acc.total_credits = round2(acc.total_credits + t.amount);
-      return acc;
-    },
-    { total_debits: 0, total_credits: 0 }
-  );
-
   // ---- Live Meta-side figures ------------------------------------------
   // Meta exposes the prepaid balance + lifetime spend directly, unlike
   // Google Ads. Pull them on every analytics fetch so the frontend always
@@ -951,24 +931,6 @@ export const getClientAnalytics = async (req, res) => {
     daily_trend: dailyTrend,
     lead_forms,
     recent_leads,
-    billing: {
-      ...billing_totals,
-      available_balance: round2(client.billing?.available_balance),
-      total_added_funds: round2(client.billing?.total_added_funds),
-      total_spend: round2(client.billing?.total_spend),
-      low_balance_threshold: client.billing?.low_balance_threshold || 0,
-      meta_live_balance: meta_account?.balance ?? null,
-      meta_lifetime_spend: meta_account?.amount_spent ?? null,
-      transactions: billingTxns.map((t) => ({
-        type: t.type,
-        amount: t.amount,
-        source: t.source,
-        occurred_at: t.occurred_at,
-        campaign_id: t.reference?.campaign_id,
-        campaign_name: t.reference?.campaign_name,
-        metric_date: t.reference?.metric_date,
-      })),
-    },
     meta_account,
     entity_counts: {
       campaigns: await MetaCampaign.countDocuments({ client_id: clientId }),
