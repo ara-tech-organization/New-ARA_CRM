@@ -25,6 +25,7 @@ import {
   postClientSubscribePage,
   deleteClientSubscribePage,
   getClientAnalytics,
+  getAllPages,
 } from '../controllers/metaController.js';
 
 const router = express.Router();
@@ -60,6 +61,9 @@ router.delete('/client/:clientId/pages/:pageId/subscribe', deleteClientSubscribe
 
 // Per-client analytics (Meta-only; sibling to /api/analytics/client/:clientId for Google)
 router.get('/client/:clientId/analytics', getClientAnalytics);
+
+// Directory
+router.get('/pages', getAllPages);
 
 // Utilities
 router.get('/ad-account/:adAccountId/verify', getVerifyAdAccount);
