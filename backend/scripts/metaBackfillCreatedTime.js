@@ -97,9 +97,25 @@ for (const form of forms) {
   }
 
   if (APPLY && ops.length) {
-    const result = await Lead.bulkWrite(ops, { ordered: false });
-    updatedLeads += result.modifiedCount || 0;
-    console.log(`      → updated ${result.modifiedCount || 0} leads`);
+    // Cosmos DB chokes on large bulkWrites. Chunk at 50 so each command
+    // stays well under the server-side timeout.
+    const CHUNK = 50;
+    let modifiedForForm = 0;
+    for (let i = 0; i < ops.length; i += CHUNK) {
+      const slice = ops.slice(i, i + CHUNK);
+      try {
+        const result = await Lead.bulkWrite(slice, { ordered: false });
+        modifiedForForm += result.modifiedCount || 0;
+      } catch (err) {
+        // A partial-batch timeout is still a failure — log and move on so
+        // one form doesn't stall the rest of the backfill.
+        console.log(
+          `      ! chunk ${i}-${i + slice.length} failed: ${err.message}`
+        );
+      }
+    }
+    updatedLeads += modifiedForForm;
+    console.log(`      → updated ${modifiedForForm}/${ops.length} leads`);
   } else if (!APPLY && ops.length) {
     console.log(`      → ${ops.length} leads would be updated (dry-run)`);
   }

@@ -135,7 +135,7 @@ Live status of the background scheduler plus the most recent run.
 **cURL:**
 
 ```bash
-curl -s https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/sync-status
+curl -s https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/sync-status
 ```
 
 ---
@@ -208,7 +208,7 @@ Trigger a full sync of every meta-enabled client. Fire-and-forget — returns im
 **cURL:**
 
 ```bash
-curl -X POST https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/sync
+curl -X POST https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/sync
 ```
 
 ---
@@ -261,7 +261,7 @@ curl -X POST https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net
 **cURL:**
 
 ```bash
-curl -X POST https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/sync/69e7189d1f64a29d76ae5979
+curl -X POST https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/sync/69e7189d1f64a29d76ae5979
 ```
 
 ---
@@ -690,7 +690,7 @@ Onboard or update a client's Meta linkage. All fields are optional; pass only wh
 **cURL:**
 
 ```bash
-curl -X PUT https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/69e7189d.../config \
+curl -X PUT https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/client/69e7189d.../config \
   -H 'Content-Type: application/json' \
   -d '{"meta_enabled":true,"meta_ad_account_id":"act_800798932805550"}'
 ```
@@ -940,7 +940,7 @@ Unsubscribe a Page. Keeps the row in `meta_pages` but flips `subscribed: false`.
 **cURL:**
 
 ```bash
-curl -s "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/69e7189d1f64a29d76ae5979/analytics?from=2026-04-01&to=2026-04-21"
+curl -s "https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/client/69e7189d1f64a29d76ae5979/analytics?from=2026-04-01&to=2026-04-21"
 ```
 
 ---
@@ -971,11 +971,11 @@ Once all of these are live on Azure, every endpoint in this document works end-t
 
 1. Set the ad account
 
-curl -X PUT "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/68deb16211a12187d52ad0de/config" \
+curl -X PUT "https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/client/68e7a5df061e3d76f3cb10a5/config" \
   -H "Content-Type: application/json" \
   -d '{
     "meta_enabled": true,
-    "meta_ad_account_id": "act_967896905356867"
+    "meta_ad_account_id": "act_1543617913485113"
   }'
 
 
@@ -983,14 +983,14 @@ Expected: {"success": true, "config": {"meta_ad_account_name": "Adgrohair Dharma
 
 2. Attach + subscribe the Page
 
-curl -X POST "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/68deb16211a12187d52ad0de/pages/723158910877351/subscribe"
+curl -X POST "https:// ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/client/68e7a5df061e3d76f3cb10a5/pages/663654716841502/subscribe"
 
 
 Expected: {"ok": true, "subscribed": true, "graph_response": {"success": true}}
 
 3. Kick initial sync (blocking — returns when done)
 
-curl -X POST "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/sync/68deb16211a12187d52ad0de"
+curl -X POST "https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/sync/68e7a5df061e3d76f3cb10a5"
 
 
 
@@ -998,7 +998,7 @@ Expected: non-zero counts for campaigns, adsets, ads, insights_rows, forms, lead
 
 4. Verify
 
-curl "https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net/api/meta/client/68deb16211a12187d52ad0de/analytics?from=2026-03-22&to=2026-04-21"
+curl "https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/client/68e7a5df061e3d76f3cb10a5/analytics?from=2026-03-22&to=2026-04-21"
 
 
 You'll get back summary.spend, campaigns[], daily_trend[], recent_leads[] populated for Dharmapuri only.
