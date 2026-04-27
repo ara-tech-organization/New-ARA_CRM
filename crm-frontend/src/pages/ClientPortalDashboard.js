@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -27,9 +27,12 @@ const CREAM = '#FFF8F0';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
 
-const API_URL = process.env.NODE_ENV === 'development'
-  ? '/api'
-  : (process.env.REACT_APP_API_URL || '/api');
+// Match the main CRM axios config: always point at the real backend
+// (REACT_APP_API_URL from .env), falling back to the production host.
+// Previously this used '/api' in dev mode, which required a proxy that
+// doesn't exist — every call 404'd against localhost:3000.
+const API_URL = process.env.REACT_APP_API_URL
+  || 'https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api';
 
 const fmtNum = (n) => (n ?? 0).toLocaleString('en-IN');
 const fmtINR = (n) => `₹${Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -70,7 +73,11 @@ const ClientPortalDashboard = () => {
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [expandedCampaigns, setExpandedCampaigns] = useState({});
-  const metaData = null; // TODO: wire up when Meta API is ready
+  // Use the raw Meta analytics response directly — mirrors how the admin
+  // ClientAdDetails page consumes it (snake_case, no renaming). Keeping
+  // shapes identical means the portal and admin stay in sync if the API
+  // grows fields.
+  const metaData = data?.meta || null;
 
   const clientApi = useMemo(() => {
     const instance = axios.create({ baseURL: API_URL, headers: { 'Content-Type': 'application/json' } });
@@ -96,22 +103,94 @@ const ClientPortalDashboard = () => {
 
   const fetchAnalytics = async () => {
     setLoading(true); setError(null);
+    const clientId = clientData?._id;
+    // Call both ad platforms DIRECTLY — same way the admin page does —
+    // so we use each endpoint's own response as the source of truth for
+    // "is this linked?". Skips the backend's internal proxy, which was
+    // flaky on Azure (localhost loopback timeouts).
+    const [googleRes, metaRes] = await Promise.allSettled([
+      clientId
+        ? clientApi.get(`/analytics/client/${clientId}`, {
+            params: { start_date: dateFrom, end_date: dateTo },
+            timeout: 20000,
+          })
+        : Promise.resolve(null),
+      clientId
+        ? clientApi.get(`/meta/client/${clientId}/analytics`, {
+            params: { from: dateFrom, to: dateTo },
+            timeout: 20000,
+          })
+        : Promise.resolve(null),
+    ]);
+
     try {
-      const res = await clientApi.get('/client-portal/analytics', {
-        params: { start_date: dateFrom, end_date: dateTo },
-        timeout: 10000,
-      });
-      setData(res.data || null);
-    } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to fetch data';
-      setError(msg);
-      setData(null);
+      // Google: 200 with data → linked; 400 with "does not have Google Ads enabled" → not linked.
+      let googleData = null;
+      let googleLinked = false;
+      if (googleRes.status === 'fulfilled' && googleRes.value) {
+        googleData = googleRes.value.data || null;
+        googleLinked = true;
+      } else if (googleRes.status === 'rejected' && googleRes.reason?.response?.status === 400) {
+        // 400 is the "not linked" signal from /api/analytics/client/:id
+        googleLinked = false;
+      } else if (googleRes.status === 'rejected') {
+        // Network error / timeout / 5xx — treat as unknown, not "not linked"
+        googleLinked = clientData?.googleAdsEnabled === true;
+      }
+
+      // Meta: the analytics endpoint returns 200 with an empty body even for
+      // unlinked clients — so "response arrived" is NOT proof of linkage.
+      // The authoritative signal is `meta_account.id` in the body, which the
+      // backend only populates when the client actually has a verified
+      // meta_ad_account_id set.
+      const metaData = metaRes.status === 'fulfilled' && metaRes.value ? metaRes.value.data : null;
+      const metaLinked = !!(metaData && metaData.meta_account && metaData.meta_account.id && !metaData.meta_account.error);
+
+      const merged = {
+        ...(googleData || {
+          client: { _id: clientId, clientName: clientData?.clientName || '' },
+          summary: {},
+          campaignMetrics: [],
+          keywords: [],
+          dailyMetrics: [],
+        }),
+        integrations: { google_enabled: googleLinked, meta_enabled: metaLinked },
+      };
+      if (metaData) merged.meta = metaData;
+
+      setData(merged);
+
+      // Only surface a global error when BOTH direct calls failed with something
+      // other than the clean "not linked" signal.
+      const googleHardFail = googleRes.status === 'rejected' && googleRes.reason?.response?.status !== 400;
+      const metaHardFail = metaRes.status === 'rejected';
+      if (googleHardFail && metaHardFail) {
+        setError(
+          googleRes.reason?.response?.data?.message
+          || googleRes.reason?.response?.data?.error
+          || googleRes.reason?.message
+          || 'Failed to fetch data'
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { if (token) fetchAnalytics(); }, [dateFrom, dateTo]);
+
+  // Auto-select the tab that has data, once, on first load. If the client
+  // has only Meta linked (no Google), jump them straight to the Meta tab
+  // instead of making them see the "Google not linked" banner first.
+  // If neither is linked, stay on Google so the banner explains why.
+  const autoSwitchedRef = useRef(false);
+  useEffect(() => {
+    if (autoSwitchedRef.current) return;
+    if (!data?.integrations) return;
+    const { google_enabled, meta_enabled } = data.integrations;
+    if (!google_enabled && meta_enabled) setTab(1);
+    autoSwitchedRef.current = true;
+  }, [data]);
 
   const handleLogout = () => {
     localStorage.removeItem('clientToken');
@@ -273,8 +352,36 @@ const ClientPortalDashboard = () => {
         {/* Error */}
         {!loading && error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        {/* Data */}
-        {data && (
+        {/* Prefer the backend's authoritative flag, fall back to the
+            login-time `clientData.googleAdsEnabled` so the banner works
+            even if the backend hasn't been redeployed with the updated
+            /client-portal/analytics response yet. */}
+        {data && (() => {
+          const googleEnabled = data.integrations?.google_enabled
+            ?? clientData?.googleAdsEnabled;
+          const googleLinked = googleEnabled === true;
+          if (!googleLinked) {
+            return (
+              <Alert
+                severity="info"
+                icon={<GoogleIcon sx={{ color: GOOGLE_GREEN }} />}
+                sx={{ mb: 2, borderLeft: `4px solid ${GOOGLE_GREEN}` }}
+              >
+                <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.3 }}>
+                  Google Ads is not linked for this account
+                </Typography>
+                <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
+                  Your Google Ads performance will appear here once your agency connects your Google Ads account.
+                  Please contact your account manager to set it up.
+                </Typography>
+              </Alert>
+            );
+          }
+          return null;
+        })()}
+
+        {/* Data (only when Google is actually linked) */}
+        {data && (data.integrations?.google_enabled ?? clientData?.googleAdsEnabled) === true && (
           <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.2s' }}>
             {/* KPIs */}
             {summary && (
@@ -426,27 +533,68 @@ const ClientPortalDashboard = () => {
         )}
         </>)}
 
-        {/* META ADS TAB — UI scaffold ready for Meta Marketing API integration */}
+        {/* META ADS TAB — mirrors the admin ClientAdDetails Meta tab exactly */}
         {tab === 1 && (() => {
-          const metaAccount = metaData?.account;
+          const metaAccount = metaData?.meta_account;
           const metaBilling = metaData?.billing;
           const metaSummary = metaData?.summary;
           const metaCampaigns = metaData?.campaigns || [];
-          const metaPlacements = metaData?.placements || [];
-          const metaDemographics = metaData?.demographics || [];
-          const metaDaily = metaData?.dailyMetrics || [];
+          const metaDaily = metaData?.daily_trend || [];
+          const metaLeadForms = metaData?.lead_forms || [];
+          const metaRecentLeads = metaData?.recent_leads || [];
+          const metaRange = metaData?.range;
+          const metaEntityCounts = metaData?.entity_counts || {};
+          const accountStatusLabel = metaAccount?.account_status === 1 ? 'Active'
+            : metaAccount?.account_status === 2 ? 'Disabled'
+            : metaAccount?.account_status === 3 ? 'Unsettled'
+            : metaAccount?.account_status === 7 ? 'Pending Risk Review'
+            : metaAccount?.account_status === 8 ? 'Pending Settlement'
+            : metaAccount?.account_status === 9 ? 'In Grace Period'
+            : metaAccount?.account_status === 100 ? 'Pending Closure'
+            : metaAccount?.account_status === 101 ? 'Closed'
+            : null;
+          const isAccountActive = metaAccount?.account_status === 1;
+          const isLowAccountBalance = metaAccount?.balance != null
+            && metaBilling?.low_balance_threshold != null
+            && metaAccount.balance < metaBilling.low_balance_threshold;
+
+          // Prefer backend flag; fall back to "Meta analytics returned data".
+          // Strict true-check so missing/undefined flag doesn't silently
+          // hide the "not linked" banner.
+          const metaEnabled = data?.integrations?.meta_enabled === true
+            || (data?.integrations === undefined && metaData != null);
 
           return (
             <>
-              {!metaData && (
-                <Alert severity="info" icon={<FacebookIcon sx={{ color: META_BLUE }} />} sx={{ mb: 2 }}>
-                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.3 }}>Meta Ads Coming Soon</Typography>
+              {/* Not integrated — short-circuit: hide everything else. */}
+              {!metaEnabled && (
+                <Alert
+                  severity="info"
+                  icon={<FacebookIcon sx={{ color: META_BLUE }} />}
+                  sx={{ mb: 2, borderLeft: `4px solid ${META_BLUE}` }}
+                >
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.3 }}>
+                    Meta Ads is not linked for this account
+                  </Typography>
                   <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
-                    Your Meta Ads performance will appear here once integration is complete.
+                    Your Facebook / Instagram Ads performance will appear here once your agency connects your Meta Ad Account.
+                    Please contact your account manager to set it up.
                   </Typography>
                 </Alert>
               )}
 
+              {/* Integrated but no data yet (sync still running or empty range). */}
+              {metaEnabled && !metaData && (
+                <Alert severity="info" icon={<FacebookIcon sx={{ color: META_BLUE }} />} sx={{ mb: 2 }}>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.3 }}>No Meta data yet</Typography>
+                  <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
+                    Your Meta Ads are connected but no data has been fetched yet, or the selected date range has no activity.
+                  </Typography>
+                </Alert>
+              )}
+
+              {/* The rest of the tab is only rendered when Meta is linked. */}
+              {metaEnabled && (<>
               {/* Date filter */}
               <Card variant="outlined" sx={{ mb: 2 }}>
                 <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
@@ -475,89 +623,131 @@ const ClientPortalDashboard = () => {
                 </CardContent>
               </Card>
 
-              {/* Account Info */}
+              {/* Account info panel — mirrors admin layout */}
               <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: `${META_BLUE}06` }}>
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Page Name</Typography>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.pageName || '—'}</Typography>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.name || '—'}</Typography>
+                    {metaAccount?.id && (
+                      <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', fontFamily: 'monospace' }}>{metaAccount.id}</Typography>
+                    )}
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account ID</Typography>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, fontFamily: 'monospace' }}>{metaAccount?.adAccountId || '—'}</Typography>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency / Time Zone</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                      {metaAccount?.currency || '—'} · {metaAccount?.timezone_name || '—'}
+                    </Typography>
                   </Grid>
+                  {metaRange && (
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Data Range</Typography>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                        {fmtDate(metaRange.from)} – {fmtDate(metaRange.to)}
+                      </Typography>
+                    </Grid>
+                  )}
                   <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency</Typography>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.currency || '—'}</Typography>
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Time Zone</Typography>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.timezone || '—'}</Typography>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Entities</Typography>
+                    <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+                      <Chip label={`${metaEntityCounts.campaigns ?? 0} campaigns`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
+                      <Chip label={`${metaEntityCounts.adsets ?? 0} ad sets`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${COPPER}15`, color: COPPER, fontWeight: 600 }} />
+                      <Chip label={`${metaEntityCounts.ads ?? 0} ads`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${BROWN}15`, color: BROWN, fontWeight: 600 }} />
+                    </Box>
                   </Grid>
                 </Grid>
               </Paper>
 
-              {/* Billing */}
-              <Card variant="outlined" sx={{ borderLeft: `3px solid ${META_BLUE}`, mb: 2 }}>
-                <CardContent>
-                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1.5 }}>Billing & Budget</Typography>
-                  <Grid container spacing={1.5}>
-                    <Grid size={{ xs: 6, md: 3 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Total Added</Typography>
-                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: BROWN }}>{metaBilling?.total_added_funds != null ? fmtINR(metaBilling.total_added_funds) : '—'}</Typography>
+              {/* Billing — mirrors admin layout */}
+              {(metaAccount || metaBilling) && (
+                <Card variant="outlined" sx={{ borderLeft: `3px solid ${META_BLUE}`, mb: 2 }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem' }}>Billing</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        {accountStatusLabel && (
+                          <Chip
+                            label={accountStatusLabel}
+                            size="small"
+                            sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600,
+                              bgcolor: isAccountActive ? '#10b98115' : '#ef444415',
+                              color: isAccountActive ? '#10b981' : '#ef4444' }}
+                          />
+                        )}
+                        {metaAccount?.disable_reason > 0 && (
+                          <Chip label={`Disable Reason ${metaAccount.disable_reason}`} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600, bgcolor: '#ef444415', color: '#ef4444' }} />
+                        )}
+                        {metaAccount?.fetched_at && (
+                          <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                            Fetched {new Date(metaAccount.fetched_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                    <Grid container spacing={1.5}>
+                      {metaAccount?.balance != null && (
+                        <Grid size={{ xs: 6, md: 2 }}>
+                          <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account Balance</Typography>
+                          <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: isLowAccountBalance ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            {fmtINR(metaAccount.balance)}
+                            {isLowAccountBalance && <WarningIcon sx={{ fontSize: 14 }} />}
+                          </Typography>
+                        </Grid>
+                      )}
+                      {metaAccount?.amount_spent != null && (
+                        <Grid size={{ xs: 6, md: 2 }}>
+                          <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Spent</Typography>
+                          <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: META_BLUE }}>{fmtINR(metaAccount.amount_spent)}</Typography>
+                        </Grid>
+                      )}
                     </Grid>
-                    <Grid size={{ xs: 6, md: 3 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Spent</Typography>
-                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: META_BLUE }}>{metaBilling?.total_spend != null ? fmtINR(metaBilling.total_spend) : '—'}</Typography>
-                    </Grid>
-                    <Grid size={{ xs: 6, md: 3 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Available</Typography>
-                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#10b981' }}>{metaBilling?.available_balance != null ? fmtINR(metaBilling.available_balance) : '—'}</Typography>
-                    </Grid>
-                    <Grid size={{ xs: 6, md: 3 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Daily Budget</Typography>
-                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: COPPER }}>{metaBilling?.daily_budget != null ? fmtINR(metaBilling.daily_budget) : '—'}</Typography>
-                    </Grid>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Performance Summary — admin two-row KPI layout */}
+              {metaSummary && (
+                <>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                    Performance Summary
+                  </Typography>
+                  <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                    {metaSummary.spend != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Spend" value={fmtINR(metaSummary.spend)} color={META_BLUE} icon={<WalletIcon />} /></Grid>}
+                    {metaSummary.total_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Total Leads" value={fmtNum(metaSummary.total_leads)} color={META_BLUE} icon={<GroupsIcon />} sublabel={metaSummary.cpl != null ? `${fmtINR(metaSummary.cpl)}/lead` : null} /></Grid>}
+                    {metaSummary.form_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Form Leads" value={fmtNum(metaSummary.form_leads)} color={COPPER} icon={<GroupsIcon />} sublabel={metaSummary.cpl_form != null ? `${fmtINR(metaSummary.cpl_form)}/lead` : null} /></Grid>}
+                    {metaSummary.whatsapp_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="WhatsApp Leads" value={fmtNum(metaSummary.whatsapp_leads)} color={BROWN} icon={<ChatIcon />} sublabel={metaSummary.cpl_whatsapp != null ? `${fmtINR(metaSummary.cpl_whatsapp)}/lead` : null} /></Grid>}
+                    {metaSummary.cpl != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPL (Overall)" value={fmtINR(metaSummary.cpl)} color={META_BLUE} icon={<MoneyIcon />} /></Grid>}
+                    {metaSummary.reach != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Reach" value={fmtNum(metaSummary.reach)} color={COPPER} icon={<PeopleIcon />} /></Grid>}
                   </Grid>
-                </CardContent>
-              </Card>
+                  <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                    {metaSummary.impressions != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Impressions" value={fmtNum(metaSummary.impressions)} color={META_BLUE} icon={<VisibilityIcon />} /></Grid>}
+                    {metaSummary.clicks != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Clicks" value={fmtNum(metaSummary.clicks)} color={COPPER} icon={<TrendingUpIcon />} /></Grid>}
+                    {metaSummary.ctr != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CTR" value={fmtPct(metaSummary.ctr)} color={BROWN} icon={<ShowChartIcon />} /></Grid>}
+                    {metaSummary.cpc != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPC" value={fmtINR(metaSummary.cpc)} color={META_BLUE} icon={<MoneyIcon />} /></Grid>}
+                    {metaSummary.cpm != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPM" value={fmtINR(metaSummary.cpm)} color={COPPER} icon={<MoneyIcon />} /></Grid>}
+                  </Grid>
+                </>
+              )}
 
-              {/* KPIs */}
-              <Grid container spacing={1.5} sx={{ mb: 2 }}>
-                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Spend" value={metaSummary?.spend != null ? fmtINR(metaSummary.spend) : '—'} color={META_BLUE} icon={<WalletIcon />} /></Grid>
-                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Reach" value={metaSummary?.reach != null ? fmtNum(metaSummary.reach) : '—'} color={COPPER} icon={<PeopleIcon />} /></Grid>
-                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Impressions" value={metaSummary?.impressions != null ? fmtNum(metaSummary.impressions) : '—'} color={META_BLUE} icon={<VisibilityIcon />} /></Grid>
-                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Clicks" value={metaSummary?.clicks != null ? fmtNum(metaSummary.clicks) : '—'} color={COPPER} icon={<TrendingUpIcon />} /></Grid>
-                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CTR" value={metaSummary?.ctr != null ? fmtPct(metaSummary.ctr) : '—'} color={BROWN} icon={<ShowChartIcon />} /></Grid>
-                <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPC" value={metaSummary?.cpc != null ? fmtINR(metaSummary.cpc) : '—'} color={META_BLUE} icon={<MoneyIcon />} /></Grid>
-              </Grid>
-
-              <Grid container spacing={1.5} sx={{ mb: 2 }}>
-                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Conversions" value={metaSummary?.conversions != null ? fmtNum(metaSummary.conversions) : '—'} color={BROWN} icon={<CampaignIcon />} sublabel={metaSummary?.cpa ? `${fmtINR(metaSummary.cpa)}/conv` : null} /></Grid>
-                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Leads" value={metaSummary?.leads != null ? fmtNum(metaSummary.leads) : '—'} color={META_BLUE} icon={<GroupsIcon />} sublabel={metaSummary?.cpl ? `${fmtINR(metaSummary.cpl)}/lead` : null} /></Grid>
-                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Messages" value={metaSummary?.messaging_conversations != null ? fmtNum(metaSummary.messaging_conversations) : '—'} color={COPPER} icon={<ChatIcon />} /></Grid>
-                <Grid size={{ xs: 6, md: 3 }}><KpiCard label="Frequency" value={metaSummary?.frequency != null ? Number(metaSummary.frequency).toFixed(2) : '—'} color={BROWN} icon={<ShowChartIcon />} /></Grid>
-              </Grid>
-
-              {/* Campaigns Table */}
+              {/* Campaigns — admin column set */}
               <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
                 Campaigns {metaCampaigns.length > 0 && `(${metaCampaigns.length})`}
               </Typography>
               <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
-                <Table size="small" sx={{ minWidth: 1100 }}>
+                <Table size="small" sx={{ minWidth: 1200 }}>
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Campaign</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Objective</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Daily Budget</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Spend</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Reach</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impr.</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
                       <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPC</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Results</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Cost/Result</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPL</TableCell>
+                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Messages</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -568,24 +758,24 @@ const ClientPortalDashboard = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      metaCampaigns.map(c => (
-                        <TableRow key={c.campaignId} hover>
+                      metaCampaigns.map((c) => (
+                        <TableRow key={c.campaign_id} hover>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
                               <CampaignIcon sx={{ fontSize: 14, color: META_BLUE }} />
-                              {c.campaignName}
+                              {c.name}
                             </Box>
                           </TableCell>
                           <TableCell><Chip label={c.objective} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600 }} /></TableCell>
                           <TableCell><Chip label={c.status} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: c.status === 'ACTIVE' ? '#10b98115' : '#ef444415', color: c.status === 'ACTIVE' ? '#10b981' : '#ef4444' }} /></TableCell>
+                          <TableCell align="right">{c.daily_budget != null ? fmtINR(c.daily_budget) : '—'}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtINR(c.spend)}</TableCell>
-                          <TableCell align="right">{fmtNum(c.reach)}</TableCell>
                           <TableCell align="right">{fmtNum(c.impressions)}</TableCell>
                           <TableCell align="right">{fmtNum(c.clicks)}</TableCell>
                           <TableCell align="right">{fmtPct(c.ctr)}</TableCell>
-                          <TableCell align="right">{fmtINR(c.cpc)}</TableCell>
-                          <TableCell align="right">{fmtNum(c.results)}</TableCell>
-                          <TableCell align="right">{c.costPerResult != null ? fmtINR(c.costPerResult) : '—'}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtNum(c.total_leads ?? c.form_leads ?? 0)}</TableCell>
+                          <TableCell align="right">{c.cpl != null ? fmtINR(c.cpl) : '—'}</TableCell>
+                          <TableCell align="right">{fmtNum(c.messenger_leads ?? c.whatsapp_leads ?? 0)}</TableCell>
                         </TableRow>
                       ))
                     )}
@@ -593,81 +783,11 @@ const ClientPortalDashboard = () => {
                 </Table>
               </TableContainer>
 
-              {/* Placement + Demographics */}
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card variant="outlined">
-                    <CardContent>
-                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1 }}>Placement Breakdown</Typography>
-                      <TableContainer>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }}>Placement</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Impr.</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Clicks</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Spend</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {metaPlacements.length === 0 ? (
-                              <TableRow><TableCell colSpan={4} align="center" sx={{ py: 2, color: 'text.secondary', fontStyle: 'italic', fontSize: '0.78rem' }}>No placement data</TableCell></TableRow>
-                            ) : (
-                              metaPlacements.map((p, i) => (
-                                <TableRow key={i}>
-                                  <TableCell sx={{ fontSize: '0.78rem', fontWeight: 600, textTransform: 'capitalize' }}>{p.placement}</TableCell>
-                                  <TableCell align="right" sx={{ fontSize: '0.78rem' }}>{fmtNum(p.impressions)}</TableCell>
-                                  <TableCell align="right" sx={{ fontSize: '0.78rem' }}>{fmtNum(p.clicks)}</TableCell>
-                                  <TableCell align="right" sx={{ fontSize: '0.78rem', fontWeight: 600, color: META_BLUE }}>{fmtINR(p.spend)}</TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card variant="outlined">
-                    <CardContent>
-                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1 }}>Demographics</Typography>
-                      <TableContainer>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }}>Age</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }}>Gender</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Reach</TableCell>
-                              <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem' }} align="right">Spend</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {metaDemographics.length === 0 ? (
-                              <TableRow><TableCell colSpan={4} align="center" sx={{ py: 2, color: 'text.secondary', fontStyle: 'italic', fontSize: '0.78rem' }}>No demographics data</TableCell></TableRow>
-                            ) : (
-                              metaDemographics.map((d, i) => (
-                                <TableRow key={i}>
-                                  <TableCell sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{d.age}</TableCell>
-                                  <TableCell sx={{ fontSize: '0.78rem', textTransform: 'capitalize' }}>{d.gender}</TableCell>
-                                  <TableCell align="right" sx={{ fontSize: '0.78rem' }}>{fmtNum(d.reach)}</TableCell>
-                                  <TableCell align="right" sx={{ fontSize: '0.78rem', fontWeight: 600, color: META_BLUE }}>{fmtINR(d.spend)}</TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-
               {/* Spike Chart */}
               <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
                 Campaign Performance
               </Typography>
-              <Paper variant="outlined" sx={{ p: 1.5 }}>
+              <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
                 {metaDaily.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: 'center' }}>
                     <Typography sx={{ color: 'text.secondary', fontSize: '0.82rem', fontStyle: 'italic' }}>
@@ -692,6 +812,144 @@ const ClientPortalDashboard = () => {
                   </ResponsiveContainer>
                 )}
               </Paper>
+
+              {/* Lead Forms */}
+              {metaLeadForms.length > 0 && (
+                <>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                    Lead Forms ({metaLeadForms.length})
+                  </Typography>
+                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Name</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads in Range</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Page ID</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {[...metaLeadForms].sort((a, b) => (Number(b.leads_in_range) || 0) - (Number(a.leads_in_range) || 0)).map((f) => {
+                          const isActive = f.status === 'ACTIVE';
+                          return (
+                            <TableRow key={f.form_id} hover>
+                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{f.name}</TableCell>
+                              <TableCell>
+                                <Chip label={f.status || '—'} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: isActive ? '#10b98115' : '#ef444415', color: isActive ? '#10b981' : '#ef4444' }} />
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtNum(f.leads_in_range)}</TableCell>
+                              <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>{f.page_id || '—'}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </>
+              )}
+
+              {/* Recent Leads */}
+              {metaRecentLeads.length > 0 && (
+                <>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                    Recent Leads ({metaRecentLeads.length})
+                  </Typography>
+                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Meta Account</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Name</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Phone</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Platform</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form</TableCell>
+                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Responses</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {metaRecentLeads.map((l) => {
+                          const REDUNDANT = new Set([
+                            'full_name', 'fullname', 'name', 'first_name', 'last_name',
+                            'email', 'email_address',
+                            'phone', 'phone_number', 'mobile', 'mobile_number',
+                          ]);
+                          const prettify = (k) => String(k || '')
+                            .replace(/\?+$/, '')
+                            .replace(/_/g, ' ')
+                            .trim()
+                            .replace(/\b\w/g, (c) => c.toUpperCase());
+                          const rfd = l.raw_field_data;
+                          let entries = [];
+                          if (Array.isArray(rfd)) {
+                            entries = rfd
+                              .filter((e) => e?.name && !REDUNDANT.has(String(e.name).toLowerCase()))
+                              .map((e) => ({
+                                label: prettify(e.name),
+                                value: Array.isArray(e?.values) ? e.values.join(', ') : (e?.value ?? ''),
+                              }));
+                          } else if (rfd && typeof rfd === 'object') {
+                            entries = Object.entries(rfd)
+                              .filter(([k]) => !REDUNDANT.has(k.toLowerCase()))
+                              .map(([k, v]) => ({
+                                label: prettify(k),
+                                value: Array.isArray(v) ? v.join(', ') : String(v ?? ''),
+                              }));
+                          }
+                          return (
+                            <TableRow key={l._id} hover sx={{ verticalAlign: 'top' }}>
+                              <TableCell sx={{ fontSize: '0.78rem' }}>
+                                {metaAccount?.fetched_at
+                                  ? new Date(metaAccount.fetched_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                  : '—'}
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.78rem' }}>{metaAccount?.name || '—'}</TableCell>
+                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
+                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
+                              <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
+                              <TableCell>
+                                {l.platform && (
+                                  <Chip label={l.platform} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
+                                )}
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
+                              <TableCell sx={{ maxWidth: 340, py: 1 }}>
+                                {entries.length === 0 ? (
+                                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
+                                ) : (
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                                    {entries.map((e, i) => (
+                                      <Box
+                                        key={i}
+                                        sx={{
+                                          display: 'grid',
+                                          gridTemplateColumns: '120px 1fr',
+                                          columnGap: 1,
+                                          alignItems: 'baseline',
+                                        }}
+                                      >
+                                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                          {e.label}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: '0.78rem', color: 'text.primary', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                          {e.value || '—'}
+                                        </Typography>
+                                      </Box>
+                                    ))}
+                                  </Box>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </>
+              )}
+              </>)}
             </>
           );
         })()}

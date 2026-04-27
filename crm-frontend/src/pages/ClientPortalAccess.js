@@ -159,6 +159,7 @@ const ClientPortalAccess = () => {
                 <TableCell sx={{ fontWeight: 700 }}>Portal Email</TableCell>
                 <TableCell sx={{ fontWeight: 700 }} align="center">Portal Status</TableCell>
                 <TableCell sx={{ fontWeight: 700 }} align="center">Google Ads</TableCell>
+                <TableCell sx={{ fontWeight: 700 }} align="center">Meta Ads</TableCell>
                 <TableCell sx={{ fontWeight: 700 }} align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -191,6 +192,17 @@ const ClientPortalAccess = () => {
                     />
                   </TableCell>
                   <TableCell align="center">
+                    <Chip
+                      label={c.meta_enabled || c.metaEnabled ? 'Linked' : 'Not Linked'}
+                      size="small"
+                      sx={{
+                        height: 22, fontSize: '0.7rem', fontWeight: 600,
+                        bgcolor: (c.meta_enabled || c.metaEnabled) ? '#1877f215' : '#9ca3af15',
+                        color: (c.meta_enabled || c.metaEnabled) ? '#1877f2' : '#9ca3af',
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell align="center">
                     <IconButton size="small" onClick={() => openEdit(c)} sx={{ color: COPPER }}>
                       <EditIcon sx={{ fontSize: 18 }} />
                     </IconButton>
@@ -199,7 +211,7 @@ const ClientPortalAccess = () => {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
+                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
                     No clients found
                   </TableCell>
                 </TableRow>

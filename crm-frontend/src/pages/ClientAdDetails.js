@@ -5,7 +5,7 @@ import {
   Box, Card, CardContent, Typography, Grid, Chip, Avatar, Button,
   Tabs, Tab, TextField, LinearProgress, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, IconButton,
-  Alert, Paper, CircularProgress, Collapse,
+  Alert, Paper, CircularProgress, Collapse, Snackbar,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon, Facebook as FacebookIcon, Google as GoogleIcon,
@@ -13,6 +13,7 @@ import {
   Campaign as CampaignIcon, TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
   AttachMoney as MoneyIcon, Refresh as RefreshIcon,
+  Sync as SyncIcon,
   Link as LinkIcon,
   KeyboardArrowDown as ArrowDownIcon,
   KeyboardArrowUp as ArrowUpIcon,
@@ -83,6 +84,61 @@ const ClientAdDetails = () => {
   const [linkAccountName, setLinkAccountName] = useState('');
   const [linking, setLinking] = useState(false);
   const [linkMessage, setLinkMessage] = useState(null);
+
+  // Meta resync state (fire-and-forget)
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncSnack, setResyncSnack] = useState({ open: false, message: '', severity: 'info' });
+  // Banner visibility — persists across reloads via sessionStorage so the user
+  // still sees "sync in progress" if they refresh mid-fetch.
+  const syncFlagKey = clientId ? `meta_sync_in_progress_${clientId}` : null;
+  const [syncBannerVisible, setSyncBannerVisible] = useState(() => {
+    if (!syncFlagKey) return false;
+    return sessionStorage.getItem(syncFlagKey) === '1';
+  });
+
+  const raiseSyncBanner = () => {
+    if (syncFlagKey) sessionStorage.setItem(syncFlagKey, '1');
+    setSyncBannerVisible(true);
+  };
+  const clearSyncBanner = () => {
+    if (syncFlagKey) sessionStorage.removeItem(syncFlagKey);
+    setSyncBannerVisible(false);
+  };
+
+  const handleMetaResync = () => {
+    if (!clientId) return;
+    setResyncing(true);
+    raiseSyncBanner();
+    // Fire the full Meta sync in the background — don't await.
+    // Meta pulls up to 90 days of campaign/insights/leads data, which can take several minutes.
+    api.post(`/meta/sync/${clientId}`)
+      .then(() => {
+        setResyncSnack({
+          open: true,
+          message: 'Resync finished. Refreshing analytics…',
+          severity: 'success',
+        });
+        clearSyncBanner();
+        fetchMetaAnalytics({ force: true });
+      })
+      .catch((err) => {
+        console.error('Meta resync error:', err);
+        setResyncSnack({
+          open: true,
+          message: err.response?.data?.message || err.response?.data?.error || 'Resync failed. Try again in a moment.',
+          severity: 'error',
+        });
+        clearSyncBanner();
+      })
+      .finally(() => {
+        setResyncing(false);
+      });
+    setResyncSnack({
+      open: true,
+      message: 'Resync started. Meta is fetching up to 90 days of data — this can take a few minutes. You can keep using the page.',
+      severity: 'info',
+    });
+  };
 
   // Find client in cache (may be undefined if cache hasn't loaded — that's OK, we still fetch)
   const client = useMemo(() => clients.find(c => c._id === clientId), [clients, clientId]);
@@ -221,6 +277,21 @@ const ClientAdDetails = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, clientId, dateFrom, dateTo]);
 
+  // When the user lands here right after launching setup, the sync is running
+  // server-side. We can't poll its status directly, but once Meta analytics
+  // successfully returns non-empty data we know enough has landed in our DB
+  // for the user to stop waiting — drop the banner.
+  useEffect(() => {
+    if (!syncBannerVisible) return;
+    const hasMetaData = metaData && (
+      (metaData.summary && Object.keys(metaData.summary).length) ||
+      (Array.isArray(metaData.campaigns) && metaData.campaigns.length) ||
+      (Array.isArray(metaData.daily_trend) && metaData.daily_trend.length)
+    );
+    if (hasMetaData) clearSyncBanner();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metaData, syncBannerVisible]);
+
   // Derive a display name: prefer cached client, fall back to API response, else show the ID
   const displayName = client?.clientName || data?.client?.clientName || `Client ${clientId?.slice(-6)}`;
   const displayPlace = client?.place;
@@ -301,7 +372,43 @@ const ClientAdDetails = () => {
         >
           {(tab === 0 ? loading : metaLoading) ? 'Syncing...' : 'Refresh'}
         </Button>
+        {tab === 1 && (
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={resyncing ? <CircularProgress size={14} color="inherit" /> : <SyncIcon />}
+            onClick={handleMetaResync}
+            disabled={resyncing}
+            sx={{ bgcolor: META_BLUE, '&:hover': { bgcolor: '#0c5cb8' } }}
+          >
+            {resyncing ? 'Resyncing…' : 'Resync from Meta'}
+          </Button>
+        )}
       </Box>
+
+      {/* Meta sync in-progress banner (persists across reloads via sessionStorage) */}
+      {syncBannerVisible && (
+        <Alert
+          severity="info"
+          icon={<CircularProgress size={20} sx={{ color: META_BLUE }} />}
+          onClose={clearSyncBanner}
+          sx={{
+            mb: 2,
+            borderLeft: `4px solid ${META_BLUE}`,
+            bgcolor: `${META_BLUE}10`,
+            '& .MuiAlert-icon': { alignItems: 'center' },
+          }}
+        >
+          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.3 }}>
+            Fetching Meta data in the background — this can take a few minutes
+          </Typography>
+          <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+            Meta is pulling up to 90 days of campaigns, ad sets, ads, daily insights, lead forms, and leads for this client.
+            The page will refresh automatically once data starts arriving. You can keep using the app, switch tabs, or come back
+            later — the sync continues on the server.
+          </Typography>
+        </Alert>
+      )}
 
       {/* Date Filter (shared across tabs) */}
       {(() => {
@@ -1177,7 +1284,6 @@ const ClientAdDetails = () => {
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads in Range</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Page ID</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Last Seen</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -1191,7 +1297,6 @@ const ClientAdDetails = () => {
                                 </TableCell>
                                 <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtNum(f.leads_in_range)}</TableCell>
                                 <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>{f.page_id || '—'}</TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>{fmtDate(f.last_seen_at)}</TableCell>
                               </TableRow>
                             );
                           })}
@@ -1212,32 +1317,111 @@ const ClientAdDetails = () => {
                         <TableHead>
                           <TableRow>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Meta Account</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Name</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Phone</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Platform</TableCell>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Responses</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {metaRecentLeads.map(l => (
-                            <TableRow key={l._id} hover>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{fmtDate(l.createdAt)}</TableCell>
-                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
-                              <TableCell>
-                                {l.platform && (
-                                  <Chip label={l.platform} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
-                                )}
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
-                              <TableCell>
-                                <Chip label={l.status || '—'} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize' }} />
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {metaRecentLeads.map(l => {
+                            // Build a [{label, value}] list from raw_field_data regardless of
+                            // shape (Meta's array-of-{name,value[s]} or plain object). Hide
+                            // fields already shown in Name / Email / Phone columns so this
+                            // cell only carries the form-specific answers.
+                            const REDUNDANT = new Set([
+                              'full_name', 'fullname', 'name', 'first_name', 'last_name',
+                              'email', 'email_address',
+                              'phone', 'phone_number', 'mobile', 'mobile_number',
+                            ]);
+                            const prettify = (k) => String(k || '')
+                              .replace(/\?+$/, '')
+                              .replace(/_/g, ' ')
+                              .trim()
+                              .replace(/\b\w/g, (c) => c.toUpperCase());
+                            const rfd = l.raw_field_data;
+                            let entries = [];
+                            if (Array.isArray(rfd)) {
+                              entries = rfd
+                                .filter((e) => e?.name && !REDUNDANT.has(String(e.name).toLowerCase()))
+                                .map((e) => ({
+                                  label: prettify(e.name),
+                                  value: Array.isArray(e?.values) ? e.values.join(', ') : (e?.value ?? ''),
+                                }));
+                            } else if (rfd && typeof rfd === 'object') {
+                              entries = Object.entries(rfd)
+                                .filter(([k]) => !REDUNDANT.has(k.toLowerCase()))
+                                .map(([k, v]) => ({
+                                  label: prettify(k),
+                                  value: Array.isArray(v) ? v.join(', ') : String(v ?? ''),
+                                }));
+                            }
+                            return (
+                              <TableRow key={l._id} hover sx={{ verticalAlign: 'top' }}>
+                                <TableCell sx={{ fontSize: '0.78rem' }}>
+                                  {metaAccount?.fetched_at
+                                    ? new Date(metaAccount.fetched_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                    : '—'}
+                                </TableCell>
+                                <TableCell sx={{ fontSize: '0.78rem' }}>{metaAccount?.name || '—'}</TableCell>
+                                <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
+                                <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
+                                <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
+                                <TableCell>
+                                  {l.platform && (
+                                    <Chip label={l.platform} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
+                                  )}
+                                </TableCell>
+                                <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
+                                <TableCell sx={{ maxWidth: 340, py: 1 }}>
+                                  {entries.length === 0 ? (
+                                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
+                                  ) : (
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                                      {entries.map((e, i) => (
+                                        <Box
+                                          key={i}
+                                          sx={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '120px 1fr',
+                                            columnGap: 1,
+                                            alignItems: 'baseline',
+                                          }}
+                                        >
+                                          <Typography
+                                            sx={{
+                                              fontSize: '0.68rem',
+                                              fontWeight: 600,
+                                              color: 'text.secondary',
+                                              textTransform: 'uppercase',
+                                              letterSpacing: 0.3,
+                                              whiteSpace: 'normal',
+                                              wordBreak: 'break-word',
+                                            }}
+                                          >
+                                            {e.label}
+                                          </Typography>
+                                          <Typography
+                                            sx={{
+                                              fontSize: '0.78rem',
+                                              color: 'text.primary',
+                                              whiteSpace: 'normal',
+                                              wordBreak: 'break-word',
+                                            }}
+                                          >
+                                            {e.value || '—'}
+                                          </Typography>
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </TableContainer>
@@ -1254,6 +1438,21 @@ const ClientAdDetails = () => {
           })()}
         </CardContent>
       </Card>
+
+      <Snackbar
+        open={resyncSnack.open}
+        autoHideDuration={resyncSnack.severity === 'info' ? 8000 : 5000}
+        onClose={() => setResyncSnack({ ...resyncSnack, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setResyncSnack({ ...resyncSnack, open: false })}
+          severity={resyncSnack.severity}
+          sx={{ width: '100%' }}
+        >
+          {resyncSnack.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

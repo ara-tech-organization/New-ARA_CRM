@@ -889,7 +889,7 @@ export const getClientAnalytics = async (req, res) => {
     source: 'meta',
     createdAt: dateRange,
   })
-    .select('name email phone status meta_form_name meta_campaign_id meta_ad_id platform createdAt')
+    .select('name email phone status meta_form_name meta_campaign_id meta_ad_id platform raw_field_data createdAt')
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();

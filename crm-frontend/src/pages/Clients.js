@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../contexts/ThemeContext';
 import api from '../api/axios';
 import {
@@ -39,14 +40,19 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Google as GoogleIcon,
+  Facebook as FacebookIcon,
   Link as LinkIcon,
   Delete as DeleteIcon,
+  CheckCircle as CheckCircleIcon,
+  Search as SearchIcon,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
-import { MenuItem, Select, InputLabel, FormControl } from '@mui/material';
+import { MenuItem, Select, InputLabel, FormControl, Radio, RadioGroup, FormControlLabel, FormLabel, Stepper, Step, StepLabel, InputAdornment } from '@mui/material';
 import { TableLoader, PageLoader } from '../components/Loading';
 import userApi from '../api/userApi';
 
 const Clients = () => {
+  const navigate = useNavigate();
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#C08552';
   const secondaryColor = accentColor?.primary || '#3E2723';
@@ -55,6 +61,7 @@ const Clients = () => {
   const [selectedClient, setSelectedClient] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [searchQuery, setSearchQuery] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Main API state - only source of data
@@ -102,6 +109,17 @@ const Clients = () => {
   const [mergeSelection, setMergeSelection] = useState({}); // { normalizedKey: keepId }
   const [merging, setMerging] = useState(false);
 
+  // Meta Setup Dialog state
+  const [metaSetupOpen, setMetaSetupOpen] = useState(false);
+  const [metaSetupClient, setMetaSetupClient] = useState(null);
+  const [metaStep, setMetaStep] = useState(0);
+  const [metaAdAccountInput, setMetaAdAccountInput] = useState('');
+  const [metaConfig, setMetaConfig] = useState(null);
+  const [metaAvailablePages, setMetaAvailablePages] = useState([]);
+  const [metaSelectedPageId, setMetaSelectedPageId] = useState('');
+  const [metaBusy, setMetaBusy] = useState(false);
+  const [metaError, setMetaError] = useState('');
+
   // Fetch clients from main API
   const fetchClients = async () => {
     setLoading(true);
@@ -121,6 +139,10 @@ const Clients = () => {
         // Backend uses snake_case: google_ads_customer_id + google_ads_enabled
         googleCustomerId: client.google_ads_customer_id || client.googleCustomerId || '',
         googleAdsEnabled: client.google_ads_enabled || false,
+        metaEnabled: client.meta_enabled || false,
+        metaAdAccountId: client.meta_ad_account_id || '',
+        metaAdAccountName: client.meta_ad_account_name || '',
+        metaPages: client.meta_pages || [],
         status: client.status || 'active',
         onboardedDate: client.onboardDate || client.createdAt,
         removalReason: client.removalReason || '',
@@ -310,6 +332,117 @@ const Clients = () => {
   const handleOpenDelete = (client) => {
     setClientToDelete(client);
     setDeleteDialogOpen(true);
+  };
+
+  // ── Meta (Facebook) Setup ──
+  const resetMetaState = () => {
+    setMetaStep(0);
+    setMetaAdAccountInput('');
+    setMetaConfig(null);
+    setMetaAvailablePages([]);
+    setMetaSelectedPageId('');
+    setMetaBusy(false);
+    setMetaError('');
+  };
+
+  const handleOpenMetaSetup = async (client) => {
+    resetMetaState();
+    setMetaSetupClient(client);
+    setMetaSetupOpen(true);
+    setMetaBusy(true);
+    try {
+      const res = await api.get(`/meta/client/${client._id}/config`);
+      const cfg = res.data?.config || res.data || {};
+      setMetaConfig(cfg);
+      setMetaAdAccountInput(cfg.meta_ad_account_id || '');
+      // If ad account is already set, skip straight to page selection
+      if (cfg.meta_ad_account_id) {
+        setMetaStep(1);
+        await loadAvailablePages(client._id);
+      }
+    } catch (err) {
+      // 404 is fine — means config not yet created; start at step 0
+      if (err.response?.status !== 404) {
+        setMetaError(err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to load Meta config');
+      }
+    } finally {
+      setMetaBusy(false);
+    }
+  };
+
+  const loadAvailablePages = async (clientId) => {
+    try {
+      const res = await api.get(`/meta/client/${clientId}/available-pages`);
+      setMetaAvailablePages(res.data?.pages || res.data || []);
+    } catch (err) {
+      setMetaError(err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to load available Pages');
+    }
+  };
+
+  const handleSaveMetaConfig = async () => {
+    const trimmed = metaAdAccountInput.trim();
+    if (!/^act_\d+$/.test(trimmed)) {
+      setMetaError('Ad Account ID must be in the format act_1234567890');
+      return;
+    }
+    setMetaBusy(true);
+    setMetaError('');
+    try {
+      const res = await api.put(`/meta/client/${metaSetupClient._id}/config`, {
+        meta_enabled: true,
+        meta_ad_account_id: trimmed,
+      });
+      const cfg = res.data?.config || res.data || {};
+      setMetaConfig(cfg);
+      setMetaStep(1);
+      await loadAvailablePages(metaSetupClient._id);
+    } catch (err) {
+      setMetaError(err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to save Meta config');
+    } finally {
+      setMetaBusy(false);
+    }
+  };
+
+  const handleSubscribeAndLaunch = async () => {
+    if (!metaSelectedPageId) {
+      setMetaError('Select a Page to attach');
+      return;
+    }
+    setMetaBusy(true);
+    setMetaError('');
+    try {
+      await api.post(`/meta/client/${metaSetupClient._id}/pages/${metaSelectedPageId}/subscribe`);
+      // Fire the initial sync in the background — don't await.
+      // Meta pulls up to 90 days of history which can take several minutes.
+      api.post(`/meta/sync/${metaSetupClient._id}`).catch((e) => {
+        console.error('Background Meta sync error:', e);
+      });
+      const targetId = metaSetupClient._id;
+      const targetName = metaSetupClient.name;
+      // Persist "sync in progress" so the banner shows immediately on the
+      // Client Ads page and survives a refresh mid-fetch.
+      try { sessionStorage.setItem(`meta_sync_in_progress_${targetId}`, '1'); } catch (_) {}
+      setSnackbar({
+        open: true,
+        message: `${targetName} connected. Meta is fetching up to 90 days of campaign, insights, and lead data in the background — this can take several minutes. Taking you to the client's Ads page now…`,
+        severity: 'info',
+      });
+      setMetaSetupOpen(false);
+      resetMetaState();
+      setMetaSetupClient(null);
+      navigate(`/client-ads/${targetId}`);
+    } catch (err) {
+      setMetaError(err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to subscribe Page');
+      setMetaBusy(false);
+    }
+  };
+
+  const handleCloseMetaSetup = () => {
+    setMetaSetupOpen(false);
+    setMetaSetupClient(null);
+    resetMetaState();
+    // Refresh clients so the green FB icon reflects the new integration state
+    fetchClients();
   };
 
   // ── Detect & Merge Duplicates ──
@@ -557,8 +690,22 @@ const Clients = () => {
     }
   };
 
-  // Paginated clients
-  const paginatedClients = clients.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  // Filter clients by search query across common fields
+  const filteredClients = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter((c) => {
+      const haystack = [
+        c.name, c.clientID, c.place, c.organisationType, c.gstNumber, c.accountId,
+        c.assignedSMM, c.assignedSME, c.team, c.status,
+        c.googleCustomerId, c.metaAdAccountId, c.metaAdAccountName,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [clients, searchQuery]);
+
+  // Paginated clients (from filtered set)
+  const paginatedClients = filteredClients.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   // Show aesthetic loader during initial data fetch
   if (loading && clients.length === 0) {
@@ -597,6 +744,37 @@ const Clients = () => {
             Refresh
           </Button>
         </Box>
+      </Box>
+
+      {/* Search */}
+      <Box sx={{ mb: 2 }}>
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Search by name, place, industry, GST, account ID, SMM/SME, team, Google/Meta ID…"
+          value={searchQuery}
+          onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => { setSearchQuery(''); setPage(0); }}>
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ) : null,
+          }}
+          sx={{ maxWidth: 560, bgcolor: 'background.paper' }}
+        />
+        {searchQuery && (
+          <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+            {filteredClients.length} of {clients.length} clients match
+          </Typography>
+        )}
       </Box>
 
       {/* Stats Cards */}
@@ -650,6 +828,14 @@ const Clients = () => {
                     <TableCell colSpan={10} align="center">
                       <Typography color="text.secondary" sx={{ py: 4 }}>
                         No clients found. Click "Refresh" to fetch from Main API.
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredClients.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} align="center">
+                      <Typography color="text.secondary" sx={{ py: 4 }}>
+                        No clients match "{searchQuery}".
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -731,6 +917,15 @@ const Clients = () => {
                               </IconButton>
                             </Tooltip>
                           )}
+                          <Tooltip title={client.metaEnabled ? `Meta connected: ${client.metaAdAccountName || client.metaAdAccountId}` : 'Set up Meta (Facebook) integration'}>
+                            <IconButton
+                              size="small"
+                              sx={{ color: client.metaEnabled ? '#10b981' : '#1877F2' }}
+                              onClick={() => handleOpenMetaSetup(client)}
+                            >
+                              <FacebookIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="Delete Client">
                             <IconButton
                               size="small"
@@ -751,7 +946,7 @@ const Clients = () => {
           <TablePagination
             rowsPerPageOptions={[5, 10, 25]}
             component="div"
-            count={clients.length}
+            count={filteredClients.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
@@ -1436,10 +1631,137 @@ const Clients = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Meta (Facebook) Setup Dialog */}
+      <Dialog open={metaSetupOpen} onClose={metaBusy ? undefined : handleCloseMetaSetup} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600, bgcolor: 'grey.50' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FacebookIcon sx={{ color: '#1877F2' }} />
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Meta Setup{metaSetupClient ? ` — ${metaSetupClient.name}` : ''}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Connect a Facebook Ad Account and Page to this client
+              </Typography>
+            </Box>
+          </Box>
+        </DialogTitle>
+        <Divider />
+        <DialogContent>
+          <Stepper activeStep={metaStep} sx={{ mb: 3, mt: 1 }}>
+            <Step><StepLabel>Ad Account</StepLabel></Step>
+            <Step><StepLabel>Page & Launch</StepLabel></Step>
+          </Stepper>
+
+          {metaError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setMetaError('')}>
+              {metaError}
+            </Alert>
+          )}
+
+          {metaStep === 0 && (
+            <Box>
+              <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+                Enter the Meta Ad Account ID to attach to this client. Format: <code>act_1234567890</code>.
+              </Typography>
+              <TextField
+                fullWidth
+                label="Meta Ad Account ID"
+                placeholder="act_967896905356867"
+                value={metaAdAccountInput}
+                onChange={(e) => setMetaAdAccountInput(e.target.value)}
+                disabled={metaBusy}
+                autoFocus
+              />
+              {metaConfig?.meta_ad_account_name && (
+                <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'text.secondary' }}>
+                  Currently: {metaConfig.meta_ad_account_name} ({metaConfig.meta_ad_account_currency || '—'})
+                </Typography>
+              )}
+            </Box>
+          )}
+
+          {metaStep === 1 && (
+            <Box>
+              <Alert severity="success" icon={<CheckCircleIcon fontSize="small" />} sx={{ mb: 2 }}>
+                Ad Account attached: <strong>{metaConfig?.meta_ad_account_name || metaConfig?.meta_ad_account_id}</strong>
+                {metaConfig?.meta_ad_account_currency ? ` • ${metaConfig.meta_ad_account_currency}` : ''}
+              </Alert>
+              <FormLabel sx={{ fontWeight: 600, mb: 1, display: 'block' }}>
+                Select the Facebook Page to subscribe
+              </FormLabel>
+              <Typography variant="caption" sx={{ display: 'block', mb: 1.5, color: 'text.secondary' }}>
+                On launch, the data fetch will start in the background and can take a few minutes (up to 90 days of history). You'll be redirected to the client's Ads page immediately.
+              </Typography>
+              {metaBusy && metaAvailablePages.length === 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
+                  <CircularProgress size={18} /> <Typography variant="body2">Loading Pages…</Typography>
+                </Box>
+              ) : metaAvailablePages.length === 0 ? (
+                <Alert severity="warning">
+                  No Pages available from this ad account's Business. Make sure the System User has access.
+                </Alert>
+              ) : (
+                <RadioGroup value={metaSelectedPageId} onChange={(e) => setMetaSelectedPageId(e.target.value)}>
+                  {metaAvailablePages.map((p) => (
+                    <FormControlLabel
+                      key={p.page_id || p.id}
+                      value={p.page_id || p.id}
+                      control={<Radio />}
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {p.page_name || p.name}
+                            {p.already_assigned && (
+                              <Chip label="already attached" size="small" color="success" sx={{ ml: 1, height: 18, fontSize: '0.65rem' }} />
+                            )}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ID: {p.page_id || p.id}
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                  ))}
+                </RadioGroup>
+              )}
+            </Box>
+          )}
+
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseMetaSetup} disabled={metaBusy}>
+            Cancel
+          </Button>
+          {metaStep === 0 && (
+            <Button
+              variant="contained"
+              onClick={handleSaveMetaConfig}
+              disabled={metaBusy || !metaAdAccountInput.trim()}
+              startIcon={metaBusy ? <CircularProgress size={14} color="inherit" /> : null}
+              sx={{ bgcolor: '#1877F2', '&:hover': { bgcolor: '#1464d8' } }}
+            >
+              {metaBusy ? 'Saving…' : 'Save & Continue'}
+            </Button>
+          )}
+          {metaStep === 1 && (
+            <Button
+              variant="contained"
+              onClick={handleSubscribeAndLaunch}
+              disabled={metaBusy || !metaSelectedPageId}
+              startIcon={metaBusy ? <CircularProgress size={14} color="inherit" /> : <LinkIcon />}
+              sx={{ bgcolor: '#1877F2', '&:hover': { bgcolor: '#1464d8' } }}
+            >
+              {metaBusy ? 'Finishing…' : 'Attach & Launch'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
       {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={4000}
+        autoHideDuration={snackbar.severity === 'info' ? 10000 : 4000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
