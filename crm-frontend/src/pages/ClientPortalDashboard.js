@@ -901,9 +901,12 @@ const ClientPortalDashboard = () => {
                           return (
                             <TableRow key={l._id} hover sx={{ verticalAlign: 'top' }}>
                               <TableCell sx={{ fontSize: '0.78rem' }}>
-                                {metaAccount?.fetched_at
-                                  ? new Date(metaAccount.fetched_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                                  : '—'}
+                                {(() => {
+                                  const ts = l.meta_created_time || l.createdAt;
+                                  return ts
+                                    ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                    : '—';
+                                })()}
                               </TableCell>
                               <TableCell sx={{ fontSize: '0.78rem' }}>{metaAccount?.name || '—'}</TableCell>
                               <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
