@@ -888,18 +888,22 @@ Unsubscribe a Page. Keeps the row in `meta_pages` but flips `subscribed: false`.
     }
   ],
 
-  "recent_leads": [
+  "leads_in_range": [
     {
       "_id": "69e718a2...",
       "name": "Upendra Bag",
       "email": "u.bag@example.com",
       "phone": "+91XXXXXXXXXX",
       "status": "new",
+      "meta_form_id": "972207495782606",
       "meta_form_name": "ARA -Sahakara",
       "meta_campaign_id": "7001401191612",
+      "meta_adset_id": "6973956389859",
       "meta_ad_id": "6973956389859",
       "platform": "facebook",
-      "createdAt": "2026-04-21T05:30:00.000Z"
+      "createdAt": "2026-04-21T05:30:00.000Z",
+      "meta_created_time": "2026-04-20T18:42:11.000Z",
+      "raw_field_data": [{ "name": "full_name", "values": ["Upendra Bag"] }]
     }
   ],
 
@@ -931,7 +935,7 @@ Unsubscribe a Page. Keeps the row in `meta_pages` but flips `subscribed: false`.
 
 - `summary.*` comes from campaign-level insights only — adset/ad-level rows are excluded to avoid double-counting.
 - `daily_trend[]` is pre-sorted ascending.
-- `recent_leads[]` returns max 50; use your existing `/api/leads` endpoint for pagination.
+- `leads_in_range[]` returns every Meta lead whose `meta_created_time` (or `createdAt` for legacy rows missing that field) falls inside the requested window — no row cap. Use `/api/leads` if you need pagination or richer lead fields.
 - `billing.transactions[]` hard-capped at 500.
 - `daily_budget`/`lifetime_budget`: currency-native major units (₹, not paise).
 - Dates: ISO-8601 UTC strings.
@@ -1001,5 +1005,5 @@ Expected: non-zero counts for campaigns, adsets, ads, insights_rows, forms, lead
 curl "https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites.net/api/meta/client/68deb16211a12187d52ad0de/analytics?from=2026-03-22&to=2026-04-21"
 
 
-You'll get back summary.spend, campaigns[], daily_trend[], recent_leads[] populated for Dharmapuri only.
+You'll get back summary.spend, campaigns[], daily_trend[], leads_in_range[] populated for Dharmapuri only.
 ```
