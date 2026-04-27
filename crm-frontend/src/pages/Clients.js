@@ -46,10 +46,12 @@ import {
   CheckCircle as CheckCircleIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
+  Groups as GroupsIcon,
 } from '@mui/icons-material';
 import { MenuItem, Select, InputLabel, FormControl, Radio, RadioGroup, FormControlLabel, FormLabel, Stepper, Step, StepLabel, InputAdornment } from '@mui/material';
 import { TableLoader, PageLoader } from '../components/Loading';
 import userApi from '../api/userApi';
+import MetaLeadsFullView from '../components/MetaLeadsFullView';
 
 const Clients = () => {
   const navigate = useNavigate();
@@ -119,6 +121,12 @@ const Clients = () => {
   const [metaSelectedPageId, setMetaSelectedPageId] = useState('');
   const [metaBusy, setMetaBusy] = useState(false);
   const [metaError, setMetaError] = useState('');
+
+  // Meta Leads Full-View state — shown directly from a Clients-table row.
+  const [leadsViewOpen, setLeadsViewOpen] = useState(false);
+  const [leadsViewClient, setLeadsViewClient] = useState(null);
+  const [leadsViewData, setLeadsViewData] = useState(null);
+  const [leadsViewLoading, setLeadsViewLoading] = useState(false);
 
   // Fetch clients from main API
   const fetchClients = async () => {
@@ -343,6 +351,37 @@ const Clients = () => {
     setMetaSelectedPageId('');
     setMetaBusy(false);
     setMetaError('');
+  };
+
+  // Open the Meta Leads full-view directly from a Clients-table row.
+  // Defaults to the last 30 days because the Clients page has no date picker
+  // and clients usually want a recent window when reviewing leads.
+  const handleOpenLeadsView = async (client) => {
+    if (!client?._id) return;
+    setLeadsViewClient(client);
+    setLeadsViewData(null);
+    setLeadsViewOpen(true);
+    setLeadsViewLoading(true);
+    try {
+      const today = new Date();
+      const from = new Date(today);
+      from.setDate(today.getDate() - 29);
+      const iso = (d) => d.toISOString().split('T')[0];
+      const res = await api.get(`/meta/client/${client._id}/analytics`, {
+        params: { from: iso(from), to: iso(today) },
+      });
+      setLeadsViewData(res.data || null);
+    } catch (err) {
+      console.error('Failed to fetch leads for full view:', err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.message || err.response?.data?.error || 'Failed to load leads',
+        severity: 'error',
+      });
+      setLeadsViewData(null);
+    } finally {
+      setLeadsViewLoading(false);
+    }
   };
 
   const handleOpenMetaSetup = async (client) => {
@@ -926,6 +965,17 @@ const Clients = () => {
                               <FacebookIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                          {client.metaEnabled && (
+                            <Tooltip title="View Meta Leads (last 30 days)">
+                              <IconButton
+                                size="small"
+                                sx={{ color: '#1877F2' }}
+                                onClick={() => handleOpenLeadsView(client)}
+                              >
+                                <GroupsIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Delete Client">
                             <IconButton
                               size="small"
@@ -1757,6 +1807,16 @@ const Clients = () => {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Meta Leads Full View — opened from a Clients-table row */}
+      <MetaLeadsFullView
+        open={leadsViewOpen}
+        onClose={() => { setLeadsViewOpen(false); setLeadsViewClient(null); setLeadsViewData(null); }}
+        leads={leadsViewData?.recent_leads || []}
+        metaAccount={leadsViewData?.meta_account}
+        clientName={leadsViewClient?.name || ''}
+        loading={leadsViewLoading}
+      />
 
       {/* Snackbar for notifications */}
       <Snackbar

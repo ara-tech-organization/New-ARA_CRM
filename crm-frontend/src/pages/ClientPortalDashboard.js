@@ -15,11 +15,15 @@ import {
   KeyboardArrowDown as ArrowDownIcon, KeyboardArrowUp as ArrowUpIcon,
   People as PeopleIcon, Visibility as VisibilityIcon,
   Groups as GroupsIcon, Chat as ChatIcon,
+  FileDownload as FileDownloadIcon, PictureAsPdf as PdfIcon,
+  Fullscreen as FullscreenIcon,
 } from '@mui/icons-material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
+import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
+import MetaLeadsFullView from '../components/MetaLeadsFullView';
 
 const COPPER = '#C08552';
 const BROWN = '#3E2723';
@@ -73,6 +77,7 @@ const ClientPortalDashboard = () => {
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [expandedCampaigns, setExpandedCampaigns] = useState({});
+  const [leadsFullViewOpen, setLeadsFullViewOpen] = useState(false);
   // Use the raw Meta analytics response directly — mirrors how the admin
   // ClientAdDetails page consumes it (snake_case, no renaming). Keeping
   // shapes identical means the portal and admin stay in sync if the API
@@ -849,111 +854,63 @@ const ClientPortalDashboard = () => {
                 </>
               )}
 
-              {/* Recent Leads */}
+              {/* Recent Leads — entry point only; full table lives in the dialog */}
               {metaRecentLeads.length > 0 && (
-                <>
-                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                    Recent Leads ({metaRecentLeads.length})
-                  </Typography>
-                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Meta Account</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Name</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Phone</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Platform</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Responses</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {metaRecentLeads.map((l) => {
-                          const REDUNDANT = new Set([
-                            'full_name', 'fullname', 'name', 'first_name', 'last_name',
-                            'email', 'email_address',
-                            'phone', 'phone_number', 'mobile', 'mobile_number',
-                          ]);
-                          const prettify = (k) => String(k || '')
-                            .replace(/\?+$/, '')
-                            .replace(/_/g, ' ')
-                            .trim()
-                            .replace(/\b\w/g, (c) => c.toUpperCase());
-                          const rfd = l.raw_field_data;
-                          let entries = [];
-                          if (Array.isArray(rfd)) {
-                            entries = rfd
-                              .filter((e) => e?.name && !REDUNDANT.has(String(e.name).toLowerCase()))
-                              .map((e) => ({
-                                label: prettify(e.name),
-                                value: Array.isArray(e?.values) ? e.values.join(', ') : (e?.value ?? ''),
-                              }));
-                          } else if (rfd && typeof rfd === 'object') {
-                            entries = Object.entries(rfd)
-                              .filter(([k]) => !REDUNDANT.has(k.toLowerCase()))
-                              .map(([k, v]) => ({
-                                label: prettify(k),
-                                value: Array.isArray(v) ? v.join(', ') : String(v ?? ''),
-                              }));
-                          }
-                          return (
-                            <TableRow key={l._id} hover sx={{ verticalAlign: 'top' }}>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>
-                                {metaAccount?.fetched_at
-                                  ? new Date(metaAccount.fetched_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                                  : '—'}
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{metaAccount?.name || '—'}</TableCell>
-                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
-                              <TableCell>
-                                {l.platform && (
-                                  <Chip label={l.platform} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
-                                )}
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
-                              <TableCell sx={{ maxWidth: 340, py: 1 }}>
-                                {entries.length === 0 ? (
-                                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
-                                ) : (
-                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
-                                    {entries.map((e, i) => (
-                                      <Box
-                                        key={i}
-                                        sx={{
-                                          display: 'grid',
-                                          gridTemplateColumns: '120px 1fr',
-                                          columnGap: 1,
-                                          alignItems: 'baseline',
-                                        }}
-                                      >
-                                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                          {e.label}
-                                        </Typography>
-                                        <Typography sx={{ fontSize: '0.78rem', color: 'text.primary', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                          {e.value || '—'}
-                                        </Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </>
+                <Card variant="outlined" sx={{ mb: 2, borderLeft: `3px solid ${META_BLUE}` }}>
+                  <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', py: 1.5 }}>
+                    <Box>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                        Recent Leads
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
+                        {metaRecentLeads.length} lead{metaRecentLeads.length === 1 ? '' : 's'} in range — open the full view to see every form response.
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<FullscreenIcon sx={{ fontSize: 16 }} />}
+                        onClick={() => setLeadsFullViewOpen(true)}
+                        sx={{ bgcolor: META_BLUE, '&:hover': { bgcolor: '#0c5cb8' } }}
+                      >
+                        View All Leads
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
+                        onClick={() => exportLeadsToExcel(metaRecentLeads, metaAccount, displayName)}
+                        sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
+                      >
+                        Excel
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
+                        onClick={() => exportLeadsToPdf(metaRecentLeads, metaAccount, displayName)}
+                        sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
+                      >
+                        PDF
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
               )}
               </>)}
             </>
           );
         })()}
       </Box>
+
+      <MetaLeadsFullView
+        open={leadsFullViewOpen}
+        onClose={() => setLeadsFullViewOpen(false)}
+        leads={metaData?.recent_leads || []}
+        metaAccount={metaData?.meta_account}
+        clientName={clientData?.clientName || 'Client'}
+      />
     </Box>
   );
 };
