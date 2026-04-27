@@ -975,7 +975,7 @@ curl -X PUT "https://ara-crm-ads-hrarezggb7g7dxdy.southeastasia-01.azurewebsites
   -H "Content-Type: application/json" \
   -d '{
     "meta_enabled": true,
-    "meta_ad_account_id": "act_967896905356867"
+    "meta_ad_account_id": "act_1543617913485113"
   }'
 
 

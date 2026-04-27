@@ -860,6 +860,16 @@ export const getClientAnalytics = async (req, res) => {
   });
 
   // ---- Lead forms ----
+  // Lead date filter: prefer Meta's authoritative `meta_created_time`
+  // (when the user actually submitted the form), fall back to our `createdAt`
+  // (ingestion time) only for legacy rows that predate the backfill.
+  const leadDateFilter = {
+    $or: [
+      { meta_created_time: dateRange },
+      { meta_created_time: null, createdAt: dateRange },
+    ],
+  };
+
   const leadForms = await MetaLeadForm.find({ client_id: clientId })
     .select('form_id name status locale page_id last_seen_at')
     .lean();
@@ -868,7 +878,7 @@ export const getClientAnalytics = async (req, res) => {
       $match: {
         client: clientId,
         source: 'meta',
-        createdAt: dateRange,
+        ...leadDateFilter,
       },
     },
     { $group: { _id: '$meta_form_id', count: { $sum: 1 } } },
@@ -889,7 +899,7 @@ export const getClientAnalytics = async (req, res) => {
     source: 'meta',
     createdAt: dateRange,
   })
-    .select('name email phone status meta_form_name meta_campaign_id meta_ad_id platform raw_field_data createdAt')
+    .select('name email phone status meta_form_name meta_campaign_id meta_ad_id platform createdAt')
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
