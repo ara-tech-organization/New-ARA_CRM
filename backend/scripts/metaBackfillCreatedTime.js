@@ -66,10 +66,17 @@ for (const form of forms) {
   }
 
   // Pull ALL leads on this form (sinceTs=0) — this may be 1000s of rows, but
-  // the wrapper auto-paginates up to MAX_ITEMS_PER_EDGE=10000.
+  // the wrapper auto-paginates up to MAX_ITEMS_PER_EDGE=10000. Global fetch
+  // has no default timeout, so one hanging paginated call would stall the
+  // whole backfill — wrap it in a 90s deadline and skip the form on timeout.
   let metaLeads = [];
   try {
-    const result = await fetchLeadsForForm(form.form_id, pageToken, 0);
+    const result = await Promise.race([
+      fetchLeadsForForm(form.form_id, pageToken, 0),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("fetch timeout (90s)")), 90_000)
+      ),
+    ]);
     metaLeads = result.data || [];
   } catch (err) {
     apiErrors++;
@@ -81,30 +88,57 @@ for (const form of forms) {
     `  ${form.name.padEnd(45)}  meta=${metaLeads.length}   client=${client.clientName}`
   );
 
-  // Build {leadgen_id → created_time} map, then do a single bulkWrite per form.
-  const ops = [];
+  // Build {leadgen_id → created_time} map first, then trim to only leads that
+  // actually need writing. Querying which rows still lack meta_created_time
+  // up-front means we skip forms that are already 100% backfilled without
+  // sending any write commands (Cosmos is slow enough that even no-op
+  // bulkWrites can time out on a flaky network).
+  const metaMap = new Map();
   for (const m of metaLeads) {
     if (!m?.id || !m?.created_time) continue;
     const createdTime = new Date(m.created_time);
     if (Number.isNaN(createdTime.getTime())) continue;
-    matchedLeads++;
-    ops.push({
-      updateOne: {
-        filter: { meta_leadgen_id: m.id, meta_created_time: { $exists: false } },
-        update: { $set: { meta_created_time: createdTime } },
-      },
-    });
+    metaMap.set(m.id, createdTime);
+  }
+  matchedLeads += metaMap.size;
+
+  // Pre-filter: only keep leads that still need backfill.
+  const candidateIds = Array.from(metaMap.keys());
+  const pending = candidateIds.length
+    ? await Lead.find({
+        meta_leadgen_id: { $in: candidateIds },
+        meta_created_time: { $exists: false },
+      })
+        .select("meta_leadgen_id")
+        .lean()
+    : [];
+
+  const ops = pending.map((doc) => ({
+    updateOne: {
+      filter: { _id: doc._id },
+      update: { $set: { meta_created_time: metaMap.get(doc.meta_leadgen_id) } },
+    },
+  }));
+
+  if (!ops.length) {
+    console.log(`      → already backfilled, skipping`);
+    continue;
   }
 
   if (APPLY && ops.length) {
-    // Cosmos DB chokes on large bulkWrites. Chunk at 50 so each command
-    // stays well under the server-side timeout.
-    const CHUNK = 50;
+    // Cosmos DB chokes on large bulkWrites. Small chunks + per-chunk timeout
+    // means no single slow command can stall the whole run.
+    const CHUNK = 10;
     let modifiedForForm = 0;
     for (let i = 0; i < ops.length; i += CHUNK) {
       const slice = ops.slice(i, i + CHUNK);
       try {
-        const result = await Lead.bulkWrite(slice, { ordered: false });
+        const result = await Promise.race([
+          Lead.bulkWrite(slice, { ordered: false }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("bulkWrite timeout (60s)")), 60_000)
+          ),
+        ]);
         modifiedForForm += result.modifiedCount || 0;
       } catch (err) {
         // A partial-batch timeout is still a failure — log and move on so
