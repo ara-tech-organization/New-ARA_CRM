@@ -973,7 +973,7 @@ const ClientAdDetails = () => {
             const metaCampaigns = metaData?.campaigns || [];
             const metaDaily = [...(metaData?.daily_trend || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
             const metaLeadForms = metaData?.lead_forms || [];
-            const metaRecentLeads = metaData?.recent_leads || [];
+            const metaLeadsInRange = metaData?.leads_in_range || [];
             const metaEntityCounts = metaData?.entity_counts || {};
             const metaRange = metaData?.range;
             const metaCurrency = metaAccount?.currency || client?.meta_ad_account_currency || 'INR';
@@ -1306,11 +1306,11 @@ const ClientAdDetails = () => {
                   </>
                 )}
 
-                {/* Recent Leads */}
-                {metaRecentLeads.length > 0 && (
+                {/* Leads in Range */}
+                {metaLeadsInRange.length > 0 && (
                   <>
                     <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                      Recent Leads ({metaRecentLeads.length})
+                      Leads ({metaLeadsInRange.length})
                     </Typography>
                     <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
                       <Table size="small">
@@ -1327,7 +1327,7 @@ const ClientAdDetails = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {metaRecentLeads.map(l => {
+                          {metaLeadsInRange.map(l => {
                             // Build a [{label, value}] list from raw_field_data regardless of
                             // shape (Meta's array-of-{name,value[s]} or plain object). Hide
                             // fields already shown in Name / Email / Phone columns so this

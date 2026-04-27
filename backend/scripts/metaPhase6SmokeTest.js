@@ -278,8 +278,8 @@ try {
     if (b.lead_forms.length > 0) ok(`lead_forms: ${b.lead_forms.length} (leads_in_range=${b.lead_forms[0].leads_in_range})`);
     else { failures++; console.log("  ✗ no lead_forms"); }
 
-    if (b.recent_leads.length === 2) ok(`recent_leads: 2`);
-    else { failures++; console.log(`  ✗ expected 2 recent_leads, got ${b.recent_leads.length}`); }
+    if (b.leads_in_range.length === 2) ok(`leads_in_range: 2`);
+    else { failures++; console.log(`  ✗ expected 2 leads_in_range, got ${b.leads_in_range.length}`); }
 
     // Cross-check summary.spend matches our seeded total
     if (Math.abs(b.summary.spend - Number(totalSpend)) < 0.05) {

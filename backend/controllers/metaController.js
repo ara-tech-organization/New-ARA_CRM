@@ -893,15 +893,17 @@ export const getClientAnalytics = async (req, res) => {
     last_seen_at: f.last_seen_at,
   }));
 
-  // ---- Recent leads ----
-  const recent_leads = await Lead.find({
+  // ---- Leads in range ----
+  // Filter by Meta's `meta_created_time` (actual form submission), not our
+  // `createdAt` (DB ingestion), so leads synced late still land in the right
+  // window. Mirrors the filter used for `lead_forms.leads_in_range`.
+  const leads_in_range = await Lead.find({
     client: clientId,
     source: 'meta',
-    createdAt: dateRange,
+    ...leadDateFilter,
   })
-    .select('name email phone status meta_form_name meta_campaign_id meta_ad_id platform createdAt')
-    .sort({ createdAt: -1 })
-    .limit(50)
+    .select('name email phone status meta_form_id meta_form_name meta_campaign_id meta_adset_id meta_ad_id platform createdAt meta_created_time raw_field_data utm_source utm_medium utm_campaign utm_content utm_term')
+    .sort({ meta_created_time: -1, createdAt: -1 })
     .lean();
 
   // ---- Live Meta-side figures ------------------------------------------
@@ -940,7 +942,7 @@ export const getClientAnalytics = async (req, res) => {
     campaigns,
     daily_trend: dailyTrend,
     lead_forms,
-    recent_leads,
+    leads_in_range,
     meta_account,
     entity_counts: {
       campaigns: await MetaCampaign.countDocuments({ client_id: clientId }),
