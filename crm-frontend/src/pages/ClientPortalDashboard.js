@@ -16,14 +16,13 @@ import {
   People as PeopleIcon, Visibility as VisibilityIcon,
   Groups as GroupsIcon, Chat as ChatIcon,
   FileDownload as FileDownloadIcon, PictureAsPdf as PdfIcon,
-  Fullscreen as FullscreenIcon,
 } from '@mui/icons-material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
 import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
-import MetaLeadsFullView from '../components/MetaLeadsFullView';
+import MetaLeadsTable from '../components/MetaLeadsTable';
 
 const COPPER = '#C08552';
 const BROWN = '#3E2723';
@@ -77,7 +76,6 @@ const ClientPortalDashboard = () => {
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [expandedCampaigns, setExpandedCampaigns] = useState({});
-  const [leadsFullViewOpen, setLeadsFullViewOpen] = useState(false);
   // Use the raw Meta analytics response directly — mirrors how the admin
   // ClientAdDetails page consumes it (snake_case, no renaming). Keeping
   // shapes identical means the portal and admin stay in sync if the API
@@ -145,11 +143,21 @@ const ClientPortalDashboard = () => {
 
       // Meta: the analytics endpoint returns 200 with an empty body even for
       // unlinked clients — so "response arrived" is NOT proof of linkage.
-      // The authoritative signal is `meta_account.id` in the body, which the
-      // backend only populates when the client actually has a verified
-      // meta_ad_account_id set.
+      // Primary signal is `meta_account.id` (set when the live verify against
+      // Meta succeeded). Fallback: if the body has actual analytics data
+      // (campaigns / leads / summary), treat Meta as linked even if the live
+      // verify failed — covers the case where the backend can read the
+      // synced DB rows but lacks a Meta access token to re-verify the
+      // account live (e.g. running locally against the prod DB).
       const metaData = metaRes.status === 'fulfilled' && metaRes.value ? metaRes.value.data : null;
-      const metaLinked = !!(metaData && metaData.meta_account && metaData.meta_account.id && !metaData.meta_account.error);
+      const metaAccountVerified = !!(metaData?.meta_account?.id && !metaData.meta_account.error);
+      const metaHasData = !!(
+        (metaData?.campaigns?.length)
+        || (metaData?.leads_in_range?.length)
+        || (metaData?.lead_forms?.length)
+        || (metaData?.summary && Object.keys(metaData.summary).length > 0)
+      );
+      const metaLinked = metaAccountVerified || metaHasData;
 
       const merged = {
         ...(googleData || {
@@ -854,122 +862,53 @@ const ClientPortalDashboard = () => {
                 </>
               )}
 
-              {/* Leads in Range */}
-              {metaLeadsInRange.length > 0 && (
-                <>
-                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                    Leads ({metaLeadsInRange.length})
-                  </Typography>
-                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Meta Account</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Name</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Phone</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Platform</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Responses</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {metaLeadsInRange.map((l) => {
-                          const REDUNDANT = new Set([
-                            'full_name', 'fullname', 'name', 'first_name', 'last_name',
-                            'email', 'email_address',
-                            'phone', 'phone_number', 'mobile', 'mobile_number',
-                          ]);
-                          const prettify = (k) => String(k || '')
-                            .replace(/\?+$/, '')
-                            .replace(/_/g, ' ')
-                            .trim()
-                            .replace(/\b\w/g, (c) => c.toUpperCase());
-                          const rfd = l.raw_field_data;
-                          let entries = [];
-                          if (Array.isArray(rfd)) {
-                            entries = rfd
-                              .filter((e) => e?.name && !REDUNDANT.has(String(e.name).toLowerCase()))
-                              .map((e) => ({
-                                label: prettify(e.name),
-                                value: Array.isArray(e?.values) ? e.values.join(', ') : (e?.value ?? ''),
-                              }));
-                          } else if (rfd && typeof rfd === 'object') {
-                            entries = Object.entries(rfd)
-                              .filter(([k]) => !REDUNDANT.has(k.toLowerCase()))
-                              .map(([k, v]) => ({
-                                label: prettify(k),
-                                value: Array.isArray(v) ? v.join(', ') : String(v ?? ''),
-                              }));
-                          }
-                          return (
-                            <TableRow key={l._id} hover sx={{ verticalAlign: 'top' }}>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>
-                                {(() => {
-                                  const ts = l.meta_created_time || l.createdAt;
-                                  return ts
-                                    ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                                    : '—';
-                                })()}
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{metaAccount?.name || '—'}</TableCell>
-                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
-                              <TableCell>
-                                {l.platform && (
-                                  <Chip label={l.platform} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
-                                )}
-                              </TableCell>
-                              <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
-                              <TableCell sx={{ maxWidth: 340, py: 1 }}>
-                                {entries.length === 0 ? (
-                                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
-                                ) : (
-                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
-                                    {entries.map((e, i) => (
-                                      <Box
-                                        key={i}
-                                        sx={{
-                                          display: 'grid',
-                                          gridTemplateColumns: '120px 1fr',
-                                          columnGap: 1,
-                                          alignItems: 'baseline',
-                                        }}
-                                      >
-                                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                          {e.label}
-                                        </Typography>
-                                        <Typography sx={{ fontSize: '0.78rem', color: 'text.primary', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                          {e.value || '—'}
-                                        </Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </>
-              )}
+              {/* Leads — inline Excel-like table (no Full View, no separate page) */}
+              {(() => {
+                const portalLeads = metaLeadsInRange.length ? metaLeadsInRange : (metaData?.recent_leads || []);
+                if (portalLeads.length === 0) return null;
+                return (
+                  <>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                          Leads ({portalLeads.length})
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.5 }}>
+                          Every lead and form response in the selected date range.
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
+                          onClick={() => exportLeadsToExcel(portalLeads, metaAccount, displayName)}
+                          sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
+                        >
+                          Excel
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
+                          onClick={() => exportLeadsToPdf(portalLeads, metaAccount, displayName)}
+                          sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
+                        >
+                          PDF
+                        </Button>
+                      </Box>
+                    </Box>
+                    <Box sx={{ mb: 2 }}>
+                      <MetaLeadsTable leads={portalLeads} metaAccount={metaAccount} maxHeight={520} />
+                    </Box>
+                  </>
+                );
+              })()}
               </>)}
             </>
           );
         })()}
       </Box>
-
-      <MetaLeadsFullView
-        open={leadsFullViewOpen}
-        onClose={() => setLeadsFullViewOpen(false)}
-        leads={metaData?.recent_leads || []}
-        metaAccount={metaData?.meta_account}
-        clientName={clientData?.clientName || 'Client'}
-      />
     </Box>
   );
 };

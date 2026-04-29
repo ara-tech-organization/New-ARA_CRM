@@ -20,12 +20,10 @@ import {
   People as PeopleIcon, Visibility as VisibilityIcon,
   Chat as ChatIcon, Groups as GroupsIcon,
   FileDownload as FileDownloadIcon, PictureAsPdf as PdfIcon,
-  Fullscreen as FullscreenIcon,
 } from '@mui/icons-material';
 import { PageLoader } from '../components/Loading';
 import { useDataCache } from '../contexts/DataCacheContext';
 import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
-import MetaLeadsFullView from '../components/MetaLeadsFullView';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -93,7 +91,6 @@ const ClientAdDetails = () => {
   const [resyncing, setResyncing] = useState(false);
   const [resyncSnack, setResyncSnack] = useState({ open: false, message: '', severity: 'info' });
   // Full-screen Meta leads view
-  const [leadsFullViewOpen, setLeadsFullViewOpen] = useState(false);
   // Banner visibility — persists across reloads via sessionStorage so the user
   // still sees "sync in progress" if they refresh mid-fetch.
   const syncFlagKey = clientId ? `meta_sync_in_progress_${clientId}` : null;
@@ -1315,11 +1312,33 @@ const ClientAdDetails = () => {
                 {/* Leads in Range */}
                 {metaLeadsInRange.length > 0 && (
                   <>
-                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                      Leads ({metaLeadsInRange.length})
-                    </Typography>
-                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
-                      <Table size="small">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                        Leads ({metaLeadsInRange.length})
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
+                          onClick={() => exportLeadsToExcel(metaLeadsInRange, metaAccount, displayName)}
+                          sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
+                        >
+                          Excel
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
+                          onClick={() => exportLeadsToPdf(metaLeadsInRange, metaAccount, displayName)}
+                          sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
+                        >
+                          PDF
+                        </Button>
+                      </Box>
+                    </Box>
+                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, overflowX: 'auto' }}>
+                      <Table size="small" sx={{ minWidth: 1400 }}>
                         <TableHead>
                           <TableRow>
                             <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
@@ -1380,23 +1399,31 @@ const ClientAdDetails = () => {
                                 <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
                                 <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
                                 <TableCell>
-                                  {l.platform && (
-                                    <Chip label={l.platform} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
-                                  )}
+                                  {l.platform && (() => {
+                                    const isIG = String(l.platform).toLowerCase() === 'instagram';
+                                    const platformColor = isIG ? '#E4405F' : META_BLUE;
+                                    return (
+                                      <Chip
+                                        label={l.platform}
+                                        size="small"
+                                        sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${platformColor}15`, color: platformColor }}
+                                      />
+                                    );
+                                  })()}
                                 </TableCell>
                                 <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
-                                <TableCell sx={{ maxWidth: 340, py: 1 }}>
+                                <TableCell sx={{ minWidth: 480, maxWidth: 640, py: 1.2 }}>
                                   {entries.length === 0 ? (
                                     <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
                                   ) : (
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
                                       {entries.map((e, i) => (
                                         <Box
                                           key={i}
                                           sx={{
                                             display: 'grid',
-                                            gridTemplateColumns: '120px 1fr',
-                                            columnGap: 1,
+                                            gridTemplateColumns: '220px 1fr',
+                                            columnGap: 2,
                                             alignItems: 'baseline',
                                           }}
                                         >
@@ -1447,14 +1474,6 @@ const ClientAdDetails = () => {
           })()}
         </CardContent>
       </Card>
-
-      <MetaLeadsFullView
-        open={leadsFullViewOpen}
-        onClose={() => setLeadsFullViewOpen(false)}
-        leads={metaData?.recent_leads || []}
-        metaAccount={metaData?.meta_account}
-        clientName={displayName}
-      />
 
       <Snackbar
         open={resyncSnack.open}
