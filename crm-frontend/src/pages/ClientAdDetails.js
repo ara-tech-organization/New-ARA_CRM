@@ -82,12 +82,6 @@ const ClientAdDetails = () => {
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
 
-  // Inline Link-to-Google-Ads state (shown when client is not linked)
-  const [linkCustomerId, setLinkCustomerId] = useState('');
-  const [linkAccountName, setLinkAccountName] = useState('');
-  const [linking, setLinking] = useState(false);
-  const [linkMessage, setLinkMessage] = useState(null);
-
   // Meta resync state (fire-and-forget)
   const [resyncing, setResyncing] = useState(false);
   const [resyncSnack, setResyncSnack] = useState({ open: false, message: '', severity: 'info' });
@@ -146,28 +140,6 @@ const ClientAdDetails = () => {
 
   // Find client in cache (may be undefined if cache hasn't loaded — that's OK, we still fetch)
   const client = useMemo(() => clients.find(c => c._id === clientId), [clients, clientId]);
-
-  // Handler to link this client to a Google Ads account
-  const handleLinkNow = async () => {
-    if (!clientId || !linkCustomerId.trim() || !linkAccountName.trim()) return;
-    setLinking(true);
-    setLinkMessage(null);
-    try {
-      await api.put(`/google-ads/client/${clientId}/associate`, {
-        customerId: linkCustomerId.trim(),
-        accountName: linkAccountName.trim(),
-      });
-      setLinkMessage({ type: 'success', text: `Linked successfully! Fetching data...` });
-      setLinkCustomerId('');
-      setLinkAccountName('');
-      setTimeout(() => { setLinkMessage(null); fetchGoogleAnalytics({ force: true }); }, 800);
-    } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to link account';
-      setLinkMessage({ type: 'error', text: msg });
-    } finally {
-      setLinking(false);
-    }
-  };
 
   const fetchGoogleAnalytics = async ({ force = false } = {}) => {
     if (!clientId) return;
@@ -521,61 +493,27 @@ const ClientAdDetails = () => {
                 </Alert>
               )}
 
-              {/* Inline Link-to-Google-Ads form (shown when client is not linked) */}
+              {/* Not-linked message — linking is now done from the Clients
+                  list page (the "G" icon next to Facebook). This view just
+                  points the user there instead of duplicating the form. */}
               {!loading && error && error.includes('not linked') && (
                 <Paper variant="outlined" sx={{ p: 3, borderLeft: `4px solid ${GOOGLE_GREEN}`, bgcolor: `${GOOGLE_GREEN}04` }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <GoogleIcon sx={{ color: GOOGLE_GREEN, fontSize: 24 }} />
-                    <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>Link Google Ads Account</Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>Google Ads not linked</Typography>
                   </Box>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    <strong>{displayName}</strong> is not yet linked to a Google Ads account. Enter the account details below to start viewing ad performance.
+                    <strong>{displayName}</strong> is not yet linked to a Google Ads account.
+                    Open the Clients page and click the Google icon next to this client to connect an account.
                   </Typography>
-
-                  <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, md: 5 }}>
-                      <TextField
-                        fullWidth
-                        label="Google Ads Customer ID"
-                        value={linkCustomerId}
-                        onChange={(e) => setLinkCustomerId(e.target.value)}
-                        placeholder="e.g. 2000367396"
-                        helperText="10-digit Customer ID (top-right of your Google Ads account)"
-                        required
-                        disabled={linking}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 5 }}>
-                      <TextField
-                        fullWidth
-                        label="Google Ads Account Name"
-                        value={linkAccountName}
-                        onChange={(e) => setLinkAccountName(e.target.value)}
-                        placeholder="e.g. Ad Grohair & Gloskin Karaikudi"
-                        helperText="The account name as it appears in Google Ads"
-                        required
-                        disabled={linking}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 2 }} sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <Button
-                        fullWidth
-                        variant="contained"
-                        onClick={handleLinkNow}
-                        disabled={!linkCustomerId.trim() || !linkAccountName.trim() || linking}
-                        startIcon={linking ? <CircularProgress size={14} color="inherit" /> : <LinkIcon />}
-                        sx={{ bgcolor: GOOGLE_GREEN, '&:hover': { bgcolor: '#2c8f45' }, py: 1.5, mt: 0.5 }}
-                      >
-                        {linking ? 'Linking...' : 'Link & View'}
-                      </Button>
-                    </Grid>
-                  </Grid>
-
-                  {linkMessage && (
-                    <Alert severity={linkMessage.type} sx={{ mt: 2 }}>
-                      {linkMessage.text}
-                    </Alert>
-                  )}
+                  <Button
+                    variant="contained"
+                    onClick={() => navigate('/clients')}
+                    startIcon={<LinkIcon />}
+                    sx={{ bgcolor: GOOGLE_GREEN, '&:hover': { bgcolor: '#2c8f45' } }}
+                  >
+                    Go to Clients to Link
+                  </Button>
                 </Paper>
               )}
 

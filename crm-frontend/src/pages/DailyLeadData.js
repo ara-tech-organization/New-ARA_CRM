@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useContext } from 'react';
+import { useState, useMemo, useEffect, useRef, useContext, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -37,6 +37,7 @@ import {
 import { TableLoader, PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useDataCache } from '../contexts/DataCacheContext';
+import api from '../api/axios';
 
 const DailyLeadData = () => {
   const { accentColor } = useContext(ThemeContext);
@@ -50,27 +51,49 @@ const DailyLeadData = () => {
   const [selectedClient, setSelectedClient] = useState('all');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const { leads: allCachedLeads, clients: cachedClients, leadsLoading: loading, clientsLoading, fetchLeads, fetchClients } = useDataCache();
-
-  // Trigger the lazy fetches when this page mounts. Leads + clients are
-  // separate caches — pulling only leads left the dropdown empty for
-  // clients that had no leads in the selected date range.
-  useEffect(() => {
-    fetchLeads();
-    fetchClients();
-  }, [fetchLeads, fetchClients]);
-
-  // Filter leads by date range from cache (no API call)
-  const mainApiLeads = useMemo(() => {
-    return allCachedLeads.filter(lead => {
-      const leadDate = lead.date;
-      return leadDate >= dateFrom && leadDate <= dateTo;
-    });
-  }, [allCachedLeads, dateFrom, dateTo]);
+  // Clients still come from the shared cache (small, slow-changing list
+  // shared by other pages). Leads do NOT — the global cache fetches all
+  // 10k rows on every visit, which is what was making this page block
+  // for several seconds. Instead we fetch only the date range below.
+  const { clients: cachedClients, clientsLoading, fetchClients } = useDataCache();
+  const [mainApiLeads, setMainApiLeads] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const mainApiClients = cachedClients;
 
-  const fetchLeadsForDateRange = () => fetchLeads(true);
+  // Targeted fetch — server-side date filter cuts payload from ~10k to
+  // typically <100 records for the day(s) actually being viewed.
+  const fetchLeadsForDateRange = useCallback(async (force = false) => {
+    setLoading(true);
+    try {
+      const params = { limit: 10000 };
+      if (dateFrom === dateTo) {
+        params.date = dateFrom;
+      } else {
+        params.dateFrom = dateFrom;
+        params.dateTo = dateTo;
+      }
+      // Cache-bust flag — passed when the user clicks Refresh so any
+      // upstream cache (CDN, browser) is bypassed.
+      if (force) params._t = Date.now();
+      const res = await api.get('/leads', { params });
+      const data = res.data?.data || res.data || [];
+      setMainApiLeads(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch daily leads:', err);
+      setMainApiLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
+
+  useEffect(() => {
+    fetchLeadsForDateRange();
+  }, [fetchLeadsForDateRange]);
 
   // Filter entries by client (date range already filtered from API)
   const filteredEntries = useMemo(() => {

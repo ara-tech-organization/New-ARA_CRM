@@ -26,6 +26,7 @@ import {
   deleteClientSubscribePage,
   getClientAnalytics,
   updateClientLead,
+  getClientsAdsComparison,
 } from "../controllers/metaController.js";
 
 const router = express.Router();
@@ -67,6 +68,10 @@ router.delete(
 
 // Per-client analytics (Meta-only; sibling to /api/analytics/client/:clientId for Google)
 router.get("/client/:clientId/analytics", getClientAnalytics);
+
+// Multi-client comparison — sibling to /api/analytics/clients for Google.
+// Powers the Meta tab on the AdsDashboard ("Ads Comparison") page.
+router.get("/clients", getClientsAdsComparison);
 
 // Inline CRM edits from MetaLeadsTable. Reachable from both the admin
 // /client-ads page and the client portal — same auth pattern as the

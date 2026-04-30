@@ -44,7 +44,7 @@ const GlassTooltip = ({ active, payload }) => {
 };
 
 // --- Client Performance Card — clickable, navigates to client ads detail page ---
-const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi }) => {
+const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, adsLoading, metaLoading }) => {
   // Prefer live Meta API summary when available; fall back to DailyEntry tracking.
   const metaForm = metaApi?.form_leads != null ? metaApi.form_leads : (data.metaForm || 0);
   const metaWhats = metaApi?.whatsapp_leads != null ? metaApi.whatsapp_leads : (data.metaWhatsapp || 0);
@@ -104,11 +104,20 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi })
             <Facebook sx={{ color: '#C08552', fontSize: 18 }} />
             <Typography sx={{ fontWeight: 700, color: '#C08552', fontSize: '0.78rem' }}>META</Typography>
           </Box>
-          <Box sx={{ display: 'flex', flex: 1, gap: 0.8 }}>
-            <MetricBox value={metaForm} label="Form" />
-            <MetricBox value={metaWhats} label="WhatsApp" />
-            <MetricBox value={`₹${Number(metaSpent).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} label="Spent" />
-            <MetricBox value={`₹${Number(metaCpl).toFixed(0)}`} label="CPL" />
+          <Box sx={{ display: 'flex', flex: 1, gap: 0.8, alignItems: 'center' }}>
+            {client.metaEnabled && metaLoading && !metaApi ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', justifyContent: 'center', py: 0.5 }}>
+                <CircularProgress size={14} sx={{ color: '#C08552' }} />
+                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Loading Meta data…</Typography>
+              </Box>
+            ) : (
+              <>
+                <MetricBox value={metaForm} label="Form" />
+                <MetricBox value={metaWhats} label="WhatsApp" />
+                <MetricBox value={`₹${Number(metaSpent).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} label="Spent" />
+                <MetricBox value={`₹${Number(metaCpl).toFixed(0)}`} label="CPL" />
+              </>
+            )}
           </Box>
         </Box>
 
@@ -121,13 +130,34 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi })
             <Typography sx={{ fontWeight: 700, color: '#3E2723', fontSize: '0.78rem' }}>GOOGLE</Typography>
           </Box>
           <Box sx={{ display: 'flex', flex: 1, gap: 0.8, alignItems: 'center' }}>
-            {isLinked ? (
-              <>
-                <MetricBox value={`${(adsData.totalClicks > 0 ? ((adsData.totalConversions || 0) / adsData.totalClicks * 100) : 0).toFixed(2)}%`} label="Conv. Rate" />
-                <MetricBox value={`₹${(adsData.fund ?? adsData.totalCost ?? 0).toLocaleString()}`} label="Fund" />
-                <MetricBox value={(adsData.totalClicks || 0).toLocaleString()} label="Clicks" />
-                <MetricBox value={(adsData.totalImpressions || 0).toLocaleString()} label="Impr." />
-              </>
+            {isLinked ? (() => {
+              // Prefer the API's precomputed CTR / CPC; fall back to a
+              // local derivation so the card still renders sensible
+              // numbers if the summary endpoint doesn't include them.
+              const clicks = Number(adsData.totalClicks) || 0;
+              const impressions = Number(adsData.totalImpressions) || 0;
+              const cost = Number(adsData.totalCost ?? adsData.fund ?? 0);
+              const ctr = adsData.ctr != null
+                ? Number(adsData.ctr)
+                : (impressions > 0 ? (clicks / impressions) * 100 : 0);
+              const cpc = adsData.cpc != null
+                ? Number(adsData.cpc)
+                : (clicks > 0 ? cost / clicks : 0);
+              return (
+                <>
+                  <MetricBox value={`${ctr.toFixed(2)}%`} label="CTR" />
+                  <MetricBox value={`₹${cpc.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`} label="Avg CPC" />
+                  <MetricBox value={clicks.toLocaleString()} label="Clicks" />
+                  <MetricBox value={impressions.toLocaleString()} label="Impr." />
+                </>
+              );
+            })() : client.googleAdsEnabled && adsLoading ? (
+              // Linked but the analytics fetch is still in flight — show a
+              // loader instead of the misleading "Not linked" message.
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', justifyContent: 'center', py: 0.5 }}>
+                <CircularProgress size={14} sx={{ color: '#3E2723' }} />
+                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Loading Google data…</Typography>
+              </Box>
             ) : (
               <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontStyle: 'italic', textAlign: 'center', width: '100%', py: 0.5 }}>
                 Not linked to Google Ads
@@ -156,7 +186,16 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { accentColor } = useContext(ThemeContext);
   const tealAccent = accentColor?.secondary || '#C08552';
-  const { todayLeads, clients: cachedClients, todayLeadsLoading: leadsLoading, clientsLoading, refreshAll } = useDataCache();
+  const { todayLeads, clients: cachedClients, todayLeadsLoading: leadsLoading, clientsLoading, refreshAll, fetchTodayLeads, fetchClients } = useDataCache();
+
+  // Auto-refresh today's data + clients on every Dashboard mount so the
+  // Client-wise Performance cards show fresh today's numbers without the
+  // user having to click the Refresh button. The underlying cache TTL
+  // (5 min) means this is a no-op when the data is still fresh.
+  useEffect(() => {
+    fetchTodayLeads(true);
+    fetchClients();
+  }, [fetchTodayLeads, fetchClients]);
 
   const [clientSearch, setClientSearch] = useState('');
 
@@ -424,6 +463,8 @@ const Dashboard = () => {
               onClick={() => navigate(`/client-ads/${client._id}`)}
               adsData={adsDataMap[client._id]}
               metaApi={metaDataMap[client._id]}
+              adsLoading={adsLoading}
+              metaLoading={metaLoading}
             />
           </Grid>
         ))}
