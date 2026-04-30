@@ -50,10 +50,15 @@ const DailyLeadData = () => {
   const [selectedClient, setSelectedClient] = useState('all');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const { leads: allCachedLeads, clients: cachedClients, leadsLoading: loading, clientsLoading, fetchLeads } = useDataCache();
+  const { leads: allCachedLeads, clients: cachedClients, leadsLoading: loading, clientsLoading, fetchLeads, fetchClients } = useDataCache();
 
-  // Trigger the lazy all-leads fetch when this page mounts
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  // Trigger the lazy fetches when this page mounts. Leads + clients are
+  // separate caches — pulling only leads left the dropdown empty for
+  // clients that had no leads in the selected date range.
+  useEffect(() => {
+    fetchLeads();
+    fetchClients();
+  }, [fetchLeads, fetchClients]);
 
   // Filter leads by date range from cache (no API call)
   const mainApiLeads = useMemo(() => {
@@ -99,19 +104,14 @@ const DailyLeadData = () => {
     return client?.clientName || 'Unknown Client';
   }, [selectedClient, mainApiClients]);
 
-  // Get unique clients from leads for dropdown
+  // Dropdown source = the full /clients cache, sorted alphabetically by
+  // clientName. Previously this was derived from leads in the current
+  // date range, which dropped any client that hadn't generated leads yet.
   const clients = useMemo(() => {
-    const clientMap = new Map();
-    mainApiLeads.forEach(lead => {
-      if (lead.clientId && !clientMap.has(lead.clientId)) {
-        clientMap.set(lead.clientId, {
-          _id: lead.clientId,
-          name: lead.clientName,
-        });
-      }
-    });
-    return Array.from(clientMap.values());
-  }, [mainApiLeads]);
+    return [...(mainApiClients || [])].sort((a, b) =>
+      String(a.clientName || '').localeCompare(String(b.clientName || ''))
+    );
+  }, [mainApiClients]);
 
   // Calculate totals for the selected date
   const dailyTotals = useMemo(() => {
@@ -307,12 +307,14 @@ const DailyLeadData = () => {
                   }
                 >
                   <MenuItem value="all">All Clients</MenuItem>
-                  {clientsLoading ? (
+                  {clientsLoading && clients.length === 0 ? (
                     <MenuItem disabled>Loading...</MenuItem>
+                  ) : clients.length === 0 ? (
+                    <MenuItem disabled>No clients found</MenuItem>
                   ) : (
                     clients.map((client) => (
                       <MenuItem key={client._id} value={client._id}>
-                        {client.name} {client.company ? `(${client.company})` : ''}
+                        {client.clientName}{client.place ? ` — ${client.place}` : ''}
                       </MenuItem>
                     ))
                   )}

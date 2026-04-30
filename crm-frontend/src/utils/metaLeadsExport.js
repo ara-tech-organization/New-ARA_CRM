@@ -70,22 +70,104 @@ const fmtReceived = (fetchedAt) => {
   }
 };
 
+const fmtDateOnly = (d) => {
+  if (!d) return '';
+  try {
+    return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return String(d);
+  }
+};
+
+// Squash follow-ups into one cell, mirroring the spreadsheet's "Followup
+// History" columns. Connected vs not-connected are split so reporting can
+// glance at retention vs reach-rate without re-parsing.
+const summarizeFollowUps = (followUps = [], { connectedOnly } = {}) => {
+  if (!Array.isArray(followUps) || followUps.length === 0) return '';
+  return followUps
+    .filter((f) => {
+      if (connectedOnly === true) return !!f.connected;
+      if (connectedOnly === false) return !f.connected;
+      return true;
+    })
+    .map((f) => {
+      const date = fmtDateOnly(f.date) || '—';
+      const label = f.call_label || '';
+      const remarks = f.remarks ? ` ${f.remarks}` : '';
+      return `Attempt ${f.number}: ${date}${label ? ` ${label}` : ''}${remarks}`;
+    })
+    .join('\n');
+};
+
+// Form-question labels the team reviews most often — pin these next to
+// the lead-details columns rather than letting them land in the dynamic
+// tail. Labels match the prettify() output (title-cased, "?" stripped).
+const PRIORITY_FORM_COLUMNS = [
+  'Are You Ready To Visit Bonitaa Skin And Hair Care In Salem',
+  'City',
+  'May I Know Your Concern',
+  'Are You Near By Salem',
+  'Which Service Are You Interest',
+];
+const PRIORITY_FORM_SET = new Set(PRIORITY_FORM_COLUMNS);
+
 const buildRowsAndColumns = (leads, metaAccount) => {
-  const baseColumns = ['Received', 'Meta Account', 'Name', 'Email', 'Phone', 'Platform', 'Form'];
+  // Order mirrors the section bands of MetaLeadsTable so the export looks
+  // like the spreadsheet the team works from today, with Form Name +
+  // priority form questions inserted right before Hair / Skin.
+  const baseColumns = [
+    // Lead Details — pre Hair/Skin
+    'Received', 'Meta Account', 'Source', 'Name', 'Contact', 'Email', 'Location',
+    // Form name + priority form-response columns (pinned slot)
+    'Form',
+    ...PRIORITY_FORM_COLUMNS,
+    // Lead Details — Hair/Skin onwards
+    'Hair / Skin', 'Telecaller',
+    // Initial Call
+    'First Call Date', 'Call Label', 'Response', 'Remarks',
+    // Reminder
+    'Next Follow-up',
+    // Appointment
+    'Appointment Status', 'Appointment Date', 'Booked On',
+    // Follow-up summary
+    'Latest Follow-up #', 'Latest Follow-up Date', 'Latest Call Label', 'Latest Remarks',
+    'Followup History (Not Connected)', 'Followup History (Connected)',
+  ];
   const formColumnSet = new Set();
   const rows = leads.map((l) => {
     const entries = extractFormEntries(l.raw_field_data);
+    const fu = Array.isArray(l.follow_ups) ? l.follow_ups : [];
+    const last = fu.length ? fu[fu.length - 1] : null;
     const row = {
-      Received: fmtReceived(metaAccount?.fetched_at),
+      Received: fmtReceived(l.meta_created_time || l.createdAt || metaAccount?.fetched_at),
       'Meta Account': metaAccount?.name || '',
+      Source: l.platform || '',
       Name: l.name || '',
+      Contact: l.phone || '',
       Email: l.email || '',
-      Phone: l.phone || '',
-      Platform: l.platform || '',
+      Location: l.lead_location || '',
       Form: l.meta_form_name || '',
+      'Hair / Skin': l.lead_category || '',
+      Telecaller: l.telecaller_name || '',
+      'First Call Date': fmtDateOnly(l.first_call_date),
+      'Call Label': l.first_call_label || '',
+      Response: l.response_label || '',
+      Remarks: l.remarks || '',
+      'Next Follow-up': fmtDateOnly(l.next_followup_date),
+      'Appointment Status': l.appointment_status || '',
+      'Appointment Date': fmtDateOnly(l.appointment_date),
+      'Booked On': fmtDateOnly(l.appointment_booked_date),
+      'Latest Follow-up #': last ? `FU-${last.number}` : '',
+      'Latest Follow-up Date': last ? fmtDateOnly(last.date) : '',
+      'Latest Call Label': last?.call_label || '',
+      'Latest Remarks': last?.remarks || '',
+      'Followup History (Not Connected)': summarizeFollowUps(fu, { connectedOnly: false }),
+      'Followup History (Connected)': summarizeFollowUps(fu, { connectedOnly: true }),
     };
     entries.forEach((e) => {
-      formColumnSet.add(e.label);
+      // Priority labels already have a fixed slot in baseColumns; only
+      // unrecognized labels go to the dynamic tail.
+      if (!PRIORITY_FORM_SET.has(e.label)) formColumnSet.add(e.label);
       row[e.label] = e.value;
     });
     return row;
@@ -105,7 +187,8 @@ const slugify = (s) => String(s || 'meta-leads')
 export const exportLeadsToExcel = (leads, metaAccount, clientName) => {
   if (!leads || leads.length === 0) return false;
   const { rows, columns } = buildRowsAndColumns(leads, metaAccount);
-  const platformIdx = columns.indexOf('Platform');
+  // Column was renamed Platform -> Source to match the spreadsheet bands.
+  const platformIdx = columns.indexOf('Source');
 
   // Build the sheet as an array-of-arrays of styled cells so we can apply
   // per-cell formatting. xlsx-js-style understands the `s` property.
@@ -170,7 +253,8 @@ export const exportLeadsToExcel = (leads, metaAccount, clientName) => {
 export const exportLeadsToPdf = (leads, metaAccount, clientName) => {
   if (!leads || leads.length === 0) return false;
   const { rows, columns } = buildRowsAndColumns(leads, metaAccount);
-  const platformIdx = columns.indexOf('Platform');
+  // Column was renamed Platform -> Source to match the spreadsheet bands.
+  const platformIdx = columns.indexOf('Source');
 
   const headerFill = HEX_TO_RGB(HEADER_FILL_HEX);
   const headerText = HEX_TO_RGB(HEADER_TEXT_HEX);

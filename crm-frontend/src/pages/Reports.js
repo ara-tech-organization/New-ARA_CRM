@@ -30,11 +30,7 @@ import {
   AttachMoney,
   CalendarMonth,
   Facebook,
-  Google,
   WhatsApp,
-  Language,
-  Phone,
-  CloudQueue as CloudQueueIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import {
@@ -69,24 +65,6 @@ const METRIC_CONFIG = {
     color: '#C08552',
     label: 'Total Meta Leads',
     icon: <Facebook />,
-    bgColor: '#C0855215',
-  },
-  googleWebsite: {
-    color: '#C08552',
-    label: 'Google Website Leads',
-    icon: <Language />,
-    bgColor: '#C0855215',
-  },
-  googleCall: {
-    color: '#3E2723',
-    label: 'Google Call Leads',
-    icon: <Phone />,
-    bgColor: '#3E272315',
-  },
-  googleTotalLeads: {
-    color: '#C08552',
-    label: 'Total Google Leads',
-    icon: <Google />,
     bgColor: '#C0855215',
   },
 };
@@ -333,9 +311,6 @@ const Reports = () => {
         metaForm: 0,
         metaWhatsapp: 0,
         metaTotalLeads: 0,
-        googleWebsite: 0,
-        googleCall: 0,
-        googleTotalLeads: 0,
       };
     });
 
@@ -346,9 +321,6 @@ const Reports = () => {
           dateMap[dateStr].metaForm += entry.metaForm || 0;
           dateMap[dateStr].metaWhatsapp += entry.metaWhatsapp || 0;
           dateMap[dateStr].metaTotalLeads += entry.metaTotalLeads || 0;
-          dateMap[dateStr].googleWebsite += entry.googleWebsite || 0;
-          dateMap[dateStr].googleCall += entry.googleCall || 0;
-          dateMap[dateStr].googleTotalLeads += entry.googleTotalLeads || 0;
         }
       } catch {
         // Skip invalid dates
@@ -402,18 +374,12 @@ const Reports = () => {
             metaForm: 0,
             metaWhatsapp: 0,
             metaTotalLeads: 0,
-            googleWebsite: 0,
-            googleCall: 0,
-            googleTotalLeads: 0,
           };
         }
 
         monthMap[monthKey].metaForm += entry.metaForm || 0;
         monthMap[monthKey].metaWhatsapp += entry.metaWhatsapp || 0;
         monthMap[monthKey].metaTotalLeads += entry.metaTotalLeads || 0;
-        monthMap[monthKey].googleWebsite += entry.googleWebsite || 0;
-        monthMap[monthKey].googleCall += entry.googleCall || 0;
-        monthMap[monthKey].googleTotalLeads += entry.googleTotalLeads || 0;
       } catch {
         // Skip invalid dates
       }
@@ -422,37 +388,26 @@ const Reports = () => {
     return Object.values(monthMap).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
   }, [barChartEntries]);
 
-  // Calculate stats
+  // Calculate stats — Meta-only since Google reporting was removed.
   const stats = useMemo(() => {
     const metaTotalLeads = filteredEntries.reduce((sum, entry) => sum + (entry.metaTotalLeads || 0), 0);
-    const googleTotalLeads = filteredEntries.reduce((sum, entry) => sum + (entry.googleTotalLeads || 0), 0);
-    const totalLeads = metaTotalLeads + googleTotalLeads;
     const totalSpend = filteredEntries.reduce((sum, entry) => sum + (entry.totalSpend || 0), 0);
-    const avgCPL = totalLeads > 0 ? totalSpend / totalLeads : 0;
+    const avgCPL = metaTotalLeads > 0 ? totalSpend / metaTotalLeads : 0;
 
     return {
       metaTotalLeads,
-      googleTotalLeads,
-      totalLeads,
       totalSpend,
       avgCPL,
       entriesCount: filteredEntries.length,
     };
   }, [filteredEntries]);
 
-  // Table data
+  // Table data — change column tracks day-over-day Meta total movement.
   const tableData = useMemo(() => {
     return lineChartData.map((item, index) => {
       const prevItem = index > 0 ? lineChartData[index - 1] : null;
-      const totalLeads = item.metaTotalLeads + item.googleTotalLeads;
-      const prevTotalLeads = prevItem ? prevItem.metaTotalLeads + prevItem.googleTotalLeads : 0;
-      const change = prevItem ? totalLeads - prevTotalLeads : 0;
-
-      return {
-        ...item,
-        totalLeads,
-        change,
-      };
+      const change = prevItem ? item.metaTotalLeads - prevItem.metaTotalLeads : 0;
+      return { ...item, change };
     });
   }, [lineChartData]);
 
@@ -543,7 +498,7 @@ const Reports = () => {
         <>
           {/* Stats Cards */}
           <Grid container spacing={1.5} sx={{ mb: 2 }}>
-            <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Meta Total Leads"
                 value={stats.metaTotalLeads}
@@ -551,15 +506,7 @@ const Reports = () => {
                 color={METRIC_CONFIG.metaTotalLeads.color}
               />
             </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-              <MetricCard
-                title="Google Total Leads"
-                value={stats.googleTotalLeads}
-                icon={<Google />}
-                color={METRIC_CONFIG.googleTotalLeads.color}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Total Spend"
                 value={stats.totalSpend.toFixed(2)}
@@ -568,7 +515,7 @@ const Reports = () => {
                 color="#9c27b0"
               />
             </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Average CPL"
                 value={stats.avgCPL.toFixed(2)}
@@ -577,7 +524,7 @@ const Reports = () => {
                 color="#ff9800"
               />
             </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <MetricCard
                 title="Total Entries"
                 value={stats.entriesCount}
@@ -619,30 +566,6 @@ const Reports = () => {
                 data={lineChartData}
                 metricKey="metaTotalLeads"
                 title="Total Meta Leads"
-              />
-            </Grid>
-            {/* Google Website Leads */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <MetricLineChart
-                data={lineChartData}
-                metricKey="googleWebsite"
-                title="Google Website Leads"
-              />
-            </Grid>
-            {/* Google Call Leads */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <MetricLineChart
-                data={lineChartData}
-                metricKey="googleCall"
-                title="Google Call Leads"
-              />
-            </Grid>
-            {/* Total Google Leads */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <MetricLineChart
-                data={lineChartData}
-                metricKey="googleTotalLeads"
-                title="Total Google Leads"
               />
             </Grid>
           </Grid>
@@ -703,30 +626,6 @@ const Reports = () => {
                 title="Total Meta Leads"
               />
             </Grid>
-            {/* Google Website Leads Bar */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <MetricBarChart
-                data={barChartData}
-                metricKey="googleWebsite"
-                title="Google Website Leads"
-              />
-            </Grid>
-            {/* Google Call Leads Bar */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <MetricBarChart
-                data={barChartData}
-                metricKey="googleCall"
-                title="Google Call Leads"
-              />
-            </Grid>
-            {/* Total Google Leads Bar */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <MetricBarChart
-                data={barChartData}
-                metricKey="googleTotalLeads"
-                title="Total Google Leads"
-              />
-            </Grid>
           </Grid>
 
           {/* Data Table */}
@@ -748,18 +647,6 @@ const Reports = () => {
                       </TableCell>
                       <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.metaTotalLeads.color }} align="right">
                         Meta Total
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.googleWebsite.color }} align="right">
-                        Google Web
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.googleCall.color }} align="right">
-                        Google Call
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.googleTotalLeads.color }} align="right">
-                        Google Total
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 600 }} align="right">
-                        Total
                       </TableCell>
                       <TableCell sx={{ fontWeight: 600 }} align="center">
                         Change
@@ -788,26 +675,6 @@ const Reports = () => {
                           <TableCell align="right" sx={{ fontWeight: 600, color: METRIC_CONFIG.metaTotalLeads.color }}>
                             {row.metaTotalLeads}
                           </TableCell>
-                          <TableCell align="right">
-                            <Chip
-                              label={row.googleWebsite}
-                              size="small"
-                              sx={{ bgcolor: METRIC_CONFIG.googleWebsite.bgColor, color: METRIC_CONFIG.googleWebsite.color, fontWeight: 600 }}
-                            />
-                          </TableCell>
-                          <TableCell align="right">
-                            <Chip
-                              label={row.googleCall}
-                              size="small"
-                              sx={{ bgcolor: METRIC_CONFIG.googleCall.bgColor, color: METRIC_CONFIG.googleCall.color, fontWeight: 600 }}
-                            />
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 600, color: METRIC_CONFIG.googleTotalLeads.color }}>
-                            {row.googleTotalLeads}
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700 }}>
-                            {row.totalLeads}
-                          </TableCell>
                           <TableCell align="center">
                             {row.change !== 0 && (
                               <Chip
@@ -832,7 +699,7 @@ const Reports = () => {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                        <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
                           <Typography color="text.secondary">No data available for selected date range</Typography>
                         </TableCell>
                       </TableRow>

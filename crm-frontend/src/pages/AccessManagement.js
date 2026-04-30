@@ -46,14 +46,14 @@ import userApi from '../api/userApi';
 // Available pages/screens in the system
 const availablePages = [
   { id: 'dashboard', name: 'Dashboard', icon: '📊' },
-  { id: 'daily-entry', name: 'Daily Entry', icon: '📝' },
+  // { id: 'daily-entry', name: 'Daily Entry', icon: '📝' },
   { id: 'daily-lead-data', name: 'Daily Lead Data', icon: '📈' },
   { id: 'leads', name: 'Leads Management', icon: '🎯' },
   { id: 'ads-dashboard', name: 'Ads Dashboard', icon: '📣' },
   { id: 'clients', name: 'Clients', icon: '👥' },
-  { id: 'client-vault', name: 'Client Vault', icon: '🔐' },
-  { id: 'content-management', name: 'Content Management', icon: '📋' },
-  { id: 'fund-entry', name: 'Fund Entry', icon: '💰' },
+  // { id: 'client-vault', name: 'Client Vault', icon: '🔐' },
+  // { id: 'content-management', name: 'Content Management', icon: '📋' },
+  // { id: 'fund-entry', name: 'Fund Entry', icon: '💰' },
   // { id: 'tasks', name: 'Tasks', icon: '✅' },
   { id: 'reports', name: 'Reports', icon: '📄' },
   { id: 'settings', name: 'Settings', icon: '⚙️' },

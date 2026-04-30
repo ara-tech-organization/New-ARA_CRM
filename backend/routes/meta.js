@@ -25,6 +25,7 @@ import {
   postClientSubscribePage,
   deleteClientSubscribePage,
   getClientAnalytics,
+  updateClientLead,
 } from "../controllers/metaController.js";
 
 const router = express.Router();
@@ -66,6 +67,11 @@ router.delete(
 
 // Per-client analytics (Meta-only; sibling to /api/analytics/client/:clientId for Google)
 router.get("/client/:clientId/analytics", getClientAnalytics);
+
+// Inline CRM edits from MetaLeadsTable. Reachable from both the admin
+// /client-ads page and the client portal — same auth pattern as the
+// analytics route above.
+router.put("/client/:clientId/leads/:leadId", updateClientLead);
 
 // Utilities
 router.get("/ad-account/:adAccountId/verify", getVerifyAdAccount);

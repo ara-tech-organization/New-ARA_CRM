@@ -24,6 +24,7 @@ import {
 import { PageLoader } from '../components/Loading';
 import { useDataCache } from '../contexts/DataCacheContext';
 import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
+import MetaLeadsTable from '../components/MetaLeadsTable';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -268,6 +269,25 @@ const ClientAdDetails = () => {
     } finally {
       setMetaLoading(false);
     }
+  };
+
+  // Inline-edit save callback for the CRM telecaller columns rendered by
+  // MetaLeadsTable. PATCHes the lead via the meta-tree route (kept off
+  // /api/leads/:id so the client portal can hit the same endpoint with its
+  // clientToken) and patches the lead in metaData.leads_in_range so the
+  // table reflects the server response without a full refetch.
+  const handleSaveMetaLead = async (leadId, payload) => {
+    if (!clientId) throw new Error('Missing clientId');
+    const res = await api.put(`/meta/client/${clientId}/leads/${leadId}`, payload);
+    const updated = res.data?.lead;
+    if (updated) {
+      setMetaData((prev) => {
+        if (!prev?.leads_in_range) return prev;
+        const nextLeads = prev.leads_in_range.map((l) => (l._id === leadId ? { ...l, ...updated } : l));
+        return { ...prev, leads_in_range: nextLeads };
+      });
+    }
+    return updated;
   };
 
   // Fetch analytics as soon as we have a clientId — don't wait for the cached client record
@@ -1337,130 +1357,14 @@ const ClientAdDetails = () => {
                         </Button>
                       </Box>
                     </Box>
-                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, overflowX: 'auto' }}>
-                      <Table size="small" sx={{ minWidth: 1400 }}>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Meta Account</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Name</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Phone</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Platform</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Responses</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {metaLeadsInRange.map(l => {
-                            // Build a [{label, value}] list from raw_field_data regardless of
-                            // shape (Meta's array-of-{name,value[s]} or plain object). Hide
-                            // fields already shown in Name / Email / Phone columns so this
-                            // cell only carries the form-specific answers.
-                            const REDUNDANT = new Set([
-                              'full_name', 'fullname', 'name', 'first_name', 'last_name',
-                              'email', 'email_address',
-                              'phone', 'phone_number', 'mobile', 'mobile_number',
-                            ]);
-                            const prettify = (k) => String(k || '')
-                              .replace(/\?+$/, '')
-                              .replace(/_/g, ' ')
-                              .trim()
-                              .replace(/\b\w/g, (c) => c.toUpperCase());
-                            const rfd = l.raw_field_data;
-                            let entries = [];
-                            if (Array.isArray(rfd)) {
-                              entries = rfd
-                                .filter((e) => e?.name && !REDUNDANT.has(String(e.name).toLowerCase()))
-                                .map((e) => ({
-                                  label: prettify(e.name),
-                                  value: Array.isArray(e?.values) ? e.values.join(', ') : (e?.value ?? ''),
-                                }));
-                            } else if (rfd && typeof rfd === 'object') {
-                              entries = Object.entries(rfd)
-                                .filter(([k]) => !REDUNDANT.has(k.toLowerCase()))
-                                .map(([k, v]) => ({
-                                  label: prettify(k),
-                                  value: Array.isArray(v) ? v.join(', ') : String(v ?? ''),
-                                }));
-                            }
-                            return (
-                              <TableRow key={l._id} hover sx={{ verticalAlign: 'top' }}>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>
-                                  {(() => {
-                                    const ts = l.meta_created_time || l.createdAt;
-                                    return ts
-                                      ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                                      : '—';
-                                  })()}
-                                </TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>{metaAccount?.name || '—'}</TableCell>
-                                <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
-                                <TableCell>
-                                  {l.platform && (() => {
-                                    const isIG = String(l.platform).toLowerCase() === 'instagram';
-                                    const platformColor = isIG ? '#E4405F' : META_BLUE;
-                                    return (
-                                      <Chip
-                                        label={l.platform}
-                                        size="small"
-                                        sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${platformColor}15`, color: platformColor }}
-                                      />
-                                    );
-                                  })()}
-                                </TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
-                                <TableCell sx={{ minWidth: 480, maxWidth: 640, py: 1.2 }}>
-                                  {entries.length === 0 ? (
-                                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
-                                  ) : (
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
-                                      {entries.map((e, i) => (
-                                        <Box
-                                          key={i}
-                                          sx={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '220px 1fr',
-                                            columnGap: 2,
-                                            alignItems: 'baseline',
-                                          }}
-                                        >
-                                          <Typography
-                                            sx={{
-                                              fontSize: '0.68rem',
-                                              fontWeight: 600,
-                                              color: 'text.secondary',
-                                              textTransform: 'uppercase',
-                                              letterSpacing: 0.3,
-                                              whiteSpace: 'normal',
-                                              wordBreak: 'break-word',
-                                            }}
-                                          >
-                                            {e.label}
-                                          </Typography>
-                                          <Typography
-                                            sx={{
-                                              fontSize: '0.78rem',
-                                              color: 'text.primary',
-                                              whiteSpace: 'normal',
-                                              wordBreak: 'break-word',
-                                            }}
-                                          >
-                                            {e.value || '—'}
-                                          </Typography>
-                                        </Box>
-                                      ))}
-                                    </Box>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
+                    <Box sx={{ mb: 2 }}>
+                      <MetaLeadsTable
+                        leads={metaLeadsInRange}
+                        metaAccount={metaAccount}
+                        maxHeight={600}
+                        onSaveLead={handleSaveMetaLead}
+                      />
+                    </Box>
                   </>
                 )}
 

@@ -192,6 +192,29 @@ const ClientPortalDashboard = () => {
 
   useEffect(() => { if (token) fetchAnalytics(); }, [dateFrom, dateTo]);
 
+  // Inline-edit save callback for MetaLeadsTable. PATCHes the lead via the
+  // client-portal-friendly route added to /api/meta and patches the lead
+  // in-place inside data.meta.leads_in_range so the table reflects the
+  // server response without a full refetch.
+  const handleSaveMetaLead = async (leadId, payload) => {
+    const clientId = clientData?._id;
+    if (!clientId) throw new Error('Client session expired — please log in again.');
+    const { data: resp } = await clientApi.put(
+      `/meta/client/${clientId}/leads/${leadId}`,
+      payload,
+      { timeout: 20000 }
+    );
+    const updated = resp?.lead;
+    if (updated) {
+      setData((prev) => {
+        if (!prev?.meta?.leads_in_range) return prev;
+        const nextLeads = prev.meta.leads_in_range.map((l) => (l._id === leadId ? { ...l, ...updated } : l));
+        return { ...prev, meta: { ...prev.meta, leads_in_range: nextLeads } };
+      });
+    }
+    return updated;
+  };
+
   // Auto-select the tab that has data, once, on first load. If the client
   // has only Meta linked (no Google), jump them straight to the Meta tab
   // instead of making them see the "Google not linked" banner first.
@@ -899,7 +922,12 @@ const ClientPortalDashboard = () => {
                       </Box>
                     </Box>
                     <Box sx={{ mb: 2 }}>
-                      <MetaLeadsTable leads={portalLeads} metaAccount={metaAccount} maxHeight={520} />
+                      <MetaLeadsTable
+                        leads={portalLeads}
+                        metaAccount={metaAccount}
+                        maxHeight={520}
+                        onSaveLead={handleSaveMetaLead}
+                      />
                     </Box>
                   </>
                 );

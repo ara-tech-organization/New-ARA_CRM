@@ -902,7 +902,7 @@ export const getClientAnalytics = async (req, res) => {
     source: 'meta',
     ...leadDateFilter,
   })
-    .select('name email phone status meta_form_id meta_form_name meta_campaign_id meta_adset_id meta_ad_id platform createdAt meta_created_time raw_field_data utm_source utm_medium utm_campaign utm_content utm_term')
+    .select('name email phone status meta_form_id meta_form_name meta_campaign_id meta_adset_id meta_ad_id platform createdAt meta_created_time raw_field_data utm_source utm_medium utm_campaign utm_content utm_term is_duplicate lead_location lead_category telecaller_name first_call_date first_call_label response_label remarks next_followup_date appointment_status appointment_date appointment_booked_date follow_ups')
     .sort({ meta_created_time: -1, createdAt: -1 })
     .lean();
 
@@ -950,4 +950,74 @@ export const getClientAnalytics = async (req, res) => {
       ads: await MetaAd.countDocuments({ client_id: clientId }),
     },
   });
+};
+
+// PUT /api/meta/client/:clientId/leads/:leadId
+// Inline-edit endpoint for the CRM telecaller columns rendered by
+// MetaLeadsTable. Lives on the Meta route tree (rather than /api/leads/:id)
+// so the client-portal can hit it with its own clientToken — same pattern as
+// /api/meta/client/:clientId/analytics. The /api/leads/:id PUT is admin-only
+// and runs leadValidation which would reject our partial CRM patches.
+//
+// Accepts a partial body — only allow-listed fields are persisted, so a
+// stray `status` or `assignedTo` from the frontend can never escalate.
+const CRM_EDITABLE_FIELDS = [
+  'is_duplicate',
+  'lead_location',
+  'lead_category',
+  'telecaller_name',
+  'first_call_date',
+  'first_call_label',
+  'response_label',
+  'remarks',
+  'next_followup_date',
+  'appointment_status',
+  'appointment_date',
+  'appointment_booked_date',
+  'follow_ups',
+];
+
+export const updateClientLead = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  const { leadId } = req.params;
+  if (!mongoose.isValidObjectId(leadId)) {
+    return res.status(400).json({ success: false, message: 'Invalid leadId' });
+  }
+
+  const lead = await Lead.findOne({ _id: leadId, client: client._id });
+  if (!lead) {
+    return res.status(404).json({ success: false, message: 'Lead not found' });
+  }
+
+  for (const key of CRM_EDITABLE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(req.body, key)) continue;
+    const value = req.body[key];
+    if (key === 'follow_ups') {
+      // Replace the full array — simpler than diffing, and the table sends
+      // the entire ordered list on every save.
+      lead.follow_ups = Array.isArray(value)
+        ? value.map((f) => ({
+            number: f.number,
+            date: f.date || null,
+            call_label: f.call_label || '',
+            remarks: f.remarks || '',
+            connected: !!f.connected,
+          }))
+        : [];
+    } else if (
+      key === 'first_call_date' ||
+      key === 'next_followup_date' ||
+      key === 'appointment_date' ||
+      key === 'appointment_booked_date'
+    ) {
+      lead[key] = value ? new Date(value) : null;
+    } else {
+      lead[key] = value;
+    }
+  }
+
+  await lead.save();
+  res.json({ success: true, lead: lead.toObject() });
 };
