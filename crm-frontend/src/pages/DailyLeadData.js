@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useRef, useContext, useCallback } from 'react';
+import { useState, useMemo, useEffect, useContext, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -23,18 +24,14 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@mui/material';
 import {
   CalendarToday as CalendarIcon,
   PictureAsPdf as PdfIcon,
   Business as BusinessIcon,
-  Cloud as CloudIcon,
-  Storage as StorageIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { TableLoader, PageLoader } from '../components/Loading';
+import { PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useDataCache } from '../contexts/DataCacheContext';
 import api from '../api/axios';
@@ -42,126 +39,89 @@ import api from '../api/axios';
 const DailyLeadData = () => {
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#C08552';
-  const secondaryColor = accentColor?.primary || '#3E2723';
 
-  const printRef = useRef();
+  const today = new Date().toISOString().split('T')[0];
+  const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
 
-  const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
-  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedClient, setSelectedClient] = useState('all');
+  // URL is the source of truth for filters. /daily-lead-data → today, all clients;
+  // /daily-lead-data?from=…&to=…&clientId=… → restored on refresh/share.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlFrom = searchParams.get('from');
+  const urlTo = searchParams.get('to');
+  const urlClient = searchParams.get('clientId');
+
+  const dateFrom = ymdRe.test(urlFrom || '') ? urlFrom : today;
+  const dateTo = ymdRe.test(urlTo || '') ? urlTo : today;
+  const selectedClient = urlClient || 'all';
+
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  // Clients still come from the shared cache (small, slow-changing list
-  // shared by other pages). Leads do NOT — the global cache fetches all
-  // 10k rows on every visit, which is what was making this page block
-  // for several seconds. Instead we fetch only the date range below.
+  // Clients come from the shared cache (small, slow-changing list shared by other pages).
   const { clients: cachedClients, clientsLoading, fetchClients } = useDataCache();
-  const [mainApiLeads, setMainApiLeads] = useState([]);
+
+  // Server-side aggregated entries — pre-shaped, pre-totaled.
+  const [entries, setEntries] = useState([]);
+  const [dailyTotals, setDailyTotals] = useState({
+    metaForm: 0, metaWhatsapp: 0, metaFund: 0, metaTotalLeads: 0,
+    googleCall: 0, googleWebsite: 0, googleFund: 0, googleTotalLeads: 0,
+    totalLeads: 0, totalSpend: 0, entryCount: 0,
+  });
   const [loading, setLoading] = useState(false);
 
-  const mainApiClients = cachedClients;
-
-  // Targeted fetch — server-side date filter cuts payload from ~10k to
-  // typically <100 records for the day(s) actually being viewed.
-  const fetchLeadsForDateRange = useCallback(async (force = false) => {
+  const fetchEntries = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const params = { limit: 10000 };
-      if (dateFrom === dateTo) {
-        params.date = dateFrom;
-      } else {
-        params.dateFrom = dateFrom;
-        params.dateTo = dateTo;
-      }
-      // Cache-bust flag — passed when the user clicks Refresh so any
-      // upstream cache (CDN, browser) is bypassed.
-      if (force) params._t = Date.now();
-      const res = await api.get('/leads', { params });
-      const data = res.data?.data || res.data || [];
-      setMainApiLeads(Array.isArray(data) ? data : []);
+      const params = { from: dateFrom, to: dateTo };
+      if (selectedClient && selectedClient !== 'all') params.clientId = selectedClient;
+      if (force) params.refresh = 1;
+      const res = await api.get('/leads/daily-by-client', { params });
+      const data = res.data?.data || {};
+      setEntries(Array.isArray(data.entries) ? data.entries : []);
+      setDailyTotals(data.dailyTotals || dailyTotals);
     } catch (err) {
       console.error('Failed to fetch daily leads:', err);
-      setMainApiLeads([]);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo, selectedClient]);
 
-  useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
+  useEffect(() => { fetchClients(); }, [fetchClients]);
+  useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
-  useEffect(() => {
-    fetchLeadsForDateRange();
-  }, [fetchLeadsForDateRange]);
+  // Filter helpers — selectedClient already enforced server-side.
+  const filteredEntries = entries;
 
-  // Filter entries by client (date range already filtered from API)
-  const filteredEntries = useMemo(() => {
-    return mainApiLeads.filter(entry => {
-      const matchesClient = selectedClient === 'all' || entry.clientId === selectedClient;
-      return matchesClient;
-    }).map(lead => ({
-      _id: lead._id,
-      date: lead.date,
-      clientId: lead.clientId,
-      clientName: lead.clientName,
-      metaForm: lead.metaFormLead || 0,
-      metaWhatsapp: lead.metaWhatsappLead || 0,
-      metaFund: lead.metaFund || 0,
-      metaCPL: lead.metaCpl || 0,
-      metaTotalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0),
-      googleCall: lead.googleCallLead || 0,
-      googleWebsite: lead.googleWebsiteLead || 0,
-      googleFund: lead.googleFund || 0,
-      googleCPL: lead.googleCpl || 0,
-      googleTotalLeads: (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
-      totalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0) + (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
-      totalSpend: (lead.metaFund || 0) + (lead.googleFund || 0),
-    }));
-  }, [mainApiLeads, selectedClient]);
+  // Tiny URL writers — replace=true to keep the back button clean.
+  const updateUrl = useCallback((next) => {
+    const merged = {
+      from: next.from ?? dateFrom,
+      to: next.to ?? dateTo,
+      ...(next.clientId !== undefined
+        ? (next.clientId && next.clientId !== 'all' ? { clientId: next.clientId } : {})
+        : (selectedClient && selectedClient !== 'all' ? { clientId: selectedClient } : {})),
+    };
+    setSearchParams(merged, { replace: true });
+  }, [dateFrom, dateTo, selectedClient, setSearchParams]);
 
-  // Get selected client name for PDF
+  const handleFromChange = (e) => updateUrl({ from: e.target.value });
+  const handleToChange = (e) => updateUrl({ to: e.target.value });
+  const handleClientChange = (e) => updateUrl({ clientId: e.target.value });
+
+  // Selected client name for PDF + chip.
   const selectedClientName = useMemo(() => {
     if (selectedClient === 'all') return 'All Clients';
-    const client = mainApiClients.find(c => c._id === selectedClient);
+    const client = cachedClients.find(c => c._id === selectedClient);
     return client?.clientName || 'Unknown Client';
-  }, [selectedClient, mainApiClients]);
+  }, [selectedClient, cachedClients]);
 
-  // Dropdown source = the full /clients cache, sorted alphabetically by
-  // clientName. Previously this was derived from leads in the current
-  // date range, which dropped any client that hadn't generated leads yet.
+  // Dropdown source = canonical /clients list, alpha-sorted.
   const clients = useMemo(() => {
-    return [...(mainApiClients || [])].sort((a, b) =>
+    return [...(cachedClients || [])].sort((a, b) =>
       String(a.clientName || '').localeCompare(String(b.clientName || ''))
     );
-  }, [mainApiClients]);
-
-  // Calculate totals for the selected date
-  const dailyTotals = useMemo(() => {
-    return filteredEntries.reduce((totals, entry) => ({
-      metaForm: totals.metaForm + (entry.metaForm || 0),
-      metaWhatsapp: totals.metaWhatsapp + (entry.metaWhatsapp || 0),
-      metaFund: totals.metaFund + (entry.metaFund || 0),
-      metaTotalLeads: totals.metaTotalLeads + (entry.metaTotalLeads || 0),
-      googleCall: totals.googleCall + (entry.googleCall || 0),
-      googleWebsite: totals.googleWebsite + (entry.googleWebsite || 0),
-      googleFund: totals.googleFund + (entry.googleFund || 0),
-      googleTotalLeads: totals.googleTotalLeads + (entry.googleTotalLeads || 0),
-      totalLeads: totals.totalLeads + (entry.totalLeads || 0),
-      totalSpend: totals.totalSpend + (entry.totalSpend || 0),
-    }), {
-      metaForm: 0,
-      metaWhatsapp: 0,
-      metaFund: 0,
-      metaTotalLeads: 0,
-      googleCall: 0,
-      googleWebsite: 0,
-      googleFund: 0,
-      googleTotalLeads: 0,
-      totalLeads: 0,
-      totalSpend: 0,
-    });
-  }, [filteredEntries]);
+  }, [cachedClients]);
 
   // Export to PDF using print
   const handleExportPDF = () => {
@@ -177,7 +137,6 @@ const DailyLeadData = () => {
           .header p { color: #666; }
           .totals-row { background-color: #f5f5f5; font-weight: bold; }
           .meta-col { background-color: #C0855210; }
-          .google-col { background-color: #3E272310; }
           @page { size: landscape; margin: 10mm; }
         }
       </style>
@@ -205,10 +164,6 @@ const DailyLeadData = () => {
             <th class="meta-col">Meta WhatsApp</th>
             <th class="meta-col">Meta Total</th>
             <th class="meta-col">Meta Fund (₹)</th>
-            <th class="google-col">Google Call</th>
-            <th class="google-col">Google Website</th>
-            <th class="google-col">Google Total</th>
-            <th class="google-col">Google Fund (₹)</th>
             <th>Total Leads</th>
             <th>Total Spend (₹)</th>
           </tr>
@@ -222,10 +177,6 @@ const DailyLeadData = () => {
               <td class="meta-col">${entry.metaWhatsapp || 0}</td>
               <td class="meta-col">${entry.metaTotalLeads || 0}</td>
               <td class="meta-col">₹${(entry.metaFund || 0).toLocaleString('en-IN')}</td>
-              <td class="google-col">${entry.googleCall || 0}</td>
-              <td class="google-col">${entry.googleWebsite || 0}</td>
-              <td class="google-col">${entry.googleTotalLeads || 0}</td>
-              <td class="google-col">₹${(entry.googleFund || 0).toLocaleString('en-IN')}</td>
               <td><strong>${entry.totalLeads || 0}</strong></td>
               <td><strong>₹${(entry.totalSpend || 0).toLocaleString('en-IN')}</strong></td>
             </tr>
@@ -237,10 +188,6 @@ const DailyLeadData = () => {
             <td class="meta-col"><strong>${dailyTotals.metaWhatsapp}</strong></td>
             <td class="meta-col"><strong>${dailyTotals.metaTotalLeads}</strong></td>
             <td class="meta-col"><strong>₹${dailyTotals.metaFund.toLocaleString('en-IN')}</strong></td>
-            <td class="google-col"><strong>${dailyTotals.googleCall}</strong></td>
-            <td class="google-col"><strong>${dailyTotals.googleWebsite}</strong></td>
-            <td class="google-col"><strong>${dailyTotals.googleTotalLeads}</strong></td>
-            <td class="google-col"><strong>₹${dailyTotals.googleFund.toLocaleString('en-IN')}</strong></td>
             <td><strong>${dailyTotals.totalLeads}</strong></td>
             <td><strong>₹${dailyTotals.totalSpend.toLocaleString('en-IN')}</strong></td>
           </tr>
@@ -265,7 +212,10 @@ const DailyLeadData = () => {
   };
 
   // Show aesthetic loader during initial data fetch
-  if (loading && mainApiLeads.length === 0) {
+  // Cold first-load: full-page loader (only when clients list is also empty,
+  // which means we have no shell to render). After that, the in-card overlay
+  // takes over.
+  if (loading && entries.length === 0 && cachedClients.length === 0) {
     return <PageLoader message="Loading lead data..." />;
   }
 
@@ -287,7 +237,7 @@ const DailyLeadData = () => {
           <Button
             variant="outlined"
             startIcon={loading ? <CircularProgress size={18} /> : <RefreshIcon />}
-            onClick={fetchLeadsForDateRange}
+            onClick={() => fetchEntries(true)}
             disabled={loading}
           >
             Refresh
@@ -322,7 +272,7 @@ const DailyLeadData = () => {
                   id="client-filter"
                   value={selectedClient}
                   label="Select Client"
-                  onChange={(e) => setSelectedClient(e.target.value)}
+                  onChange={handleClientChange}
                   startAdornment={
                     <InputAdornment position="start">
                       <BusinessIcon sx={{ color: primaryColor }} />
@@ -350,7 +300,7 @@ const DailyLeadData = () => {
                 label="From Date"
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={handleFromChange}
                 slotProps={{
                   inputLabel: { shrink: true },
                   input: {
@@ -369,7 +319,7 @@ const DailyLeadData = () => {
                 label="To Date"
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={handleToChange}
                 slotProps={{
                   inputLabel: { shrink: true },
                   input: {
@@ -408,28 +358,57 @@ const DailyLeadData = () => {
       </Card>
 
       {/* Data Table */}
-      <Card ref={printRef}>
-        <CardContent sx={{ p: 0 }}>
-          {loading ? (
-            <TableLoader rows={6} message="Loading lead data..." />
-          ) : filteredEntries.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 5 }}>
-              <Typography variant="h6" color="text.secondary">
-                No entries found for the selected date range
-                {selectedClient !== 'all' && ` and client`}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                {dateFrom === dateTo
-                  ? `Date: ${new Date(dateFrom).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
-                  : `From: ${new Date(dateFrom).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} - To: ${new Date(dateTo).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Add entries in the Daily Entry Management page
+      <Card>
+        <CardContent sx={{ p: 0, position: 'relative' }}>
+          {/* Loading overlay — keep table visible (faded) while a new range loads. */}
+          {loading && filteredEntries.length > 0 && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 5,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1.5,
+                bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)',
+                backdropFilter: 'blur(2px)',
+              }}
+            >
+              <CircularProgress size={36} sx={{ color: primaryColor }} />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                Loading lead data…
               </Typography>
             </Box>
+          )}
+
+          {filteredEntries.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 5 }}>
+              {loading ? (
+                <>
+                  <CircularProgress size={32} sx={{ color: primaryColor, mb: 2 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading lead data…
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography variant="h6" color="text.secondary">
+                    No entries found for the selected date range
+                    {selectedClient !== 'all' && ` and client`}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    {dateFrom === dateTo
+                      ? `Date: ${new Date(dateFrom).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                      : `From: ${new Date(dateFrom).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} – To: ${new Date(dateTo).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                  </Typography>
+                </>
+              )}
+            </Box>
           ) : (
-            <TableContainer component={Paper} variant="outlined">
-              <Table sx={{ minWidth: 1200 }}>
+            <TableContainer component={Paper} variant="outlined" sx={{ opacity: loading ? 0.5 : 1, transition: 'opacity 150ms ease' }}>
+              <Table sx={{ minWidth: 900 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                     <TableCell sx={{ fontWeight: 700 }}>Client</TableCell>
@@ -438,17 +417,13 @@ const DailyLeadData = () => {
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta WhatsApp</TableCell>
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Total</TableCell>
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Meta Fund</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="center">Google Call</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="center">Google Website</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="center">Google Total</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#3E272310' }} align="right">Google Fund</TableCell>
                     <TableCell sx={{ fontWeight: 700 }} align="center">Total Leads</TableCell>
                     <TableCell sx={{ fontWeight: 700 }} align="right">Total Spend</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredEntries.map((entry) => (
-                    <TableRow key={entry._id} hover>
+                    <TableRow key={`${entry.clientId}-${entry.date}`} hover>
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           {entry.clientName || 'Unknown Client'}
@@ -481,30 +456,6 @@ const DailyLeadData = () => {
                       <TableCell align="right" sx={{ bgcolor: '#C0855205' }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           ₹{(entry.metaFund || 0).toLocaleString('en-IN')}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#3E272305' }}>
-                        <Chip
-                          label={entry.googleCall || 0}
-                          size="small"
-                          sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600, minWidth: 40 }}
-                        />
-                      </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#3E272305' }}>
-                        <Chip
-                          label={entry.googleWebsite || 0}
-                          size="small"
-                          sx={{ bgcolor: '#C0855215', color: '#C08552', fontWeight: 600, minWidth: 40 }}
-                        />
-                      </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#3E272305' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#3E2723' }}>
-                          {entry.googleTotalLeads || 0}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right" sx={{ bgcolor: '#3E272305' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          ₹{(entry.googleFund || 0).toLocaleString('en-IN')}
                         </Typography>
                       </TableCell>
                       <TableCell align="center">
@@ -544,26 +495,6 @@ const DailyLeadData = () => {
                     <TableCell align="right" sx={{ bgcolor: '#C0855210' }}>
                       <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#3E272310' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#3E2723' }}>
-                        {dailyTotals.googleCall}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#3E272310' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
-                        {dailyTotals.googleWebsite}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#3E272310' }}>
-                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#3E2723' }}>
-                        {dailyTotals.googleTotalLeads}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#3E272310' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        ₹{dailyTotals.googleFund.toLocaleString('en-IN')}
                       </Typography>
                     </TableCell>
                     <TableCell align="center">

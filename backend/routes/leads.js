@@ -7,6 +7,7 @@ import {
   deleteLead,
   getLeadStats,
   getMonthlyMetaByClient,
+  getDailyByClient,
 } from '../controllers/leadController.js';
 import { protect } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -24,6 +25,7 @@ router.route('/')
 
 router.get('/stats/summary', checkPermission(PERMISSIONS.LEAD_READ), getLeadStats);
 router.get('/monthly-meta-by-client', checkPermission(PERMISSIONS.LEAD_READ), getMonthlyMetaByClient);
+router.get('/daily-by-client', checkPermission(PERMISSIONS.LEAD_READ), getDailyByClient);
 
 router.route('/:id')
   .get(idValidation, validate, checkPermission(PERMISSIONS.LEAD_READ), getLead)

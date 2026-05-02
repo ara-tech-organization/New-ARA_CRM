@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Lead from '../models/Lead.js';
 import MetaInsights from '../models/MetaInsights.js';
 import Client from '../models/Client.js';
@@ -283,6 +284,185 @@ export const getMonthlyMetaByClient = asyncHandler(async (req, res) => {
 
   monthlyMetaCache.set(cacheKey, { ts: Date.now(), data });
   monthlyMetaCache.set(targetMonth, { ts: Date.now(), data });
+  res.status(200).json({ success: true, cached: false, data });
+});
+
+/**
+ * @desc    Daily lead pivot per client across a date range. Source: Lead
+ *          collection (legacy upstream sync — includes Meta + Google + manual
+ *          entries). Sister endpoint to getMonthlyMetaByClient but row-shaped
+ *          (one row per client × date) and inclusive of Google + spend fields.
+ *          Returns: { from, to, clientId, entries: [...], dailyTotals: {...} }
+ *          - 90-day max range to prevent runaway queries.
+ *          - 60s in-memory cache keyed by from-to-clientId.
+ * @route   GET /api/leads/daily-by-client?from=YYYY-MM-DD&to=YYYY-MM-DD[&clientId=...]
+ * @access  Private
+ */
+const dailyByClientCache = new Map();
+const DAILY_BY_CLIENT_TTL = 60 * 1000;
+const DAILY_RANGE_MAX_DAYS = 90;
+
+const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+const daysBetween = (from, to) => {
+  const a = new Date(`${from}T00:00:00Z`);
+  const b = new Date(`${to}T00:00:00Z`);
+  return Math.round((b - a) / (24 * 60 * 60 * 1000));
+};
+
+export const getDailyByClient = asyncHandler(async (req, res) => {
+  const { from, to, clientId, refresh } = req.query;
+
+  if (!ymdRe.test(from || '') || !ymdRe.test(to || '')) {
+    return res.status(400).json({
+      success: false,
+      message: 'from and to are required as YYYY-MM-DD',
+    });
+  }
+  if (from > to) {
+    return res.status(400).json({
+      success: false,
+      message: 'from must be on or before to',
+    });
+  }
+  const span = daysBetween(from, to);
+  if (span > DAILY_RANGE_MAX_DAYS) {
+    return res.status(400).json({
+      success: false,
+      message: `Date range too wide (${span + 1} days). Max ${DAILY_RANGE_MAX_DAYS + 1} days.`,
+    });
+  }
+
+  const cacheKey = `${from}|${to}|${clientId || 'all'}`;
+  const cached = dailyByClientCache.get(cacheKey);
+  if (!refresh && cached && Date.now() - cached.ts < DAILY_BY_CLIENT_TTL) {
+    return res.status(200).json({ success: true, cached: true, data: cached.data });
+  }
+
+  // Source: MetaInsights (level='campaign' to avoid double-counting adset/ad rows).
+  // Google fields are always 0 — MetaInsights doesn't have Google data.
+  const [yr1, mo1, d1] = from.split('-').map(Number);
+  const [yr2, mo2, d2] = to.split('-').map(Number);
+  const rangeStart = new Date(Date.UTC(yr1, mo1 - 1, d1));
+  const rangeEnd = new Date(Date.UTC(yr2, mo2 - 1, d2 + 1)); // exclusive upper bound
+
+  const objectIdClient = clientId && /^[0-9a-fA-F]{24}$/.test(clientId)
+    ? new mongoose.Types.ObjectId(clientId)
+    : null;
+
+  const [pivotRows, allClients] = await Promise.all([
+    MetaInsights.aggregate([
+      {
+        $match: {
+          level: 'campaign',
+          date: { $gte: rangeStart, $lt: rangeEnd },
+          ...(objectIdClient ? { client_id: objectIdClient } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: {
+            clientId: '$client_id',
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          },
+          metaForm: { $sum: { $ifNull: ['$leads', 0] } },
+          metaWhatsapp: { $sum: { $ifNull: ['$messaging_conversations_started', 0] } },
+          metaFund: { $sum: { $ifNull: ['$spend', 0] } },
+        },
+      },
+      { $sort: { '_id.date': 1 } },
+    ]).allowDiskUse(true),
+    Client.find({}, { clientName: 1 }).lean(),
+  ]);
+
+  const clientNameById = new Map(allClients.map(c => [String(c._id), c.clientName || '']));
+
+  // Re-shape into the same row format the controller previously produced from
+  // Lead. Sort by clientName + date so the table reads naturally.
+  const rows = pivotRows
+    .map(r => ({
+      _id: { clientId: r._id.clientId, date: r._id.date },
+      clientName: clientNameById.get(String(r._id.clientId)) || '',
+      metaForm: r.metaForm || 0,
+      metaWhatsapp: r.metaWhatsapp || 0,
+      metaFund: r.metaFund || 0,
+      googleCall: 0,
+      googleWebsite: 0,
+      googleFund: 0,
+    }))
+    .sort((a, b) => {
+      const n = (a.clientName || '').localeCompare(b.clientName || '');
+      if (n !== 0) return n;
+      return (a._id.date || '').localeCompare(b._id.date || '');
+    });
+
+  const totals = {
+    metaForm: 0, metaWhatsapp: 0, metaFund: 0, metaTotalLeads: 0,
+    googleCall: 0, googleWebsite: 0, googleFund: 0, googleTotalLeads: 0,
+    totalLeads: 0, totalSpend: 0, entryCount: 0,
+  };
+
+  const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+  const entries = rows.map(r => {
+    const cid = r._id.clientId == null ? '' : String(r._id.clientId);
+    const date = r._id.date;
+    const metaForm = r.metaForm || 0;
+    const metaWhatsapp = r.metaWhatsapp || 0;
+    const metaFund = round2(r.metaFund || 0);
+    const googleCall = r.googleCall || 0;
+    const googleWebsite = r.googleWebsite || 0;
+    const googleFund = round2(r.googleFund || 0);
+    const metaTotalLeads = metaForm + metaWhatsapp;
+    const googleTotalLeads = googleCall + googleWebsite;
+    const totalLeads = metaTotalLeads + googleTotalLeads;
+    const totalSpend = round2(metaFund + googleFund);
+    const metaCPL = metaTotalLeads > 0 ? Math.round(metaFund / metaTotalLeads) : 0;
+    const googleCPL = googleTotalLeads > 0 ? Math.round(googleFund / googleTotalLeads) : 0;
+
+    totals.metaForm += metaForm;
+    totals.metaWhatsapp += metaWhatsapp;
+    totals.metaFund += metaFund;
+    totals.metaTotalLeads += metaTotalLeads;
+    totals.googleCall += googleCall;
+    totals.googleWebsite += googleWebsite;
+    totals.googleFund += googleFund;
+    totals.googleTotalLeads += googleTotalLeads;
+    totals.totalLeads += totalLeads;
+    totals.totalSpend += totalSpend;
+    totals.entryCount += 1;
+
+    return {
+      clientId: cid,
+      clientName: r.clientName || '',
+      date,
+      metaForm,
+      metaWhatsapp,
+      metaFund,
+      metaCPL,
+      metaTotalLeads,
+      googleCall,
+      googleWebsite,
+      googleFund,
+      googleCPL,
+      googleTotalLeads,
+      totalLeads,
+      totalSpend,
+    };
+  });
+
+  // Round currency totals at the end too, so accumulated float drift doesn't show.
+  totals.metaFund = round2(totals.metaFund);
+  totals.googleFund = round2(totals.googleFund);
+  totals.totalSpend = round2(totals.totalSpend);
+
+  const data = {
+    from,
+    to,
+    clientId: clientId || 'all',
+    entries,
+    dailyTotals: totals,
+  };
+
+  dailyByClientCache.set(cacheKey, { ts: Date.now(), data });
   res.status(200).json({ success: true, cached: false, data });
 });
 
