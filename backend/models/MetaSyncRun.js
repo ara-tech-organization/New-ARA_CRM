@@ -8,7 +8,7 @@ const metaSyncRunSchema = new mongoose.Schema(
     duration_ms: { type: Number, default: 0 },
     scope: {
       type: String,
-      enum: ['full', 'incremental', 'single-client', 'deep'],
+      enum: ['full', 'incremental', 'single-client', 'deep', 'historical'],
       required: true,
     },
     client_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },

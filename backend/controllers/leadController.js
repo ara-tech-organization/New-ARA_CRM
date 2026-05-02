@@ -1,4 +1,6 @@
 import Lead from '../models/Lead.js';
+import MetaInsights from '../models/MetaInsights.js';
+import Client from '../models/Client.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net';
@@ -140,6 +142,135 @@ export const deleteLead = asyncHandler(async (req, res) => {
     success: true,
     message: 'Lead deleted successfully',
   });
+});
+
+/**
+ * @desc    Monthly Meta-only leads pivot grouped by client, sourced from MetaInsights
+ *          (the local Meta-sync collection populated by the meta-scheduler cron).
+ *          totalLeads = leads + messaging_conversations_started, level='campaign'
+ *          to avoid double-counting adset/ad rows.
+ *          Returns: { month, months[], dates[], clients: [{clientId, clientName, daily:{date:count}, total}] }
+ * @route   GET /api/leads/monthly-meta-by-client?month=YYYY-MM
+ * @access  Private
+ */
+const monthlyMetaCache = new Map();
+const MONTHLY_META_TTL = 60 * 1000;
+// Months list rarely changes — cache it for 10 min so we don't rescan the full
+// MetaInsights collection on every uncached month-tab click.
+let monthsCache = { ts: 0, months: [] };
+const MONTHS_CACHE_TTL = 10 * 60 * 1000;
+
+const getCampaignMonths = async (force = false) => {
+  if (!force && monthsCache.months.length > 0 && Date.now() - monthsCache.ts < MONTHS_CACHE_TTL) {
+    return monthsCache.months;
+  }
+  const rows = await MetaInsights.aggregate([
+    { $match: { level: 'campaign' } },
+    { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$date' } } } },
+    { $sort: { _id: 1 } },
+  ]).allowDiskUse(true);
+  const months = rows.map(r => r._id).filter(Boolean);
+  monthsCache = { ts: Date.now(), months };
+  return months;
+};
+
+export const getMonthlyMetaByClient = asyncHandler(async (req, res) => {
+  const { month, refresh } = req.query;
+  const requested = month && /^\d{4}-\d{2}$/.test(month) ? month : null;
+  const cacheKey = requested || '__latest__';
+  const cached = monthlyMetaCache.get(cacheKey);
+  if (!refresh && cached && Date.now() - cached.ts < MONTHLY_META_TTL) {
+    return res.status(200).json({ success: true, cached: true, data: cached.data });
+  }
+
+  const months = await getCampaignMonths(!!refresh);
+  if (months.length === 0) {
+    const empty = { month: null, months: [], dates: [], clients: [] };
+    monthlyMetaCache.set(cacheKey, { ts: Date.now(), data: empty });
+    return res.status(200).json({ success: true, cached: false, data: empty });
+  }
+
+  const targetMonth = requested || months[months.length - 1];
+  // Range filter on the Date type — index-friendly, no string regex.
+  const [yr, mo] = targetMonth.split('-').map(Number);
+  const rangeStart = new Date(Date.UTC(yr, mo - 1, 1));
+  const rangeEnd = new Date(Date.UTC(yr, mo, 1));
+
+  // Requested month had no campaign rows? Return shell (months still useful for tabs).
+  if (!months.includes(targetMonth) && requested) {
+    const empty = { month: targetMonth, months, dates: [], clients: [] };
+    monthlyMetaCache.set(cacheKey, { ts: Date.now(), data: empty });
+    return res.status(200).json({ success: true, cached: false, data: empty });
+  }
+
+  // Run pivot aggregation + clients lookup in parallel — Cosmos $lookup is slow,
+  // and the clients collection is small enough to join in JS.
+  const [pivotRows, allClients] = await Promise.all([
+    MetaInsights.aggregate([
+      { $match: { level: 'campaign', date: { $gte: rangeStart, $lt: rangeEnd } } },
+      {
+        $group: {
+          _id: {
+            clientId: '$client_id',
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          },
+          metaLeads: {
+            $sum: {
+              $add: [
+                { $ifNull: ['$leads', 0] },
+                { $ifNull: ['$messaging_conversations_started', 0] },
+              ],
+            },
+          },
+        },
+      },
+    ]).allowDiskUse(true),
+    Client.find({}, { clientName: 1 }).lean(),
+  ]);
+
+  const clientNameById = new Map(allClients.map(c => [String(c._id), c.clientName || '']));
+
+  const dateSet = new Set();
+  const clientMap = new Map();
+
+  for (const row of pivotRows) {
+    const rawCid = row._id.clientId;
+    const cid = rawCid == null ? '' : String(rawCid);
+    const dateStr = row._id.date;
+    if (!cid || !dateStr) continue;
+
+    dateSet.add(dateStr);
+    if (!clientMap.has(cid)) {
+      clientMap.set(cid, {
+        clientId: cid,
+        clientName: clientNameById.get(cid) || '',
+        daily: {},
+        total: 0,
+      });
+    }
+    const c = clientMap.get(cid);
+    const v = row.metaLeads || 0;
+    c.daily[dateStr] = (c.daily[dateStr] || 0) + v;
+    c.total += v;
+  }
+
+  const clients = Array.from(clientMap.values())
+    .filter(c => {
+      const n = (c.clientName || '').trim().toLowerCase();
+      return n && n !== 'unknown' && n !== 'unknown client';
+    })
+    .sort((a, b) => a.clientName.localeCompare(b.clientName));
+
+  const data = {
+    month: targetMonth,
+    months,
+    dates: Array.from(dateSet).sort(),
+    clients,
+  };
+
+  monthlyMetaCache.set(cacheKey, { ts: Date.now(), data });
+  monthlyMetaCache.set(targetMonth, { ts: Date.now(), data });
+  res.status(200).json({ success: true, cached: false, data });
 });
 
 /**

@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import connectDB from "./config/db.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
+import MetaSyncRun from "./models/MetaSyncRun.js";
 
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/users.js";
@@ -32,11 +33,43 @@ import { startSyncScheduler } from "./sync/scheduler.js";
 // Load environment variables
 dotenv.config();
 
-// Connect to database
-connectDB();
+// Connect to database, then clean up zombie sync runs left behind by previous
+// crashes/restarts before the scheduler kicks off a new run. A run is "zombie"
+// if it's still flagged running but hasn't been touched in 30+ minutes — that
+// means the process died before its finally-block could mark it ended.
+const ZOMBIE_RUN_THRESHOLD_MS = 30 * 60 * 1000;
 
-// Kick off the background Google Ads sync scheduler
-startSyncScheduler();
+const cleanupOrphanedSyncRuns = async () => {
+  try {
+    const cutoff = new Date(Date.now() - ZOMBIE_RUN_THRESHOLD_MS);
+    const result = await MetaSyncRun.updateMany(
+      { status: 'running', duration_ms: 0, started_at: { $lt: cutoff } },
+      {
+        $set: { status: 'failed', ended_at: new Date() },
+        $push: {
+          errors: {
+            stage: 'startup',
+            message: 'orphaned by restart — marked failed at boot',
+            at: new Date(),
+          },
+        },
+      }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`[server] cleaned up ${result.modifiedCount} orphaned MetaSyncRun records`);
+    }
+  } catch (err) {
+    console.error('[server] orphaned sync-run cleanup failed:', err.message);
+  }
+};
+
+connectDB()
+  .then(cleanupOrphanedSyncRuns)
+  .then(() => startSyncScheduler())
+  .catch((err) => {
+    console.error('[server] boot sequence failed:', err);
+    process.exit(1);
+  });
 
 const app = express();
 

@@ -252,6 +252,7 @@ export const syncByAdAccount = async ({
   deep = false,
   run,
   label = adAccountId,
+  insightsWindow = null,
 }) => {
   const stages = [];
   const pushError = (stage, err) => {
@@ -310,7 +311,7 @@ export const syncByAdAccount = async ({
   }
 
   // 4. Insights (campaign + adset + ad levels; daily rows)
-  const window = pickInsightsWindow();
+  const window = insightsWindow || pickInsightsWindow();
   for (const level of ['campaign', 'adset', 'ad']) {
     try {
       const { data } = await fetchInsights(adAccountId, {
@@ -335,7 +336,7 @@ export const syncByAdAccount = async ({
 /**
  * High-level sync: takes a populated Client doc and routes into syncByAdAccount.
  */
-export const syncMetaClient = async (client, { deep = false, run } = {}) => {
+export const syncMetaClient = async (client, { deep = false, run, insightsWindow = null } = {}) => {
   if (!client?.meta_ad_account_id) {
     return {
       ok: false,
@@ -355,6 +356,7 @@ export const syncMetaClient = async (client, { deep = false, run } = {}) => {
     deep,
     run,
     label: `${client.clientName || 'client'} (${client.meta_ad_account_id})`,
+    insightsWindow,
   });
 
   // Lead forms + lead polling — only runs when Pages are configured.
@@ -526,6 +528,121 @@ export const syncSingleMetaClient = async (clientId, { deep = false } = {}) => {
     run.ended_at = new Date();
     run.duration_ms = run.ended_at - startedAt;
     await run.save();
+  }
+
+  return run;
+};
+
+/**
+ * Historical sync — same client iteration as syncAllMetaClients but with an
+ * explicit insights window override. Intended for one-shot backfills.
+ * `since` and `until` are YYYY-MM-DD strings (UTC).
+ */
+export const syncAllMetaClientsHistorical = async ({ since, until }) => {
+  const runId = newRunId();
+  const startedAt = new Date();
+  const insightsWindow = { since, until };
+  const run = await MetaSyncRun.create({
+    run_id: runId,
+    started_at: startedAt,
+    scope: 'historical',
+    status: 'running',
+    counts: {
+      campaigns: 0, adsets: 0, ads: 0, insights_rows: 0, forms: 0,
+      leads_fetched: 0, leads_inserted: 0,
+    },
+    errors: [],
+  });
+
+  try {
+    const clients = await Client.find({
+      meta_enabled: true,
+      meta_ad_account_id: { $ne: '', $exists: true },
+    });
+    console.log(
+      `[meta-sync] run=${runId} historical clients=${clients.length} window=${since}..${until}`
+    );
+
+    for (const client of clients) {
+      try {
+        await syncMetaClient(client, { run, insightsWindow });
+      } catch (err) {
+        run.errors.push({
+          client_id: client._id,
+          stage: 'client',
+          message: err?.message || String(err),
+          code: err instanceof MetaApiError && err.code != null ? String(err.code) : '',
+          at: new Date(),
+        });
+      }
+    }
+
+    run.status = run.errors.length === 0 ? 'success' : 'partial';
+  } catch (err) {
+    run.status = 'failed';
+    run.errors.push({
+      stage: 'run',
+      message: err?.message || String(err),
+      at: new Date(),
+    });
+  } finally {
+    run.ended_at = new Date();
+    run.duration_ms = run.ended_at - startedAt;
+    await run.save();
+    console.log(
+      `[meta-sync] run=${runId} historical status=${run.status} duration=${run.duration_ms}ms ` +
+      `insights=${run.counts.insights_rows} errors=${run.errors.length}`
+    );
+  }
+
+  return run;
+};
+
+/**
+ * One-shot historical backfill for a single client. Use when onboarding a
+ * new client — fills MetaInsights for an explicit window without touching
+ * the other clients' API quota. Mirrors syncSingleMetaClient but tags scope
+ * as "historical" and forces the insights window.
+ */
+export const syncSingleMetaClientHistorical = async (clientId, { since, until }) => {
+  const runId = newRunId();
+  const startedAt = new Date();
+  const insightsWindow = { since, until };
+  const run = await MetaSyncRun.create({
+    run_id: runId,
+    started_at: startedAt,
+    scope: 'historical',
+    client_id: clientId,
+    status: 'running',
+    counts: {
+      campaigns: 0, adsets: 0, ads: 0, insights_rows: 0, forms: 0,
+      leads_fetched: 0, leads_inserted: 0,
+    },
+    errors: [],
+  });
+
+  try {
+    const client = await Client.findById(clientId);
+    if (!client) throw new Error(`Client not found: ${clientId}`);
+
+    const result = await syncMetaClient(client, { run, insightsWindow });
+    run.status = result.ok ? 'success' : 'partial';
+  } catch (err) {
+    run.status = 'failed';
+    run.errors.push({
+      client_id: clientId,
+      stage: 'run',
+      message: err?.message || String(err),
+      at: new Date(),
+    });
+  } finally {
+    run.ended_at = new Date();
+    run.duration_ms = run.ended_at - startedAt;
+    await run.save();
+    console.log(
+      `[meta-sync] run=${runId} historical-client=${clientId} status=${run.status} ` +
+      `duration=${run.duration_ms}ms insights=${run.counts.insights_rows} errors=${run.errors.length}`
+    );
   }
 
   return run;

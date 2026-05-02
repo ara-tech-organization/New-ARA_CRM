@@ -64,7 +64,13 @@ metaInsightsSchema.index(
 );
 metaInsightsSchema.index({ client_id: 1, level: 1, date: 1 });
 metaInsightsSchema.index({ client_id: 1, campaign_id: 1, date: 1 });
+// Supports cross-client monthly aggregations (date range + level filter, no client_id).
+metaInsightsSchema.index({ date: 1, level: 1 });
 
 const MetaInsights = mongoose.model('MetaInsights', metaInsightsSchema);
+
+MetaInsights.syncIndexes().catch(err => {
+  console.log('MetaInsights index sync note:', err.message);
+});
 
 export default MetaInsights;

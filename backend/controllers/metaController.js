@@ -17,6 +17,8 @@ import {
   syncAllMetaClients,
   syncSingleMetaClient,
   syncByAdAccount,
+  syncAllMetaClientsHistorical,
+  syncSingleMetaClientHistorical,
 } from '../sync/metaSyncService.js';
 import {
   getMetaSyncStatus,
@@ -45,6 +47,127 @@ export const postSyncAll = async (req, res) => {
     message: 'Meta sync triggered',
     deep,
     status: getMetaSyncStatus(),
+  });
+};
+
+// POST /api/meta/sync/historical?since=YYYY-MM-DD&until=YYYY-MM-DD
+// Fire-and-forget historical backfill. Loops every meta-enabled client and
+// pulls insights for the explicit window — bypasses META_INSIGHTS_BACKFILL_DAYS
+// without an env-var change or restart.
+export const postSyncHistorical = async (req, res) => {
+  const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+  const { since, until } = req.query;
+  if (!ymdRe.test(since || '') || !ymdRe.test(until || '')) {
+    return res.status(400).json({
+      success: false,
+      message: 'since and until are required as YYYY-MM-DD',
+    });
+  }
+  if (since > until) {
+    return res.status(400).json({
+      success: false,
+      message: 'since must be on or before until',
+    });
+  }
+
+  syncAllMetaClientsHistorical({ since, until }).catch((err) =>
+    console.error('[meta-controller] historical sync failed:', err)
+  );
+
+  res.status(202).json({
+    success: true,
+    message: 'Historical Meta sync triggered',
+    window: { since, until },
+    note: 'Use GET /api/meta/sync-status or /api/meta/sync-runs to track progress.',
+  });
+};
+
+// POST /api/meta/sync-runs/cleanup[?force=1]
+// Marks zombie "running" runs as failed. Without ?force, only entries with
+// duration_ms=0 AND started_at >30min ago are touched (same rule as the
+// boot-time cleanup in server.js). With ?force=1, every "running" entry is
+// killed regardless of age — use only when you know nothing real is running.
+export const postCleanupSyncRuns = async (req, res) => {
+  const force = String(req.query.force || '').toLowerCase() === '1' ||
+    String(req.query.force || '').toLowerCase() === 'true';
+
+  const filter = { status: 'running', duration_ms: 0 };
+  if (!force) {
+    filter.started_at = { $lt: new Date(Date.now() - 30 * 60 * 1000) };
+  }
+
+  try {
+    const result = await MetaSyncRun.updateMany(filter, {
+      $set: { status: 'failed', ended_at: new Date() },
+      $push: {
+        errors: {
+          stage: 'cleanup',
+          message: force
+            ? 'force-cleaned via /sync-runs/cleanup?force=1'
+            : 'cleaned via /sync-runs/cleanup (>30min stale)',
+          at: new Date(),
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      force,
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
+    });
+  } catch (err) {
+    console.error('[meta-controller] cleanup failed:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// POST /api/meta/sync/historical/:clientId?since=YYYY-MM-DD&until=YYYY-MM-DD
+// Fire-and-forget historical backfill for ONE client. Use when onboarding a
+// new client so you don't waste Meta API quota re-syncing the others.
+export const postSyncHistoricalClient = async (req, res) => {
+  const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+  const { clientId } = req.params;
+  const { since, until } = req.query;
+
+  if (!mongoose.isValidObjectId(clientId)) {
+    return res.status(400).json({ success: false, message: 'Invalid clientId' });
+  }
+  if (!ymdRe.test(since || '') || !ymdRe.test(until || '')) {
+    return res.status(400).json({
+      success: false,
+      message: 'since and until are required as YYYY-MM-DD',
+    });
+  }
+  if (since > until) {
+    return res.status(400).json({
+      success: false,
+      message: 'since must be on or before until',
+    });
+  }
+
+  const client = await Client.findById(clientId);
+  if (!client) {
+    return res.status(404).json({ success: false, message: 'Client not found' });
+  }
+  if (!client.meta_ad_account_id) {
+    return res.status(400).json({
+      success: false,
+      message: 'Client has no meta_ad_account_id configured',
+    });
+  }
+
+  syncSingleMetaClientHistorical(clientId, { since, until }).catch((err) =>
+    console.error('[meta-controller] historical client sync failed:', err)
+  );
+
+  res.status(202).json({
+    success: true,
+    message: 'Historical Meta sync triggered for client',
+    clientId,
+    clientName: client.clientName,
+    window: { since, until },
+    note: 'Use GET /api/meta/sync-runs to track progress.',
   });
 };
 

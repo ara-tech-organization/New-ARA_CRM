@@ -7,6 +7,9 @@ import {
   postSyncAll,
   postSyncClient,
   postSyncAdAccount,
+  postSyncHistorical,
+  postSyncHistoricalClient,
+  postCleanupSyncRuns,
   getStatus,
   getRuns,
   getHealth,
@@ -37,11 +40,14 @@ router.post("/webhook", postWebhook);
 router.get("/health", getHealth);
 router.get("/sync-status", getStatus);
 router.get("/sync-runs", getRuns);
+router.post("/sync-runs/cleanup", postCleanupSyncRuns);
 router.get("/retry-queue", getRetryQueue);
 router.get("/raw-leads", getRawLeads);
 
 // Sync triggers
 router.post("/sync", postSyncAll);
+router.post("/sync/historical", postSyncHistorical);
+router.post("/sync/historical/:clientId", postSyncHistoricalClient);
 router.post("/sync/:clientId", postSyncClient);
 router.post("/sync/ad-account/:adAccountId", postSyncAdAccount);
 

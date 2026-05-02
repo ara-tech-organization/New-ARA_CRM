@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { ThemeContext } from '../contexts/ThemeContext';
 import {
   Box,
@@ -27,7 +27,7 @@ import {
   CalendarMonth as CalendarMonthIcon,
 } from '@mui/icons-material';
 import { PageLoader } from '../components/Loading';
-import { useDataCache } from '../contexts/DataCacheContext';
+import api from '../api/axios';
 
 const Leads = () => {
   const { accentColor } = useContext(ThemeContext);
@@ -36,91 +36,54 @@ const Leads = () => {
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [selectedMonth, setSelectedMonth] = useState(null);
-  const { leads, leadsLoading: loading, fetchLeads: refreshLeads } = useDataCache();
+  const [loading, setLoading] = useState(false);
+  const [months, setMonths] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [dates, setDates] = useState([]);
+  const [pivotData, setPivotData] = useState({});
 
-  // Trigger the lazy all-leads fetch when this page mounts
-  useEffect(() => { refreshLeads(); }, [refreshLeads]);
+  const loadMonth = useCallback(async (month, force = false) => {
+    setLoading(true);
+    try {
+      const params = {};
+      if (month) params.month = month;
+      if (force) params.refresh = 1;
+      const res = await api.get('/leads/monthly-meta-by-client', { params });
+      const data = res.data?.data || {};
+      const respClients = Array.isArray(data.clients) ? data.clients : [];
 
-  const fetchLeads = () => refreshLeads(true);
+      setMonths(Array.isArray(data.months) ? data.months : []);
+      setDates(Array.isArray(data.dates) ? data.dates : []);
+      setClients(respClients.map(c => ({ id: c.clientId, name: c.clientName })));
 
-  // Get unique clients, dates, and months for the pivot table
-  const { clients, dates, pivotData, months } = useMemo(() => {
-    // Get unique clients (filter out null/undefined clientIds and unknown names)
-    const clientMap = new Map();
-    leads.forEach(lead => {
-      if (lead.clientId && lead.clientName && !clientMap.has(lead.clientId)) {
-        clientMap.set(lead.clientId, lead.clientName);
-      }
-    });
-    const clientList = Array.from(clientMap.entries())
-      .map(([id, name]) => ({ id, name }))
-      .filter(client => client.name && client.name.toLowerCase() !== 'unknown' && client.name.toLowerCase() !== 'unknown client')
-      .sort((a, b) => a.name.localeCompare(b.name));
+      const pivot = {};
+      respClients.forEach(c => { pivot[c.clientId] = c.daily || {}; });
+      setPivotData(pivot);
 
-    // Get unique dates and sort them
-    const dateSet = new Set();
-    leads.forEach(lead => {
-      if (lead.date) {
-        const dateStr = lead.date.split('T')[0];
-        dateSet.add(dateStr);
-      }
-    });
-    const dateList = Array.from(dateSet).sort((a, b) => new Date(a) - new Date(b));
-
-    // Get unique months from dates
-    const monthSet = new Set();
-    dateList.forEach(dateStr => {
-      const date = new Date(dateStr);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      monthSet.add(monthKey);
-    });
-    const monthList = Array.from(monthSet).sort();
-
-    // Build pivot data: { clientId: { date: totalLeads } }
-    const pivot = {};
-    leads.forEach(lead => {
-      const clientId = lead.clientId;
-      const dateStr = lead.date ? lead.date.split('T')[0] : null;
-      if (!dateStr) return;
-
-      if (!pivot[clientId]) {
-        pivot[clientId] = {};
-      }
-
-      const totalLeads =
-        (lead.metaFormLead || 0) +
-        (lead.metaWhatsappLead || 0) +
-        (lead.googleCallLead || 0) +
-        (lead.googleWebsiteLead || 0);
-
-      pivot[clientId][dateStr] = (pivot[clientId][dateStr] || 0) + totalLeads;
-    });
-
-    return {
-      clients: clientList,
-      dates: dateList,
-      pivotData: pivot,
-      months: monthList,
-    };
-  }, [leads]);
-
-  // Set default selected month when months are available
-  useEffect(() => {
-    if (months.length > 0 && selectedMonth === null) {
-      // Select the most recent month by default
-      setSelectedMonth(months[months.length - 1]);
+      if (data.month) setSelectedMonth(data.month);
+    } catch (err) {
+      console.error('Failed to fetch monthly meta leads:', err);
+    } finally {
+      setLoading(false);
     }
-  }, [months, selectedMonth]);
+  }, []);
 
-  // Filter dates by selected month
-  const filteredDates = useMemo(() => {
-    if (!selectedMonth) return dates;
-    return dates.filter(dateStr => {
-      const date = new Date(dateStr);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      return monthKey === selectedMonth;
-    });
-  }, [dates, selectedMonth]);
+  // Initial load — backend returns the latest month's pivot + the full months list.
+  useEffect(() => {
+    loadMonth(null);
+  }, [loadMonth]);
+
+  const fetchLeads = () => loadMonth(selectedMonth, true);
+
+  // Tab change: only fetch if the requested month is not what's already shown.
+  const handleMonthChange = (event, newValue) => {
+    if (newValue && newValue !== selectedMonth) {
+      setSelectedMonth(newValue);
+      loadMonth(newValue);
+    }
+  };
+
+  const filteredDates = dates;
 
   // Format date for display
   const formatDate = (dateStr) => {
@@ -133,11 +96,6 @@ const Leads = () => {
     const [year, month] = monthKey.split('-');
     const date = new Date(year, parseInt(month) - 1, 1);
     return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-  };
-
-  // Handle month tab change
-  const handleMonthChange = (event, newValue) => {
-    setSelectedMonth(newValue);
   };
 
   // Export to PDF (exports current month's data)
@@ -227,7 +185,7 @@ const Leads = () => {
   };
 
   // Show loader during initial fetch
-  if (loading && leads.length === 0) {
+  if (loading && clients.length === 0) {
     return <PageLoader message="Loading leads..." />;
   }
 
