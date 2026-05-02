@@ -192,6 +192,29 @@ const ClientPortalDashboard = () => {
 
   useEffect(() => { if (token) fetchAnalytics(); }, [dateFrom, dateTo]);
 
+  // Inline-edit save callback for MetaLeadsTable. PATCHes the lead via the
+  // client-portal-friendly route added to /api/meta and patches the lead
+  // in-place inside data.meta.leads_in_range so the table reflects the
+  // server response without a full refetch.
+  const handleSaveMetaLead = async (leadId, payload) => {
+    const clientId = clientData?._id;
+    if (!clientId) throw new Error('Client session expired — please log in again.');
+    const { data: resp } = await clientApi.put(
+      `/meta/client/${clientId}/leads/${leadId}`,
+      payload,
+      { timeout: 20000 }
+    );
+    const updated = resp?.lead;
+    if (updated) {
+      setData((prev) => {
+        if (!prev?.meta?.leads_in_range) return prev;
+        const nextLeads = prev.meta.leads_in_range.map((l) => (l._id === leadId ? { ...l, ...updated } : l));
+        return { ...prev, meta: { ...prev.meta, leads_in_range: nextLeads } };
+      });
+    }
+    return updated;
+  };
+
   // Auto-select the tab that has data, once, on first load. If the client
   // has only Meta linked (no Google), jump them straight to the Meta tab
   // instead of making them see the "Google not linked" banner first.
@@ -214,6 +237,19 @@ const ClientPortalDashboard = () => {
   const clientInfo = data?.client;
   const summary = data?.summary;
   const billing = data?.client?.billing;
+  const dateRange = data?.dateRange;
+  // Mirrors the admin ClientAdDetails low-balance signal so the portal
+  // billing card shows the same red-warning state when funds are running
+  // low. Threshold can come from the billing record itself.
+  const isLowBalance = !!(
+    billing
+    && billing.available_balance != null
+    && billing.low_balance_threshold != null
+    && billing.available_balance < billing.low_balance_threshold
+  );
+  const budgetPct = (billing && billing.total_added_funds > 0)
+    ? (billing.total_spend / billing.total_added_funds) * 100
+    : 0;
   const campaignMetrics = useMemo(
     () => [...(data?.campaignMetrics || [])].sort((a, b) => (Number(b?.cost) || 0) - (Number(a?.cost) || 0)),
     [data]
@@ -396,6 +432,87 @@ const ClientPortalDashboard = () => {
         {/* Data (only when Google is actually linked) */}
         {data && (data.integrations?.google_enabled ?? clientData?.googleAdsEnabled) === true && (
           <Box sx={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+            {/* Account Info — mirrors the admin ClientAdDetails Google tab */}
+            {clientInfo && (
+              <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: `${GOOGLE_GREEN}06` }}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Account Name</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{clientInfo.googleAdsAccountName || '—'}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Customer ID</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, fontFamily: 'monospace' }}>{clientInfo.googleAdsCustomerId || '—'}</Typography>
+                  </Grid>
+                  {dateRange && (
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Date Range</Typography>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                        {fmtDate(dateRange.start_date)} – {fmtDate(dateRange.end_date)}
+                      </Typography>
+                    </Grid>
+                  )}
+                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Client Name</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{clientInfo.clientName || '—'}</Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
+
+            {/* Billing — mirrors the admin ClientAdDetails Google tab */}
+            {billing && (
+              <Card variant="outlined" sx={{ borderLeft: `3px solid ${GOOGLE_GREEN}`, mb: 2 }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem' }}>Billing</Typography>
+                    {billing.billing_type && (
+                      <Chip label={billing.billing_type.toUpperCase()} size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: `${GOOGLE_GREEN}15`, color: GOOGLE_GREEN, fontWeight: 600 }} />
+                    )}
+                  </Box>
+                  <Grid container spacing={1.5}>
+                    {billing.total_added_funds != null && (
+                      <Grid size={{ xs: 6, md: 3 }}>
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Total Added</Typography>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: BROWN }}>{fmtINR(billing.total_added_funds)}</Typography>
+                      </Grid>
+                    )}
+                    {billing.total_spend != null && (
+                      <Grid size={{ xs: 6, md: 3 }}>
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Total Spent</Typography>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: GOOGLE_GREEN }}>{fmtINR(billing.total_spend)}</Typography>
+                      </Grid>
+                    )}
+                    {billing.available_balance != null && (
+                      <Grid size={{ xs: 6, md: 3 }}>
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Available</Typography>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: isLowBalance ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          {fmtINR(billing.available_balance)}
+                          {isLowBalance && <WarningIcon sx={{ fontSize: 14 }} />}
+                        </Typography>
+                      </Grid>
+                    )}
+                    {billing.total_added_funds > 0 && (
+                      <Grid size={{ xs: 6, md: 3 }}>
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Utilization</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <LinearProgress variant="determinate" value={Math.min(budgetPct, 100)} sx={{ flex: 1, height: 6, borderRadius: 3, '& .MuiLinearProgress-bar': { bgcolor: isLowBalance ? '#ef4444' : GOOGLE_GREEN } }} />
+                          <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: GOOGLE_GREEN }}>{budgetPct.toFixed(0)}%</Typography>
+                        </Box>
+                      </Grid>
+                    )}
+                  </Grid>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Performance Summary header — matches admin layout */}
+            {summary && (
+              <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${GOOGLE_GREEN}`, pl: 1.5 }}>
+                Performance Summary
+              </Typography>
+            )}
+
             {/* KPIs */}
             {summary && (
               <Grid container spacing={1.5} sx={{ mb: 2 }}>
@@ -531,6 +648,67 @@ const ClientPortalDashboard = () => {
                               </TableRow>
                             )}
                           </React.Fragment>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </>
+            )}
+
+            {/* Keywords — standalone, full-detail table mirroring the admin
+                ClientAdDetails Google tab. Sits below Campaigns. */}
+            {keywords.length > 0 && (
+              <>
+                <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${GOOGLE_GREEN}`, pl: 1.5 }}>
+                  Keywords ({keywords.length})
+                </Typography>
+                <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                  <Table size="small" sx={{ minWidth: 1300 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }}>Keyword</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }}>Match Type</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Clicks</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Impr.</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">CTR</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Avg. CPC</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Cost</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Conversions</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Cost / Conv.</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Conv. Rate</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Quality Score</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }}>Ad Relevance</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }}>Landing Page Exp.</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {[...keywords].sort((a, b) => (Number(b.cost) || 0) - (Number(a.cost) || 0)).map((kw, i) => {
+                        const kwClicks = Number(kw.clicks) || 0;
+                        const kwConv = Number(kw.conversions) || 0;
+                        const kwCost = Number(kw.cost) || 0;
+                        const kwCostPerConv = kwConv > 0 ? kwCost / kwConv : null;
+                        const kwConvRate = kwClicks > 0 ? (kwConv / kwClicks) * 100 : null;
+                        return (
+                          <TableRow key={kw.criterion_id || i} hover>
+                            <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{kw.keyword_text}</TableCell>
+                            <TableCell><Chip label={kw.match_type} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600 }} /></TableCell>
+                            <TableCell>
+                              <Chip label={kw.status} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: kw.status === 'ENABLED' ? '#10b98115' : '#ef444415', color: kw.status === 'ENABLED' ? '#10b981' : '#ef4444' }} />
+                            </TableCell>
+                            <TableCell align="right">{fmtNum(kwClicks)}</TableCell>
+                            <TableCell align="right">{fmtNum(kw.impressions)}</TableCell>
+                            <TableCell align="right">{fmtPct(kw.ctr)}</TableCell>
+                            <TableCell align="right">{fmtINR(kw.cpc)}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 600, color: GOOGLE_GREEN }}>{fmtINR(kwCost)}</TableCell>
+                            <TableCell align="right">{fmtNum(kwConv)}</TableCell>
+                            <TableCell align="right">{kwCostPerConv != null ? fmtINR(kwCostPerConv) : '—'}</TableCell>
+                            <TableCell align="right">{kwConvRate != null ? fmtPct(kwConvRate) : '—'}</TableCell>
+                            <TableCell align="right">{kw.quality_score ?? kw.qualityScore ?? '—'}</TableCell>
+                            <TableCell sx={{ fontSize: '0.75rem' }}>{kw.ad_relevance ?? kw.adRelevance ?? '—'}</TableCell>
+                            <TableCell sx={{ fontSize: '0.75rem' }}>{kw.landing_page_experience ?? kw.landingPageExperience ?? '—'}</TableCell>
+                          </TableRow>
                         );
                       })}
                     </TableBody>
@@ -899,7 +1077,12 @@ const ClientPortalDashboard = () => {
                       </Box>
                     </Box>
                     <Box sx={{ mb: 2 }}>
-                      <MetaLeadsTable leads={portalLeads} metaAccount={metaAccount} maxHeight={520} />
+                      <MetaLeadsTable
+                        leads={portalLeads}
+                        metaAccount={metaAccount}
+                        maxHeight={520}
+                        onSaveLead={handleSaveMetaLead}
+                      />
                     </Box>
                   </>
                 );

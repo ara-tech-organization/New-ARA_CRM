@@ -24,6 +24,7 @@ import {
 import { PageLoader } from '../components/Loading';
 import { useDataCache } from '../contexts/DataCacheContext';
 import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
+import MetaLeadsTable from '../components/MetaLeadsTable';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -80,12 +81,6 @@ const ClientAdDetails = () => {
   const today = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
-
-  // Inline Link-to-Google-Ads state (shown when client is not linked)
-  const [linkCustomerId, setLinkCustomerId] = useState('');
-  const [linkAccountName, setLinkAccountName] = useState('');
-  const [linking, setLinking] = useState(false);
-  const [linkMessage, setLinkMessage] = useState(null);
 
   // Meta resync state (fire-and-forget)
   const [resyncing, setResyncing] = useState(false);
@@ -145,28 +140,6 @@ const ClientAdDetails = () => {
 
   // Find client in cache (may be undefined if cache hasn't loaded — that's OK, we still fetch)
   const client = useMemo(() => clients.find(c => c._id === clientId), [clients, clientId]);
-
-  // Handler to link this client to a Google Ads account
-  const handleLinkNow = async () => {
-    if (!clientId || !linkCustomerId.trim() || !linkAccountName.trim()) return;
-    setLinking(true);
-    setLinkMessage(null);
-    try {
-      await api.put(`/google-ads/client/${clientId}/associate`, {
-        customerId: linkCustomerId.trim(),
-        accountName: linkAccountName.trim(),
-      });
-      setLinkMessage({ type: 'success', text: `Linked successfully! Fetching data...` });
-      setLinkCustomerId('');
-      setLinkAccountName('');
-      setTimeout(() => { setLinkMessage(null); fetchGoogleAnalytics({ force: true }); }, 800);
-    } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to link account';
-      setLinkMessage({ type: 'error', text: msg });
-    } finally {
-      setLinking(false);
-    }
-  };
 
   const fetchGoogleAnalytics = async ({ force = false } = {}) => {
     if (!clientId) return;
@@ -268,6 +241,25 @@ const ClientAdDetails = () => {
     } finally {
       setMetaLoading(false);
     }
+  };
+
+  // Inline-edit save callback for the CRM telecaller columns rendered by
+  // MetaLeadsTable. PATCHes the lead via the meta-tree route (kept off
+  // /api/leads/:id so the client portal can hit the same endpoint with its
+  // clientToken) and patches the lead in metaData.leads_in_range so the
+  // table reflects the server response without a full refetch.
+  const handleSaveMetaLead = async (leadId, payload) => {
+    if (!clientId) throw new Error('Missing clientId');
+    const res = await api.put(`/meta/client/${clientId}/leads/${leadId}`, payload);
+    const updated = res.data?.lead;
+    if (updated) {
+      setMetaData((prev) => {
+        if (!prev?.leads_in_range) return prev;
+        const nextLeads = prev.leads_in_range.map((l) => (l._id === leadId ? { ...l, ...updated } : l));
+        return { ...prev, leads_in_range: nextLeads };
+      });
+    }
+    return updated;
   };
 
   // Fetch analytics as soon as we have a clientId — don't wait for the cached client record
@@ -501,61 +493,27 @@ const ClientAdDetails = () => {
                 </Alert>
               )}
 
-              {/* Inline Link-to-Google-Ads form (shown when client is not linked) */}
+              {/* Not-linked message — linking is now done from the Clients
+                  list page (the "G" icon next to Facebook). This view just
+                  points the user there instead of duplicating the form. */}
               {!loading && error && error.includes('not linked') && (
                 <Paper variant="outlined" sx={{ p: 3, borderLeft: `4px solid ${GOOGLE_GREEN}`, bgcolor: `${GOOGLE_GREEN}04` }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <GoogleIcon sx={{ color: GOOGLE_GREEN, fontSize: 24 }} />
-                    <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>Link Google Ads Account</Typography>
+                    <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>Google Ads not linked</Typography>
                   </Box>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    <strong>{displayName}</strong> is not yet linked to a Google Ads account. Enter the account details below to start viewing ad performance.
+                    <strong>{displayName}</strong> is not yet linked to a Google Ads account.
+                    Open the Clients page and click the Google icon next to this client to connect an account.
                   </Typography>
-
-                  <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, md: 5 }}>
-                      <TextField
-                        fullWidth
-                        label="Google Ads Customer ID"
-                        value={linkCustomerId}
-                        onChange={(e) => setLinkCustomerId(e.target.value)}
-                        placeholder="e.g. 2000367396"
-                        helperText="10-digit Customer ID (top-right of your Google Ads account)"
-                        required
-                        disabled={linking}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 5 }}>
-                      <TextField
-                        fullWidth
-                        label="Google Ads Account Name"
-                        value={linkAccountName}
-                        onChange={(e) => setLinkAccountName(e.target.value)}
-                        placeholder="e.g. Ad Grohair & Gloskin Karaikudi"
-                        helperText="The account name as it appears in Google Ads"
-                        required
-                        disabled={linking}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 2 }} sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <Button
-                        fullWidth
-                        variant="contained"
-                        onClick={handleLinkNow}
-                        disabled={!linkCustomerId.trim() || !linkAccountName.trim() || linking}
-                        startIcon={linking ? <CircularProgress size={14} color="inherit" /> : <LinkIcon />}
-                        sx={{ bgcolor: GOOGLE_GREEN, '&:hover': { bgcolor: '#2c8f45' }, py: 1.5, mt: 0.5 }}
-                      >
-                        {linking ? 'Linking...' : 'Link & View'}
-                      </Button>
-                    </Grid>
-                  </Grid>
-
-                  {linkMessage && (
-                    <Alert severity={linkMessage.type} sx={{ mt: 2 }}>
-                      {linkMessage.text}
-                    </Alert>
-                  )}
+                  <Button
+                    variant="contained"
+                    onClick={() => navigate('/clients')}
+                    startIcon={<LinkIcon />}
+                    sx={{ bgcolor: GOOGLE_GREEN, '&:hover': { bgcolor: '#2c8f45' } }}
+                  >
+                    Go to Clients to Link
+                  </Button>
                 </Paper>
               )}
 
@@ -1337,130 +1295,14 @@ const ClientAdDetails = () => {
                         </Button>
                       </Box>
                     </Box>
-                    <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, overflowX: 'auto' }}>
-                      <Table size="small" sx={{ minWidth: 1400 }}>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Received</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Meta Account</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Name</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Phone</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Platform</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form</TableCell>
-                            <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Responses</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {metaLeadsInRange.map(l => {
-                            // Build a [{label, value}] list from raw_field_data regardless of
-                            // shape (Meta's array-of-{name,value[s]} or plain object). Hide
-                            // fields already shown in Name / Email / Phone columns so this
-                            // cell only carries the form-specific answers.
-                            const REDUNDANT = new Set([
-                              'full_name', 'fullname', 'name', 'first_name', 'last_name',
-                              'email', 'email_address',
-                              'phone', 'phone_number', 'mobile', 'mobile_number',
-                            ]);
-                            const prettify = (k) => String(k || '')
-                              .replace(/\?+$/, '')
-                              .replace(/_/g, ' ')
-                              .trim()
-                              .replace(/\b\w/g, (c) => c.toUpperCase());
-                            const rfd = l.raw_field_data;
-                            let entries = [];
-                            if (Array.isArray(rfd)) {
-                              entries = rfd
-                                .filter((e) => e?.name && !REDUNDANT.has(String(e.name).toLowerCase()))
-                                .map((e) => ({
-                                  label: prettify(e.name),
-                                  value: Array.isArray(e?.values) ? e.values.join(', ') : (e?.value ?? ''),
-                                }));
-                            } else if (rfd && typeof rfd === 'object') {
-                              entries = Object.entries(rfd)
-                                .filter(([k]) => !REDUNDANT.has(k.toLowerCase()))
-                                .map(([k, v]) => ({
-                                  label: prettify(k),
-                                  value: Array.isArray(v) ? v.join(', ') : String(v ?? ''),
-                                }));
-                            }
-                            return (
-                              <TableRow key={l._id} hover sx={{ verticalAlign: 'top' }}>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>
-                                  {(() => {
-                                    const ts = l.meta_created_time || l.createdAt;
-                                    return ts
-                                      ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                                      : '—';
-                                  })()}
-                                </TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>{metaAccount?.name || '—'}</TableCell>
-                                <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{l.name || '—'}</TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>{l.email || '—'}</TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem', fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
-                                <TableCell>
-                                  {l.platform && (() => {
-                                    const isIG = String(l.platform).toLowerCase() === 'instagram';
-                                    const platformColor = isIG ? '#E4405F' : META_BLUE;
-                                    return (
-                                      <Chip
-                                        label={l.platform}
-                                        size="small"
-                                        sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, textTransform: 'capitalize', bgcolor: `${platformColor}15`, color: platformColor }}
-                                      />
-                                    );
-                                  })()}
-                                </TableCell>
-                                <TableCell sx={{ fontSize: '0.78rem' }}>{l.meta_form_name || '—'}</TableCell>
-                                <TableCell sx={{ minWidth: 480, maxWidth: 640, py: 1.2 }}>
-                                  {entries.length === 0 ? (
-                                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>—</Typography>
-                                  ) : (
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
-                                      {entries.map((e, i) => (
-                                        <Box
-                                          key={i}
-                                          sx={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '220px 1fr',
-                                            columnGap: 2,
-                                            alignItems: 'baseline',
-                                          }}
-                                        >
-                                          <Typography
-                                            sx={{
-                                              fontSize: '0.68rem',
-                                              fontWeight: 600,
-                                              color: 'text.secondary',
-                                              textTransform: 'uppercase',
-                                              letterSpacing: 0.3,
-                                              whiteSpace: 'normal',
-                                              wordBreak: 'break-word',
-                                            }}
-                                          >
-                                            {e.label}
-                                          </Typography>
-                                          <Typography
-                                            sx={{
-                                              fontSize: '0.78rem',
-                                              color: 'text.primary',
-                                              whiteSpace: 'normal',
-                                              wordBreak: 'break-word',
-                                            }}
-                                          >
-                                            {e.value || '—'}
-                                          </Typography>
-                                        </Box>
-                                      ))}
-                                    </Box>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
+                    <Box sx={{ mb: 2 }}>
+                      <MetaLeadsTable
+                        leads={metaLeadsInRange}
+                        metaAccount={metaAccount}
+                        maxHeight={600}
+                        onSaveLead={handleSaveMetaLead}
+                      />
+                    </Box>
                   </>
                 )}
 

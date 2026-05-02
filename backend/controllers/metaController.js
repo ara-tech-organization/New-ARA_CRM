@@ -1025,7 +1025,7 @@ export const getClientAnalytics = async (req, res) => {
     source: 'meta',
     ...leadDateFilter,
   })
-    .select('name email phone status meta_form_id meta_form_name meta_campaign_id meta_adset_id meta_ad_id platform createdAt meta_created_time raw_field_data utm_source utm_medium utm_campaign utm_content utm_term')
+    .select('name email phone status meta_form_id meta_form_name meta_campaign_id meta_adset_id meta_ad_id platform createdAt meta_created_time raw_field_data utm_source utm_medium utm_campaign utm_content utm_term is_duplicate lead_location lead_category telecaller_name first_call_date first_call_label response_label remarks next_followup_date appointment_status appointment_date appointment_booked_date follow_ups')
     .sort({ meta_created_time: -1, createdAt: -1 })
     .lean();
 
@@ -1036,13 +1036,26 @@ export const getClientAnalytics = async (req, res) => {
   // strings — convert to rupees with 2-decimal precision.
   let meta_account = null;
   if (client.meta_ad_account_id) {
+    // Fields persisted on the Client document — used both as a defensive
+    // fallback when the live Meta verify fails AND to backfill any keys
+    // the live call doesn't return (e.g. timezone_name has been observed
+    // missing on freshly synced accounts). The admin Ads page reads
+    // these directly from its cached client list, which is why this
+    // panel never goes blank there. The client portal only sees the API
+    // response, so we have to do the merge here.
+    const persisted = {
+      id: client.meta_ad_account_id || '',
+      name: client.meta_ad_account_name || '',
+      currency: client.meta_ad_account_currency || '',
+      timezone_name: client.meta_ad_account_timezone || '',
+    };
     try {
       const { account } = await verifyAdAccountAccess(client.meta_ad_account_id);
       meta_account = {
-        id: account.id,
-        name: account.name || '',
-        currency: account.currency || '',
-        timezone_name: account.timezone_name || '',
+        id: account.id || persisted.id,
+        name: account.name || persisted.name,
+        currency: account.currency || persisted.currency,
+        timezone_name: account.timezone_name || persisted.timezone_name,
         account_status: account.account_status,
         balance: round2(Number(account.balance || 0) / 100),
         amount_spent: round2(Number(account.amount_spent || 0) / 100),
@@ -1050,7 +1063,13 @@ export const getClientAnalytics = async (req, res) => {
         fetched_at: new Date(),
       };
     } catch (err) {
-      meta_account = { error: err.message, fetched_at: new Date() };
+      // Live verify failed — keep whatever the Client doc has so the
+      // portal's Meta panel still renders Ad Account / Currency / TZ.
+      meta_account = {
+        ...persisted,
+        error: err.message,
+        fetched_at: new Date(),
+      };
     }
   }
 
@@ -1073,4 +1092,196 @@ export const getClientAnalytics = async (req, res) => {
       ads: await MetaAd.countDocuments({ client_id: clientId }),
     },
   });
+};
+
+// PUT /api/meta/client/:clientId/leads/:leadId
+// Inline-edit endpoint for the CRM telecaller columns rendered by
+// MetaLeadsTable. Lives on the Meta route tree (rather than /api/leads/:id)
+// so the client-portal can hit it with its own clientToken — same pattern as
+// /api/meta/client/:clientId/analytics. The /api/leads/:id PUT is admin-only
+// and runs leadValidation which would reject our partial CRM patches.
+//
+// Accepts a partial body — only allow-listed fields are persisted, so a
+// stray `status` or `assignedTo` from the frontend can never escalate.
+const CRM_EDITABLE_FIELDS = [
+  'is_duplicate',
+  'lead_location',
+  'lead_category',
+  'telecaller_name',
+  'first_call_date',
+  'first_call_label',
+  'response_label',
+  'remarks',
+  'next_followup_date',
+  'appointment_status',
+  'appointment_date',
+  'appointment_booked_date',
+  'follow_ups',
+];
+
+export const updateClientLead = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  const { leadId } = req.params;
+  if (!mongoose.isValidObjectId(leadId)) {
+    return res.status(400).json({ success: false, message: 'Invalid leadId' });
+  }
+
+  const lead = await Lead.findOne({ _id: leadId, client: client._id });
+  if (!lead) {
+    return res.status(404).json({ success: false, message: 'Lead not found' });
+  }
+
+  for (const key of CRM_EDITABLE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(req.body, key)) continue;
+    const value = req.body[key];
+    if (key === 'follow_ups') {
+      // Replace the full array — simpler than diffing, and the table sends
+      // the entire ordered list on every save.
+      lead.follow_ups = Array.isArray(value)
+        ? value.map((f) => ({
+            number: f.number,
+            date: f.date || null,
+            call_label: f.call_label || '',
+            remarks: f.remarks || '',
+            connected: !!f.connected,
+          }))
+        : [];
+    } else if (
+      key === 'first_call_date' ||
+      key === 'next_followup_date' ||
+      key === 'appointment_date' ||
+      key === 'appointment_booked_date'
+    ) {
+      lead[key] = value ? new Date(value) : null;
+    } else {
+      lead[key] = value;
+    }
+  }
+
+  await lead.save();
+  res.json({ success: true, lead: lead.toObject() });
+};
+
+// GET /api/meta/clients
+// Multi-client comparison endpoint that powers the Meta tab on the
+// AdsDashboard ("Ads Comparison") page. Mirrors the shape of
+// /api/analytics/clients but for Meta-linked clients. Aggregates
+// MetaInsights across all `meta_enabled: true` clients in a single
+// $group pipeline (keyed by client_id) so the page stays fast even
+// with dozens of clients.
+export const getClientsAdsComparison = async (req, res) => {
+  try {
+    const { since, until } = parseDateRange(req.query);
+    const dateRange = { $gte: since, $lte: until };
+
+    const clients = await Client.find({ meta_enabled: true })
+      .select('clientName meta_ad_account_id meta_ad_account_name meta_ad_account_currency meta_pages')
+      .sort({ clientName: 1 })
+      .lean();
+
+    if (clients.length === 0) {
+      return res.json({ count: 0, clients: [] });
+    }
+
+    const clientIds = clients.map((c) => c._id);
+
+    // Single round-trip aggregation across all clients.
+    const aggRows = await MetaInsights.aggregate([
+      {
+        $match: {
+          client_id: { $in: clientIds },
+          level: 'campaign',
+          date: dateRange,
+        },
+      },
+      {
+        $group: {
+          _id: '$client_id',
+          spend: { $sum: '$spend' },
+          impressions: { $sum: '$impressions' },
+          reach: { $sum: '$reach' },
+          clicks: { $sum: '$clicks' },
+          form_leads: { $sum: '$leads' },
+          whatsapp_leads: { $sum: '$messaging_conversations_started' },
+        },
+      },
+    ]);
+    const byId = new Map(aggRows.map((r) => [String(r._id), r]));
+
+    // Aggregate budgets per client. Daily lifetime budgets are stored on
+    // MetaCampaign — sum across active campaigns to approximate "Budget".
+    const budgetRows = await MetaCampaign.aggregate([
+      { $match: { client_id: { $in: clientIds } } },
+      {
+        $group: {
+          _id: '$client_id',
+          totalBudget: {
+            $sum: {
+              $add: [
+                { $ifNull: ['$daily_budget', 0] },
+                { $ifNull: ['$lifetime_budget', 0] },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    const budgetById = new Map(budgetRows.map((r) => [String(r._id), r.totalBudget]));
+
+    const overviews = clients.map((c) => {
+      const row = byId.get(String(c._id)) || {};
+      const spend = round2(row.spend);
+      const impressions = row.impressions || 0;
+      const reach = row.reach || 0;
+      const clicks = row.clicks || 0;
+      const leads = (row.form_leads || 0) + (row.whatsapp_leads || 0);
+      const ctr = impressions > 0 ? round2((clicks / impressions) * 100) : 0;
+      const cpc = clicks > 0 ? round2(spend / clicks) : 0;
+      const cpm = impressions > 0 ? round2((spend / impressions) * 1000) : 0;
+      const cpl = leads > 0 ? round2(spend / leads) : 0;
+      const frequency = reach > 0 ? round2(impressions / reach) : 0;
+      const firstPage = Array.isArray(c.meta_pages) && c.meta_pages.length > 0 ? c.meta_pages[0] : null;
+      return {
+        clientId: c._id,
+        clientName: c.clientName,
+        metaAccountName: c.meta_ad_account_name || c.clientName,
+        metaAdAccountId: c.meta_ad_account_id || '',
+        pageName: firstPage?.page_name || '',
+        currency: c.meta_ad_account_currency || 'INR',
+        // Budget fields — Meta doesn't expose a single "fund" + "available
+        // balance" the way Google's billing record does, so keep these as
+        // best-effort sums (campaign budgets) and zeros for the columns
+        // we don't have a source for. Frontend renders them with the same
+        // INR formatter so missing values just show ₹0.
+        totalBudget: round2(budgetById.get(String(c._id)) || 0),
+        availableBalance: 0,
+        spend,
+        reach,
+        impressions,
+        frequency,
+        clicks,
+        ctr,
+        cpc,
+        cpm,
+        leads,
+        formLeads: row.form_leads || 0,
+        whatsappLeads: row.whatsapp_leads || 0,
+        cpl,
+      };
+    });
+
+    res.json({
+      count: overviews.length,
+      range: {
+        from: since.toISOString().slice(0, 10),
+        to: until.toISOString().slice(0, 10),
+      },
+      clients: overviews,
+    });
+  } catch (error) {
+    console.error('getClientsAdsComparison error:', error);
+    res.status(500).json({ error: error.message });
+  }
 };

@@ -76,8 +76,13 @@ const AdsDashboard = () => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Meta Ads placeholder — wire up when API is available
-  const metaClients = []; // TODO: fetch from /meta-analytics/clients endpoint when ready
+  // Meta multi-client comparison state — backend route uses
+  // ?from=YYYY-MM-DD&to=YYYY-MM-DD (different param names than Google's
+  // /analytics/clients which uses start_date/end_date — kept consistent
+  // with the existing /api/meta/client/:id/analytics endpoint).
+  const [metaClients, setMetaClients] = useState([]);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [metaError, setMetaError] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(today);
@@ -101,8 +106,27 @@ const AdsDashboard = () => {
     }
   };
 
+  const fetchMetaAnalytics = async () => {
+    setMetaLoading(true);
+    setMetaError(null);
+    try {
+      const res = await api.get('/meta/clients', {
+        params: { from: dateFrom, to: dateTo },
+      });
+      const data = res.data?.clients || res.data?.data || res.data || [];
+      setMetaClients(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch Meta ads analytics:', err);
+      setMetaError(err.response?.data?.error || err.response?.data?.message || 'Failed to fetch Meta Ads data');
+      setMetaClients([]);
+    } finally {
+      setMetaLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAnalytics();
+    fetchMetaAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFrom, dateTo]);
 
@@ -115,6 +139,20 @@ const AdsDashboard = () => {
       c.googleAdsCustomerId?.includes(q)
     );
   }, [clients, searchQuery]);
+
+  // Meta-side equivalent — match against client name, ad account name,
+  // ad account ID, and the page name shown in the table.
+  const filteredMetaClients = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return metaClients;
+    return metaClients.filter(c =>
+      c.clientName?.toLowerCase().includes(q) ||
+      c.metaAccountName?.toLowerCase().includes(q) ||
+      c.metaAdAccountId?.toLowerCase().includes(q) ||
+      c.pageName?.toLowerCase().includes(q)
+    );
+  }, [metaClients, searchQuery]);
+
 
   // Grand totals
   const totals = useMemo(() => {
@@ -196,11 +234,11 @@ const AdsDashboard = () => {
         <Button
           variant="outlined"
           size="small"
-          startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
-          onClick={fetchAnalytics}
-          disabled={loading || tab !== 0}
+          startIcon={(tab === 0 ? loading : metaLoading) ? <CircularProgress size={14} /> : <RefreshIcon />}
+          onClick={tab === 0 ? fetchAnalytics : fetchMetaAnalytics}
+          disabled={tab === 0 ? loading : metaLoading}
         >
-          {loading ? 'Loading...' : 'Refresh'}
+          {(tab === 0 ? loading : metaLoading) ? 'Loading...' : 'Refresh'}
         </Button>
       </Box>
 
@@ -397,15 +435,10 @@ const AdsDashboard = () => {
 
       </>)}
 
-      {/* META ADS TAB — UI scaffold ready for Meta Marketing API integration */}
+      {/* META ADS TAB */}
       {tab === 1 && (
         <>
-          <Alert severity="info" icon={<FacebookIcon sx={{ color: META_BLUE }} />} sx={{ mb: 2 }}>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 0.3 }}>Meta Ads API Integration Pending</Typography>
-            <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
-              UI is ready. Connect the Meta Marketing API and map the response to render live data below.
-            </Typography>
-          </Alert>
+          {metaError && <Alert severity="error" sx={{ mb: 2 }}>{metaError}</Alert>}
 
           {/* Date filter */}
           <Card variant="outlined" sx={{ mb: 2 }}>
@@ -436,13 +469,18 @@ const AdsDashboard = () => {
             </CardContent>
           </Card>
 
-          {metaClients.length === 0 ? (
+          {metaLoading && metaClients.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <CircularProgress sx={{ color: META_BLUE }} />
+              <Typography sx={{ mt: 2, color: 'text.secondary' }}>Loading Meta Ads data...</Typography>
+            </Box>
+          ) : filteredMetaClients.length === 0 ? (
             <Card variant="outlined">
               <CardContent sx={{ textAlign: 'center', py: 6 }}>
                 <FacebookIcon sx={{ fontSize: 48, color: META_BLUE, mb: 1 }} />
                 <Typography sx={{ fontWeight: 600, fontSize: '1rem', mb: 0.5 }}>No Linked Meta Accounts</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  No clients are linked to Meta Ads yet. Integration is pending Meta Marketing API access.
+                  No clients are linked to Meta Ads yet. Open a client from the Dashboard and click the Facebook icon to connect.
                 </Typography>
               </CardContent>
             </Card>
@@ -454,7 +492,7 @@ const AdsDashboard = () => {
                     <Typography sx={{ fontWeight: 600, fontSize: '0.92rem' }}>All Linked Meta Accounts</Typography>
                     <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Click a row to view detailed analytics</Typography>
                   </Box>
-                  <Chip label={`${metaClients.length} account${metaClients.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
+                  <Chip label={`${filteredMetaClients.length} account${filteredMetaClients.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
                 </Box>
 
                 <TableContainer>
@@ -479,7 +517,7 @@ const AdsDashboard = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {metaClients.map((c) => (
+                      {filteredMetaClients.map((c) => (
                         <TableRow
                           key={c.clientId}
                           hover

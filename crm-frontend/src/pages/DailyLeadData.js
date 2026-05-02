@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useContext } from 'react';
+import { useState, useMemo, useEffect, useRef, useContext, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -37,6 +37,7 @@ import {
 import { TableLoader, PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useDataCache } from '../contexts/DataCacheContext';
+import api from '../api/axios';
 
 const DailyLeadData = () => {
   const { accentColor } = useContext(ThemeContext);
@@ -50,22 +51,49 @@ const DailyLeadData = () => {
   const [selectedClient, setSelectedClient] = useState('all');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  const { leads: allCachedLeads, clients: cachedClients, leadsLoading: loading, clientsLoading, fetchLeads } = useDataCache();
-
-  // Trigger the lazy all-leads fetch when this page mounts
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
-
-  // Filter leads by date range from cache (no API call)
-  const mainApiLeads = useMemo(() => {
-    return allCachedLeads.filter(lead => {
-      const leadDate = lead.date;
-      return leadDate >= dateFrom && leadDate <= dateTo;
-    });
-  }, [allCachedLeads, dateFrom, dateTo]);
+  // Clients still come from the shared cache (small, slow-changing list
+  // shared by other pages). Leads do NOT — the global cache fetches all
+  // 10k rows on every visit, which is what was making this page block
+  // for several seconds. Instead we fetch only the date range below.
+  const { clients: cachedClients, clientsLoading, fetchClients } = useDataCache();
+  const [mainApiLeads, setMainApiLeads] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const mainApiClients = cachedClients;
 
-  const fetchLeadsForDateRange = () => fetchLeads(true);
+  // Targeted fetch — server-side date filter cuts payload from ~10k to
+  // typically <100 records for the day(s) actually being viewed.
+  const fetchLeadsForDateRange = useCallback(async (force = false) => {
+    setLoading(true);
+    try {
+      const params = { limit: 10000 };
+      if (dateFrom === dateTo) {
+        params.date = dateFrom;
+      } else {
+        params.dateFrom = dateFrom;
+        params.dateTo = dateTo;
+      }
+      // Cache-bust flag — passed when the user clicks Refresh so any
+      // upstream cache (CDN, browser) is bypassed.
+      if (force) params._t = Date.now();
+      const res = await api.get('/leads', { params });
+      const data = res.data?.data || res.data || [];
+      setMainApiLeads(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch daily leads:', err);
+      setMainApiLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
+
+  useEffect(() => {
+    fetchLeadsForDateRange();
+  }, [fetchLeadsForDateRange]);
 
   // Filter entries by client (date range already filtered from API)
   const filteredEntries = useMemo(() => {
@@ -99,19 +127,14 @@ const DailyLeadData = () => {
     return client?.clientName || 'Unknown Client';
   }, [selectedClient, mainApiClients]);
 
-  // Get unique clients from leads for dropdown
+  // Dropdown source = the full /clients cache, sorted alphabetically by
+  // clientName. Previously this was derived from leads in the current
+  // date range, which dropped any client that hadn't generated leads yet.
   const clients = useMemo(() => {
-    const clientMap = new Map();
-    mainApiLeads.forEach(lead => {
-      if (lead.clientId && !clientMap.has(lead.clientId)) {
-        clientMap.set(lead.clientId, {
-          _id: lead.clientId,
-          name: lead.clientName,
-        });
-      }
-    });
-    return Array.from(clientMap.values());
-  }, [mainApiLeads]);
+    return [...(mainApiClients || [])].sort((a, b) =>
+      String(a.clientName || '').localeCompare(String(b.clientName || ''))
+    );
+  }, [mainApiClients]);
 
   // Calculate totals for the selected date
   const dailyTotals = useMemo(() => {
@@ -307,12 +330,14 @@ const DailyLeadData = () => {
                   }
                 >
                   <MenuItem value="all">All Clients</MenuItem>
-                  {clientsLoading ? (
+                  {clientsLoading && clients.length === 0 ? (
                     <MenuItem disabled>Loading...</MenuItem>
+                  ) : clients.length === 0 ? (
+                    <MenuItem disabled>No clients found</MenuItem>
                   ) : (
                     clients.map((client) => (
                       <MenuItem key={client._id} value={client._id}>
-                        {client.name} {client.company ? `(${client.company})` : ''}
+                        {client.clientName}{client.place ? ` — ${client.place}` : ''}
                       </MenuItem>
                     ))
                   )}

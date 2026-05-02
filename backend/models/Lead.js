@@ -1,5 +1,19 @@
 import mongoose from 'mongoose';
 
+// Sub-document for each follow-up attempt logged against a lead.
+// One row per attempt — multiple attempts per lead are common (the CRM
+// spreadsheet shows leads with 10+ follow-ups across weeks).
+const followUpSchema = new mongoose.Schema(
+  {
+    number: { type: Number },                    // attempt index, 1-based
+    date: { type: Date },
+    call_label: { type: String, trim: true, default: '' },   // CONNECTED / NOT CONNECTED / DISCONNECTED / RNR / BUSY / etc.
+    remarks: { type: String, trim: true, default: '' },
+    connected: { type: Boolean, default: false },            // mirrors call_label === 'CONNECTED' for fast filtering
+  },
+  { _id: true, timestamps: true }
+);
+
 const leadSchema = new mongoose.Schema(
   {
     name: {
@@ -78,6 +92,30 @@ const leadSchema = new mongoose.Schema(
     utm_content: { type: String, trim: true, default: '' },
     utm_term: { type: String, trim: true, default: '' },
     raw_field_data: { type: mongoose.Schema.Types.Mixed },
+
+    // ===== CRM telecaller workflow fields =====
+    // These mirror the columns of the spreadsheet the team uses today and
+    // are edited inline from MetaLeadsTable on both /client-ads and the
+    // client portal dashboard.
+    is_duplicate: { type: Boolean, default: false },
+    lead_location: { type: String, trim: true, default: '' },
+    lead_category: { type: String, trim: true, default: '' },   // e.g. HAIR / SKIN
+    telecaller_name: { type: String, trim: true, default: '' },
+
+    // Initial call
+    first_call_date: { type: Date },
+    first_call_label: { type: String, trim: true, default: '' },   // CONNECTED / NOT CONNECTED / DISCONNECTED / INVALID
+    response_label: { type: String, trim: true, default: '' },     // TREATMENT BOOKED / CONSULTED / WARM / HOT / NOT INTERESTED / DUPLICATE / etc.
+    remarks: { type: String, trim: true, default: '' },
+
+    // Reminder + appointment
+    next_followup_date: { type: Date },
+    appointment_status: { type: String, trim: true, default: '' }, // APPOINTMENT BOOKED / RESCHEDULED / etc.
+    appointment_date: { type: Date },
+    appointment_booked_date: { type: Date },                       // Date on which the appointment was booked (audit/reporting)
+
+    // Follow-ups — one entry per attempt
+    follow_ups: { type: [followUpSchema], default: [] },
   },
   {
     timestamps: true,

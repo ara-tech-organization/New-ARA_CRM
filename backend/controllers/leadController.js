@@ -31,6 +31,19 @@ export const getLeads = asyncHandler(async (req, res) => {
 
   const filter = {};
   if (req.query.date) filter.date = req.query.date;
+  // Inclusive date-range filter — used by the Daily Lead Data page so it
+  // can pull just the rows it needs instead of the full 10k-document
+  // dump that the legacy non-filtered call returns.
+  if (req.query.dateFrom || req.query.dateTo) {
+    filter.date = filter.date || {};
+    if (typeof filter.date === 'string') {
+      // `date` was already set to an exact day; range params should not
+      // also be present, but if they are we let the exact match win.
+    } else {
+      if (req.query.dateFrom) filter.date.$gte = req.query.dateFrom;
+      if (req.query.dateTo) filter.date.$lte = req.query.dateTo;
+    }
+  }
 
   const leads = await Lead.find(filter)
     .populate('assignedTo', 'name email userID')

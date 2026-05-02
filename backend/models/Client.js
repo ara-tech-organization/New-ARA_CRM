@@ -113,12 +113,15 @@ const clientSchema = new mongoose.Schema(
     google_ads_customer_id: {
       type: String,
       trim: true,
-      default: '',
+      // No `default` here on purpose. With `unique + sparse`, the sparse
+      // index only skips null/missing values — empty strings are still
+      // indexed. Defaulting to '' caused E11000 duplicate-key 500s the
+      // moment a second client was created without a Customer ID.
       unique: true,
       sparse: true,
       validate: {
-        validator: function(v) {
-          return v === '' || /^\d{10}$/.test(v);
+        validator: function (v) {
+          return !v || /^\d{10}$/.test(v);
         },
         message: 'Google Ads Customer ID must be exactly 10 digits'
       }
@@ -146,7 +149,8 @@ const clientSchema = new mongoose.Schema(
     meta_ad_account_id: {
       type: String,
       trim: true,
-      default: '',
+      // Same reason as google_ads_customer_id above — `default: ''`
+      // breaks the sparse unique index because empty strings ARE indexed.
       unique: true,
       sparse: true,
       validate: {

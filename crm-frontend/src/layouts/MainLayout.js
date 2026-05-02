@@ -184,7 +184,7 @@ const MainLayout = () => {
     //   permissionId: 'daily-entry'
     // },
     {
-      text: 'Leads',
+      text: 'Leads Check',
       icon: <InsightsIcon />,
       path: '/daily-lead-data',
       badge: null,
@@ -205,7 +205,7 @@ const MainLayout = () => {
       permissionId: 'leads'
     },
     {
-      text: 'Ads Dashboard',
+      text: 'Ads Comparison',
       icon: <CampaignIcon />,
       path: '/ads-dashboard',
       badge: null,
@@ -233,7 +233,7 @@ const MainLayout = () => {
     //   permissionId: 'fund-entry'
     // },
     {
-      text: 'Reports',
+      text: 'Analytics',
       icon: <ReportsIcon />,
       path: '/reports',
       badge: null,
