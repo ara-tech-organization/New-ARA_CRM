@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ThemeContext } from '../contexts/ThemeContext';
 import {
   Box,
@@ -42,6 +43,17 @@ const Leads = () => {
   const [dates, setDates] = useState([]);
   const [pivotData, setPivotData] = useState({});
 
+  // URL is the source of truth for the selected month. /leads → latest;
+  // /leads?month=2026-02 → February; tab clicks update the URL.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawUrlMonth = searchParams.get('month');
+  const monthFromUrl = rawUrlMonth && /^\d{4}-\d{2}$/.test(rawUrlMonth) ? rawUrlMonth : null;
+
+  // displayMonth reflects the user's intent immediately (from URL) — used for
+  // the active tab + loader label so the UI feels responsive while data loads.
+  // selectedMonth tracks the month whose data is actually rendered.
+  const displayMonth = monthFromUrl || selectedMonth;
+
   const loadMonth = useCallback(async (month, force = false) => {
     setLoading(true);
     try {
@@ -68,18 +80,30 @@ const Leads = () => {
     }
   }, []);
 
-  // Initial load — backend returns the latest month's pivot + the full months list.
+  // URL → state: load whatever month the URL says (or latest if empty).
+  // Skips redundant fetch when the URL already matches the rendered month.
   useEffect(() => {
-    loadMonth(null);
-  }, [loadMonth]);
+    if (monthFromUrl && monthFromUrl === selectedMonth) return;
+    loadMonth(monthFromUrl);
+  }, [monthFromUrl, selectedMonth, loadMonth]);
+
+  // State → URL: only populate the URL when it's empty (first visit to /leads).
+  // Never overwrite an existing value — that would fight with the user's tab clicks
+  // and cause an effect-loop while the load is mid-flight.
+  useEffect(() => {
+    if (selectedMonth && !rawUrlMonth) {
+      setSearchParams({ month: selectedMonth }, { replace: true });
+    }
+  }, [selectedMonth, rawUrlMonth, setSearchParams]);
 
   const fetchLeads = () => loadMonth(selectedMonth, true);
 
-  // Tab change: only fetch if the requested month is not what's already shown.
+  // Tab click: just push the new month into the URL. The URL→state effect
+  // above handles the actual load, and pushes a history entry so back/forward
+  // navigates between months.
   const handleMonthChange = (event, newValue) => {
     if (newValue && newValue !== selectedMonth) {
-      setSelectedMonth(newValue);
-      loadMonth(newValue);
+      setSearchParams({ month: newValue });
     }
   };
 
@@ -258,7 +282,7 @@ const Leads = () => {
             }}
           >
             <Tabs
-              value={selectedMonth}
+              value={displayMonth}
               onChange={handleMonthChange}
               variant="scrollable"
               scrollButtons="auto"
@@ -297,24 +321,61 @@ const Leads = () => {
           </Box>
         )}
 
-        <CardContent sx={{ p: 0 }}>
+        <CardContent sx={{ p: 0, position: 'relative' }}>
+          {/* Loading overlay — keeps the existing table visible but fades it
+              and shows a centered spinner so the user knows new data is on the way. */}
+          {loading && clients.length > 0 && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 5,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1.5,
+                bgcolor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(0,0,0,0.55)'
+                  : 'rgba(255,255,255,0.75)',
+                backdropFilter: 'blur(2px)',
+              }}
+            >
+              <CircularProgress size={36} sx={{ color: primaryColor }} />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                Loading {displayMonth ? formatMonth(displayMonth) : 'leads'}…
+              </Typography>
+            </Box>
+          )}
+
           {clients.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 5 }}>
-              <Typography variant="h6" color="text.secondary">
-                No leads data found
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Click "Refresh" to fetch leads from Main API
-              </Typography>
+              {loading ? (
+                <>
+                  <CircularProgress size={32} sx={{ color: primaryColor, mb: 2 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading leads…
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography variant="h6" color="text.secondary">
+                    No leads data found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Click "Refresh" to fetch leads from Main API
+                  </Typography>
+                </>
+              )}
             </Box>
           ) : filteredDates.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 5 }}>
               <Typography variant="h6" color="text.secondary">
-                No data for {selectedMonth ? formatMonth(selectedMonth) : 'selected month'}
+                No data for {displayMonth ? formatMonth(displayMonth) : 'selected month'}
               </Typography>
             </Box>
           ) : (
-            <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 220px)', overflowX: 'auto' }}>
+            <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 220px)', overflowX: 'auto', opacity: loading ? 0.5 : 1, transition: 'opacity 150ms ease' }}>
               <Table stickyHeader size="small" sx={{ minWidth: filteredDates.length * 70 + 270 }}>
                 <TableHead>
                   <TableRow>
