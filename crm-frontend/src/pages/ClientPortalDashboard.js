@@ -6,6 +6,8 @@ import {
   TextField, LinearProgress, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, CircularProgress, Alert, IconButton, Collapse,
   Tabs, Tab,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  FormControl, InputLabel, Select, MenuItem, Snackbar,
 } from '@mui/material';
 import {
   Google as GoogleIcon, Facebook as FacebookIcon, Logout as LogoutIcon, Refresh as RefreshIcon,
@@ -13,10 +15,11 @@ import {
   AccountBalanceWallet as WalletIcon, AttachMoney as MoneyIcon,
   Campaign as CampaignIcon, Warning as WarningIcon,
   KeyboardArrowDown as ArrowDownIcon, KeyboardArrowUp as ArrowUpIcon,
-  People as PeopleIcon, Visibility as VisibilityIcon,
+  People as PeopleIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon,
   Groups as GroupsIcon, Chat as ChatIcon,
   FileDownload as FileDownloadIcon, PictureAsPdf as PdfIcon,
 } from '@mui/icons-material';
+import { InputAdornment } from '@mui/material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -66,9 +69,22 @@ const ClientPortalDashboard = () => {
   const [clientData] = useState(() => {
     try { return JSON.parse(localStorage.getItem('clientData')); } catch { return null; }
   });
+  // Logged-in portal user — drives RBAC. Telecallers see Meta Leads only;
+  // admins see Google Ads / Meta Ads / Meta Leads / Users. Falls back to
+  // 'admin' for legacy sessions that don't have a stored user (the
+  // backend's protectClient does the same grandfathering).
+  const [portalUser, setPortalUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('clientPortalUser')); } catch { return null; }
+  });
+  const role = portalUser?.role || 'admin';
+  const isAdmin = role === 'admin';
+  const isTelecaller = role === 'telecaller';
+
   const token = localStorage.getItem('clientToken');
 
-  const [tab, setTab] = useState(0); // 0 = Google, 1 = Meta
+  // Initial tab: telecallers go straight to Meta Leads (their only tab),
+  // admins start on Google Ads.
+  const [tab, setTab] = useState(isTelecaller ? 2 : 0);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -223,14 +239,21 @@ const ClientPortalDashboard = () => {
   useEffect(() => {
     if (autoSwitchedRef.current) return;
     if (!data?.integrations) return;
+    // Telecallers only have access to Meta Leads, so skip the auto-switch
+    // logic entirely — they're already pinned to tab 2.
+    if (isTelecaller) {
+      autoSwitchedRef.current = true;
+      return;
+    }
     const { google_enabled, meta_enabled } = data.integrations;
     if (!google_enabled && meta_enabled) setTab(1);
     autoSwitchedRef.current = true;
-  }, [data]);
+  }, [data, isTelecaller]);
 
   const handleLogout = () => {
     localStorage.removeItem('clientToken');
     localStorage.removeItem('clientData');
+    localStorage.removeItem('clientPortalUser');
     navigate('/client-login');
   };
 
@@ -348,8 +371,34 @@ const ClientPortalDashboard = () => {
               '& .Mui-selected': { color: `${tab === 0 ? GOOGLE_GREEN : META_BLUE} !important` },
             }}
           >
-            <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
-            <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+            {/* MUI <Tabs> uses each child's index as the value. Conditionally
+                rendering tabs would shift indices — instead each <Tab> stays
+                in place but is hidden via `display: 'none'` for roles that
+                shouldn't see it. Telecallers: only Meta Leads. */}
+            <Tab
+              icon={<GoogleIcon sx={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label="Google Ads"
+              sx={{ textTransform: 'none', fontWeight: 600, display: isAdmin ? 'inline-flex' : 'none' }}
+            />
+            <Tab
+              icon={<FacebookIcon sx={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label="Meta Ads"
+              sx={{ textTransform: 'none', fontWeight: 600, display: isAdmin ? 'inline-flex' : 'none' }}
+            />
+            <Tab
+              icon={<FacebookIcon sx={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label="Meta Leads"
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            />
+            <Tab
+              icon={<PeopleIcon sx={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label="Users"
+              sx={{ textTransform: 'none', fontWeight: 600, display: isAdmin ? 'inline-flex' : 'none' }}
+            />
           </Tabs>
         </Card>
 
@@ -732,7 +781,6 @@ const ClientPortalDashboard = () => {
           const metaCampaigns = metaData?.campaigns || [];
           const metaDaily = metaData?.daily_trend || [];
           const metaLeadForms = metaData?.lead_forms || [];
-          const metaLeadsInRange = metaData?.leads_in_range || [];
           const metaRange = metaData?.range;
           const metaEntityCounts = metaData?.entity_counts || {};
           const accountStatusLabel = metaAccount?.account_status === 1 ? 'Active'
@@ -1040,58 +1088,467 @@ const ClientPortalDashboard = () => {
                 </>
               )}
 
-              {/* Leads — inline Excel-like table (no Full View, no separate page) */}
-              {(() => {
-                const portalLeads = metaLeadsInRange.length ? metaLeadsInRange : (metaData?.recent_leads || []);
-                if (portalLeads.length === 0) return null;
-                return (
-                  <>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
-                      <Box>
-                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                          Leads ({portalLeads.length})
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.5 }}>
-                          Every lead and form response in the selected date range.
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
-                          onClick={() => exportLeadsToExcel(portalLeads, metaAccount, displayName)}
-                          sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
-                        >
-                          Excel
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
-                          onClick={() => exportLeadsToPdf(portalLeads, metaAccount, displayName)}
-                          sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
-                        >
-                          PDF
-                        </Button>
-                      </Box>
-                    </Box>
-                    <Box sx={{ mb: 2 }}>
-                      <MetaLeadsTable
-                        leads={portalLeads}
-                        metaAccount={metaAccount}
-                        maxHeight={520}
-                        onSaveLead={handleSaveMetaLead}
-                      />
-                    </Box>
-                  </>
-                );
-              })()}
               </>)}
             </>
           );
         })()}
+
+        {/* META LEADS TAB — leads + form responses for the selected date range.
+            Reuses the same Meta analytics payload (`metaData`) the Meta Ads tab
+            consumes; no extra fetch needed. The MetaLeadsTable component is the
+            same one the admin ClientAdDetails page uses, so inline editing of
+            CRM fields and the +Add Follow-up flow work identically here. */}
+        {tab === 2 && (() => {
+          const metaAccount = metaData?.meta_account;
+          const portalLeads = (metaData?.leads_in_range?.length
+            ? metaData.leads_in_range
+            : (metaData?.recent_leads || []));
+          const metaLinked = (data?.integrations?.meta_enabled === true)
+            || (data?.integrations === undefined && metaData != null);
+
+          if (loading && !metaData) {
+            return (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <CircularProgress size={40} sx={{ color: META_BLUE }} />
+                <Typography sx={{ mt: 2, color: 'text.secondary' }}>Fetching your Meta leads...</Typography>
+              </Box>
+            );
+          }
+
+          if (!metaLinked) {
+            return (
+              <Alert
+                severity="info"
+                icon={<FacebookIcon sx={{ color: META_BLUE }} />}
+                sx={{ mb: 2, borderLeft: `4px solid ${META_BLUE}` }}
+              >
+                <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.3 }}>
+                  Meta Ads is not linked for this account
+                </Typography>
+                <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
+                  Your Meta lead form submissions will appear here once your agency connects your Meta Ads account.
+                </Typography>
+              </Alert>
+            );
+          }
+
+          if (portalLeads.length === 0) {
+            return (
+              <Card variant="outlined">
+                <CardContent sx={{ textAlign: 'center', py: 6 }}>
+                  <FacebookIcon sx={{ fontSize: 48, color: META_BLUE, mb: 1 }} />
+                  <Typography sx={{ fontWeight: 600, fontSize: '1rem', mb: 0.5 }}>No leads in this date range</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Try widening the From/To dates above to see older lead submissions.
+                  </Typography>
+                </CardContent>
+              </Card>
+            );
+          }
+
+          return (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
+                <Box>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                    Leads ({portalLeads.length})
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.5 }}>
+                    Every lead and form response in the selected date range.
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
+                    onClick={() => exportLeadsToExcel(portalLeads, metaAccount, displayName)}
+                    sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
+                  >
+                    Excel
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
+                    onClick={() => exportLeadsToPdf(portalLeads, metaAccount, displayName)}
+                    sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
+                  >
+                    PDF
+                  </Button>
+                </Box>
+              </Box>
+              <Box sx={{ mb: 2 }}>
+                <MetaLeadsTable
+                  leads={portalLeads}
+                  metaAccount={metaAccount}
+                  maxHeight={640}
+                  onSaveLead={handleSaveMetaLead}
+                />
+              </Box>
+            </>
+          );
+        })()}
+
+        {/* USERS TAB — admin only. Telecallers can't reach this tab via the
+            UI (display:none on the <Tab>), but we still gate the body so
+            anyone fiddling with state can't render it. */}
+        {tab === 3 && isAdmin && (
+          <UsersTabPanel
+            clientApi={clientApi}
+            currentUser={portalUser}
+            onCurrentUserChange={(u) => {
+              setPortalUser(u);
+              localStorage.setItem('clientPortalUser', JSON.stringify(u));
+            }}
+          />
+        )}
       </Box>
+    </Box>
+  );
+};
+
+// Inline component — kept in this file because it shares the clientApi
+// instance and is only rendered from one place. Pull into its own file
+// if it grows beyond ~200 lines.
+const UsersTabPanel = ({ clientApi, currentUser, onCurrentUserChange }) => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState(null);    // user object or null
+  const [busy, setBusy] = useState(false);
+  const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' });
+
+  const [form, setForm] = useState({ username: '', email: '', password: '', role: 'telecaller' });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await clientApi.get('/client-portal/users');
+      setUsers(res.data?.users || []);
+    } catch (err) {
+      setError(err.response?.data?.message || err.response?.data?.error || 'Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openAdd = () => {
+    setForm({ username: '', email: '', password: '', role: 'telecaller' });
+    setEditing(null);
+    setShowPassword(false);
+    setAddOpen(true);
+  };
+
+  const openEdit = (user) => {
+    setForm({
+      username: user.username || '',
+      email: user.email || '',
+      password: '',
+      role: user.role || 'telecaller',
+    });
+    setEditing(user);
+    setShowPassword(false);
+    setAddOpen(true);
+  };
+
+  const closeDialog = () => {
+    if (busy) return;
+    setAddOpen(false);
+    setEditing(null);
+    setShowPassword(false);
+  };
+
+  const handleSubmit = async () => {
+    const username = form.username.trim().toLowerCase();
+    const email = form.email.trim().toLowerCase();
+    const usernameRe = /^[a-z0-9._-]{3,60}$/;
+
+    if (!username) {
+      setSnack({ open: true, message: 'Username is required', severity: 'error' });
+      return;
+    }
+    // Mirror the backend regex on both create and edit so users get an
+    // instant error before the round-trip.
+    if (!usernameRe.test(username)) {
+      setSnack({
+        open: true,
+        message: 'Username: 3–60 chars, lowercase letters/digits/dot/underscore/hyphen only',
+        severity: 'error',
+      });
+      return;
+    }
+    if (!editing && (!form.password || form.password.length < 6)) {
+      setSnack({ open: true, message: 'Password must be at least 6 characters', severity: 'error' });
+      return;
+    }
+    if (editing && form.password && form.password.length < 6) {
+      setSnack({ open: true, message: 'Password must be at least 6 characters', severity: 'error' });
+      return;
+    }
+    setBusy(true);
+    try {
+      if (editing) {
+        const payload = { role: form.role };
+        // Send username/email only when they actually changed — the server
+        // does its own no-op detection but this keeps the wire payload tidy.
+        if (username !== (editing.username || '')) payload.username = username;
+        if (email !== (editing.email || '')) payload.email = email;
+        if (form.password) payload.password = form.password;
+        const res = await clientApi.put(`/client-portal/users/${editing._id}`, payload);
+        const updated = res.data?.user;
+        // If the admin edited their own role / name / username, refresh
+        // the cached currentUser so the dashboard's tab gating + login
+        // identifier reflect the new values without a full reload.
+        if (updated && currentUser && String(updated._id) === String(currentUser._id)) {
+          onCurrentUserChange({ ...currentUser, ...updated });
+        }
+        setSnack({ open: true, message: 'User updated', severity: 'success' });
+      } else {
+        await clientApi.post('/client-portal/users', {
+          username,
+          email,                              // optional — server treats '' as unset
+          password: form.password,
+          role: form.role,
+        });
+        setSnack({ open: true, message: 'User created', severity: 'success' });
+      }
+      setAddOpen(false);
+      setEditing(null);
+      setShowPassword(false);
+      fetchUsers();
+    } catch (err) {
+      setSnack({
+        open: true,
+        message: err.response?.data?.message || err.response?.data?.error || 'Save failed',
+        severity: 'error',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleToggleActive = async (user) => {
+    try {
+      await clientApi.put(`/client-portal/users/${user._id}`, { isActive: !user.isActive });
+      fetchUsers();
+    } catch (err) {
+      setSnack({
+        open: true,
+        message: err.response?.data?.message || err.response?.data?.error || 'Update failed',
+        severity: 'error',
+      });
+    }
+  };
+
+  const handleDelete = async (user) => {
+    if (!window.confirm(`Delete ${user.name} (${user.email})? This cannot be undone.`)) return;
+    try {
+      await clientApi.delete(`/client-portal/users/${user._id}`);
+      setSnack({ open: true, message: 'User deleted', severity: 'success' });
+      fetchUsers();
+    } catch (err) {
+      setSnack({
+        open: true,
+        message: err.response?.data?.message || err.response?.data?.error || 'Delete failed',
+        severity: 'error',
+      });
+    }
+  };
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1, flexWrap: 'wrap' }}>
+        <Box>
+          <Typography sx={{ fontWeight: 700, fontSize: '1rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+            Portal Users
+          </Typography>
+          <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.5 }}>
+            Admins manage Google Ads, Meta Ads, Meta Leads & Users. Telecallers see only Meta Leads.
+          </Typography>
+        </Box>
+        <Button variant="contained" onClick={openAdd} sx={{ bgcolor: META_BLUE, '&:hover': { bgcolor: '#0c5cb8' } }}>
+          Add User
+        </Button>
+      </Box>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 6 }}>
+          <CircularProgress sx={{ color: META_BLUE }} />
+        </Box>
+      ) : (
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Username</TableCell>
+                <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Email</TableCell>
+                <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Role</TableCell>
+                <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>
+                    No users yet — click "Add User" to invite the first one.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((u) => {
+                  const isSelf = currentUser && String(u._id) === String(currentUser._id);
+                  return (
+                    <TableRow key={u._id} hover>
+                      <TableCell sx={{ fontSize: '0.82rem', fontFamily: 'monospace' }}>
+                        {u.username}
+                        {isSelf && <Chip label="You" size="small" sx={{ ml: 0.8, height: 18, fontSize: '0.6rem', bgcolor: `${META_BLUE}15`, color: META_BLUE }} />}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.82rem' }}>{u.email || '—'}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={u.role}
+                          size="small"
+                          sx={{
+                            height: 22,
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            bgcolor: u.role === 'admin' ? `${META_BLUE}20` : '#10b98120',
+                            color: u.role === 'admin' ? META_BLUE : '#10b981',
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={u.isActive ? 'Active' : 'Inactive'}
+                          size="small"
+                          sx={{
+                            height: 22, fontSize: '0.7rem', fontWeight: 600,
+                            bgcolor: u.isActive ? '#10b98115' : '#9ca3af15',
+                            color: u.isActive ? '#10b981' : '#6b7280',
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button size="small" onClick={() => openEdit(u)} sx={{ minWidth: 0, mr: 0.5 }}>Edit</Button>
+                        <Button size="small" onClick={() => handleToggleActive(u)} sx={{ minWidth: 0, mr: 0.5 }} disabled={isSelf}>
+                          {u.isActive ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button size="small" color="error" onClick={() => handleDelete(u)} sx={{ minWidth: 0 }} disabled={isSelf}>
+                          Delete
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      <Dialog open={addOpen} onClose={closeDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>{editing ? `Edit ${editing.username}` : 'Add Portal User'}</DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Username"
+              fullWidth
+              value={form.username}
+              onChange={(e) =>
+                // Auto-lowercase the input as the user types so they can't
+                // accidentally create an unreachable login. Still hits the
+                // server-side regex check on submit.
+                setForm((f) => ({ ...f, username: e.target.value.toLowerCase() }))
+              }
+              disabled={busy}
+              required
+              autoFocus
+              helperText="Lowercase letters, digits, . _ - only (3–60 chars). The telecaller will use this to log in."
+            />
+            <TextField
+              label="Email (optional)"
+              type="email"
+              fullWidth
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              disabled={busy}
+              helperText="Optional. Telecallers usually leave this blank."
+            />
+            <TextField
+              label={editing ? 'New password (leave blank to keep current)' : 'Password'}
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              disabled={busy}
+              helperText="Minimum 6 characters"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword((v) => !v)}
+                      edge="end"
+                      size="small"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <FormControl fullWidth disabled={busy}>
+              <InputLabel id="role-label">Role</InputLabel>
+              <Select
+                labelId="role-label"
+                value={form.role}
+                label="Role"
+                onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+              >
+                <MenuItem value="admin">Admin — full portal access</MenuItem>
+                <MenuItem value="telecaller">Telecaller — Meta Leads only</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDialog} disabled={busy}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmit}
+            disabled={busy}
+            startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}
+            sx={{ bgcolor: META_BLUE, '&:hover': { bgcolor: '#0c5cb8' } }}
+          >
+            {busy ? 'Saving…' : (editing ? 'Save Changes' : 'Create User')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={4000}
+        onClose={() => setSnack((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity={snack.severity} onClose={() => setSnack((s) => ({ ...s, open: false }))} sx={{ width: '100%' }}>
+          {snack.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

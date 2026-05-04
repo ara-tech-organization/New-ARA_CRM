@@ -4,7 +4,7 @@ import api from '../api/axios';
 import {
   Box, TextField, Button, Typography, Alert, InputAdornment, IconButton, Stack,
 } from '@mui/material';
-import { Visibility, VisibilityOff, Lock, Email } from '@mui/icons-material';
+import { Visibility, VisibilityOff, Lock, Person as PersonIcon } from '@mui/icons-material';
 
 const COPPER = '#C08552';
 const BROWN = '#3E2723';
@@ -12,7 +12,9 @@ const CREAM = '#FFF8F0';
 
 const ClientLogin = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  // Field is labelled "Username or email" — admins typically have both,
+  // telecallers usually only have a username assigned by the client admin.
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,13 +28,26 @@ const ClientLogin = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) { setError('Please enter email and password'); return; }
+    if (!identifier || !password) { setError('Please enter username/email and password'); return; }
     setLoading(true);
     setError('');
     try {
-      const res = await api.post('/auth/client-login', { email, password });
+      // The backend accepts username, email, or a generic `identifier`.
+      // We send all three so any future backend rename still works.
+      const res = await api.post('/auth/client-login', {
+        username: identifier,
+        email: identifier,
+        identifier,
+        password,
+      });
       localStorage.setItem('clientToken', res.data.accessToken);
       localStorage.setItem('clientData', JSON.stringify(res.data.client));
+      // The portal user (with role) is now returned alongside the client.
+      // Stored separately so the dashboard can gate tabs by role without
+      // having to decode the JWT or refetch /client-me.
+      if (res.data.user) {
+        localStorage.setItem('clientPortalUser', JSON.stringify(res.data.user));
+      }
       navigate('/client-portal');
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || 'Login failed');
@@ -85,10 +100,11 @@ const ClientLogin = () => {
           <form onSubmit={handleSubmit}>
             <Stack spacing={3}>
               <TextField
-                fullWidth label="Email Address" type="email"
-                value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com" disabled={loading}
-                InputProps={{ startAdornment: <InputAdornment position="start"><Email sx={{ color: 'action.active', fontSize: 20 }} /></InputAdornment> }}
+                fullWidth label="Username or Email"
+                value={identifier} onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="username or your@email.com" disabled={loading}
+                helperText="Telecallers: enter the username your admin gave you."
+                InputProps={{ startAdornment: <InputAdornment position="start"><PersonIcon sx={{ color: 'action.active', fontSize: 20 }} /></InputAdornment> }}
               />
               <TextField
                 fullWidth label="Password"

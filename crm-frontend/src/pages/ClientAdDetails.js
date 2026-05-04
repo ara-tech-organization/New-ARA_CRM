@@ -1001,7 +1001,15 @@ const ClientAdDetails = () => {
                   </Grid>
                 </Paper>
 
-                {/* Billing — from meta_account (live ad-account numbers) */}
+                {/* Billing — from meta_account (live ad-account numbers).
+                    The backend's getClientAnalytics tries to verify the
+                    ad account live with Meta on every request. If that
+                    call fails (token expired, network blip, account
+                    disabled) the response sets `meta_account.error` and
+                    the live numbers (`balance`, `amount_spent`) come
+                    back undefined. Render an inline alert in that case
+                    so the user sees WHY the billing block is empty
+                    instead of a confusingly blank card. */}
                 {(metaAccount || metaBilling) && (
                   <Card variant="outlined" sx={{ borderLeft: `3px solid ${META_BLUE}`, mb: 2 }}>
                     <CardContent>
@@ -1027,23 +1035,36 @@ const ClientAdDetails = () => {
                           )}
                         </Box>
                       </Box>
-                      <Grid container spacing={1.5}>
-                        {metaAccount?.balance != null && (
+                      {metaAccount?.error ? (
+                        <Alert severity="warning" sx={{ py: 0.5 }}>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                            Live billing not available
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.75rem' }}>
+                            Couldn't fetch the latest ad account balance from Meta:{' '}
+                            <Box component="span" sx={{ fontFamily: 'monospace' }}>{metaAccount.error}</Box>
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.5 }}>
+                            Most common cause: the System User token expired. Try Resync from Meta or contact your account manager to refresh credentials.
+                          </Typography>
+                        </Alert>
+                      ) : (
+                        <Grid container spacing={1.5}>
                           <Grid size={{ xs: 6, md: 2 }}>
                             <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account Balance</Typography>
                             <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: isLowAccountBalance ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              {fmtINR(metaAccount.balance)}
+                              {metaAccount?.balance != null ? fmtINR(metaAccount.balance) : '—'}
                               {isLowAccountBalance && <WarningIcon sx={{ fontSize: 14 }} />}
                             </Typography>
                           </Grid>
-                        )}
-                        {metaAccount?.amount_spent != null && (
                           <Grid size={{ xs: 6, md: 2 }}>
                             <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Spent</Typography>
-                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: META_BLUE }}>{fmtINR(metaAccount.amount_spent)}</Typography>
+                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: META_BLUE }}>
+                              {metaAccount?.amount_spent != null ? fmtINR(metaAccount.amount_spent) : '—'}
+                            </Typography>
                           </Grid>
-                        )}
-                      </Grid>
+                        </Grid>
+                      )}
                     </CardContent>
                   </Card>
                 )}

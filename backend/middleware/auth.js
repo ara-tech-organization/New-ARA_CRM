@@ -108,7 +108,10 @@ export const protect = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Protect client portal routes — verify JWT with role: 'client'
+ * Protect client portal routes — verify JWT for an admin/telecaller
+ * ClientPortalUser. Falls back to accepting legacy `role: 'client'`
+ * tokens (issued before per-user RBAC) so existing sessions don't break
+ * mid-rollout — those are treated as `admin` for backwards compat.
  */
 export const protectClient = asyncHandler(async (req, res, next) => {
   let token;
@@ -120,20 +123,58 @@ export const protectClient = asyncHandler(async (req, res, next) => {
   }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== 'client' || !decoded.clientId) {
+    if (!decoded.clientId) {
       return res.status(403).json({ success: false, message: 'Not a client token' });
     }
-    const client = await Client.findById(decoded.clientId).select('clientName portalEnabled google_ads_enabled google_ads_customer_id').lean();
+
+    const client = await Client.findById(decoded.clientId)
+      .select('clientName portalEnabled google_ads_enabled google_ads_customer_id meta_enabled')
+      .lean();
     if (!client || !client.portalEnabled) {
       return res.status(401).json({ success: false, message: 'Portal access disabled' });
     }
+
     req.clientId = decoded.clientId;
     req.clientData = client;
+
+    // Load the portal user when the JWT carries a userId. Legacy tokens
+    // (role: 'client', no userId) are grandfathered as admin.
+    if (decoded.userId) {
+      const ClientPortalUser = (await import('../models/ClientPortalUser.js')).default;
+      const portalUser = await ClientPortalUser.findById(decoded.userId).lean();
+      if (!portalUser || !portalUser.isActive) {
+        return res.status(401).json({ success: false, message: 'Portal user not found or deactivated' });
+      }
+      if (String(portalUser.clientId) !== String(decoded.clientId)) {
+        return res.status(403).json({ success: false, message: 'Token does not match portal user' });
+      }
+      req.portalUser = portalUser;
+      req.role = portalUser.role;
+    } else {
+      // Legacy token — treat as admin.
+      req.portalUser = null;
+      req.role = 'admin';
+    }
+
     next();
   } catch (error) {
     return res.status(401).json({ success: false, message: 'Token invalid or expired' });
   }
 });
+
+/**
+ * Restrict a client portal route to specific roles. Use after `protectClient`.
+ *   router.get('/users', protectClient, requireClientPortalRole('admin'), handler);
+ */
+export const requireClientPortalRole = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.role)) {
+    return res.status(403).json({
+      success: false,
+      message: `This action requires one of: ${roles.join(', ')}`,
+    });
+  }
+  next();
+};
 
 /**
  * Grant access to specific roles
