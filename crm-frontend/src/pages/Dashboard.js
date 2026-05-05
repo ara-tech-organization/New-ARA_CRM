@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useContext } from 'react';
+import React, { useEffect, useMemo, useState, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Grid, Card, CardContent, Typography, Box, CircularProgress,
@@ -188,14 +188,28 @@ const Dashboard = () => {
   const tealAccent = accentColor?.secondary || '#C08552';
   const { todayLeads, clients: cachedClients, todayLeadsLoading: leadsLoading, clientsLoading, refreshAll, fetchTodayLeads, fetchClients } = useDataCache();
 
-  // Auto-refresh today's data + clients on every Dashboard mount so the
+  // Auto-refresh today's data + clients ONCE per Dashboard mount so the
   // Client-wise Performance cards show fresh today's numbers without the
-  // user having to click the Refresh button. The underlying cache TTL
-  // (5 min) means this is a no-op when the data is still fresh.
+  // user having to click the Refresh button.
+  //
+  // Important: we deliberately use the empty-deps form with a
+  // stable-ref pattern instead of `[fetchTodayLeads, fetchClients]`.
+  // Those callbacks are recreated by `useDataCache` whenever the
+  // underlying state changes (todayLeads / clients arrays update on
+  // every fetch). Putting them in the dep array caused the effect to
+  // fire on every fetch — so each successful fetch immediately kicked
+  // off another one, and the page would never settle into a stable
+  // state. Pinning the callbacks via refs keeps the effect to a single
+  // boot-time call while still allowing the rest of the component to
+  // call the latest version of the function on demand.
+  const fetchTodayLeadsRef = useRef(fetchTodayLeads);
+  const fetchClientsRef = useRef(fetchClients);
+  fetchTodayLeadsRef.current = fetchTodayLeads;
+  fetchClientsRef.current = fetchClients;
   useEffect(() => {
-    fetchTodayLeads(true);
-    fetchClients();
-  }, [fetchTodayLeads, fetchClients]);
+    fetchTodayLeadsRef.current(true);
+    fetchClientsRef.current();
+  }, []);
 
   const [clientSearch, setClientSearch] = useState('');
 
