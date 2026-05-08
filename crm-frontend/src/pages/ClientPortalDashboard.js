@@ -16,7 +16,6 @@ import {
   Campaign as CampaignIcon, Warning as WarningIcon,
   KeyboardArrowDown as ArrowDownIcon, KeyboardArrowUp as ArrowUpIcon,
   People as PeopleIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon,
-  Groups as GroupsIcon, Chat as ChatIcon,
   FileDownload as FileDownloadIcon, PictureAsPdf as PdfIcon,
 } from '@mui/icons-material';
 import { InputAdornment } from '@mui/material';
@@ -99,17 +98,52 @@ const ClientPortalDashboard = () => {
   const metaData = data?.meta || null;
 
   const clientApi = useMemo(() => {
+    // Grace-window logout: a single transient 401 mid-refresh shouldn't
+    // wipe the session. We schedule a redirect 800ms out and cancel it
+    // if any later response succeeds — same pattern as agency axios.
+    const REDIRECT_GRACE_MS = 800;
+    let pendingTimer = null;
+    const cancelPending = () => {
+      if (pendingTimer) {
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+    };
+
     const instance = axios.create({ baseURL: API_URL, headers: { 'Content-Type': 'application/json' } });
     instance.interceptors.request.use(config => {
       const t = localStorage.getItem('clientToken');
       if (t) config.headers.Authorization = `Bearer ${t}`;
       return config;
     });
-    instance.interceptors.response.use(r => r, err => {
+    instance.interceptors.response.use(r => {
+      cancelPending();
+      return r;
+    }, err => {
       if (err.response?.status === 401) {
-        localStorage.removeItem('clientToken');
-        localStorage.removeItem('clientData');
-        window.location.replace('/client-login');
+        // Only force-logout when the error message clearly identifies
+        // a token problem. Generic 401s (transient backend hiccups,
+        // race during refresh) should NOT wipe the client's session.
+        const msg = (err.response?.data?.message || err.response?.data?.error || '').toLowerCase();
+        const isTokenError =
+          msg.includes('token') ||
+          msg.includes('jwt') ||
+          msg.includes('expired') ||
+          msg.includes('not authorized') ||
+          msg.includes('unauthorized') ||
+          msg.includes('account is deactivated') ||
+          msg.includes('portal user not found') ||
+          msg.includes('portal access disabled') ||
+          msg.includes('login again');
+        if (isTokenError && !pendingTimer) {
+          pendingTimer = setTimeout(() => {
+            pendingTimer = null;
+            localStorage.removeItem('clientToken');
+            localStorage.removeItem('clientData');
+            localStorage.removeItem('clientPortalUser');
+            window.location.replace('/client-login');
+          }, REDIRECT_GRACE_MS);
+        }
       }
       return Promise.reject(err);
     });
@@ -229,6 +263,29 @@ const ClientPortalDashboard = () => {
       });
     }
     return updated;
+  };
+
+  // Manual WhatsApp lead entry from the portal. POSTs through clientApi
+  // (carries the portal token) and prepends the new lead to
+  // data.meta.leads_in_range so the row appears immediately.
+  const handleAddMetaLead = async (payload) => {
+    const clientId = clientData?._id;
+    if (!clientId) throw new Error('Client session expired — please log in again.');
+    const { data: resp } = await clientApi.post(
+      `/meta/client/${clientId}/leads`,
+      payload,
+      { timeout: 20000 }
+    );
+    const created = resp?.lead;
+    if (created) {
+      setData((prev) => {
+        if (!prev) return prev;
+        const meta = prev.meta || {};
+        const nextLeads = [created, ...(meta.leads_in_range || [])];
+        return { ...prev, meta: { ...meta, leads_in_range: nextLeads } };
+      });
+    }
+    return created;
   };
 
   // Auto-select the tab that has data, once, on first load. If the client
@@ -775,14 +832,12 @@ const ClientPortalDashboard = () => {
 
         {/* META ADS TAB — mirrors the admin ClientAdDetails Meta tab exactly */}
         {tab === 1 && (() => {
+          // Slimmed Meta Ads tab — only billing + leads. Account info,
+          // performance KPIs, campaigns, daily trend and lead forms have
+          // been removed for the client-portal view (admins still see
+          // the full picture on /client-ads/:id).
           const metaAccount = metaData?.meta_account;
           const metaBilling = metaData?.billing;
-          const metaSummary = metaData?.summary;
-          const metaCampaigns = metaData?.campaigns || [];
-          const metaDaily = metaData?.daily_trend || [];
-          const metaLeadForms = metaData?.lead_forms || [];
-          const metaRange = metaData?.range;
-          const metaEntityCounts = metaData?.entity_counts || {};
           const accountStatusLabel = metaAccount?.account_status === 1 ? 'Active'
             : metaAccount?.account_status === 2 ? 'Disabled'
             : metaAccount?.account_status === 3 ? 'Unsettled'
@@ -862,42 +917,12 @@ const ClientPortalDashboard = () => {
                 </CardContent>
               </Card>
 
-              {/* Account info panel — mirrors admin layout */}
-              <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: `${META_BLUE}06` }}>
-                <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account</Typography>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.name || '—'}</Typography>
-                    {metaAccount?.id && (
-                      <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', fontFamily: 'monospace' }}>{metaAccount.id}</Typography>
-                    )}
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency / Time Zone</Typography>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                      {metaAccount?.currency || '—'} · {metaAccount?.timezone_name || '—'}
-                    </Typography>
-                  </Grid>
-                  {metaRange && (
-                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Data Range</Typography>
-                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                        {fmtDate(metaRange.from)} – {fmtDate(metaRange.to)}
-                      </Typography>
-                    </Grid>
-                  )}
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Entities</Typography>
-                    <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
-                      <Chip label={`${metaEntityCounts.campaigns ?? 0} campaigns`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
-                      <Chip label={`${metaEntityCounts.adsets ?? 0} ad sets`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${COPPER}15`, color: COPPER, fontWeight: 600 }} />
-                      <Chip label={`${metaEntityCounts.ads ?? 0} ads`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${BROWN}15`, color: BROWN, fontWeight: 600 }} />
-                    </Box>
-                  </Grid>
-                </Grid>
-              </Paper>
-
-              {/* Billing — mirrors admin layout */}
+              {/* Billing — mirrors admin layout. Per client request the
+                  Meta Ads tab is intentionally minimal: just billing +
+                  the leads table below. Account info, Performance
+                  Summary KPIs, Campaigns, Daily Trend, Lead Forms are
+                  all hidden on the portal — clients only need to see
+                  what they're paying and what's coming back as leads. */}
               {(metaAccount || metaBilling) && (
                 <Card variant="outlined" sx={{ borderLeft: `3px solid ${META_BLUE}`, mb: 2 }}>
                   <CardContent>
@@ -944,149 +969,70 @@ const ClientPortalDashboard = () => {
                 </Card>
               )}
 
-              {/* Performance Summary — admin two-row KPI layout */}
-              {metaSummary && (
-                <>
-                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                    Performance Summary
-                  </Typography>
-                  <Grid container spacing={1.5} sx={{ mb: 2 }}>
-                    {metaSummary.spend != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Spend" value={fmtINR(metaSummary.spend)} color={META_BLUE} icon={<WalletIcon />} /></Grid>}
-                    {metaSummary.total_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Total Leads" value={fmtNum(metaSummary.total_leads)} color={META_BLUE} icon={<GroupsIcon />} sublabel={metaSummary.cpl != null ? `${fmtINR(metaSummary.cpl)}/lead` : null} /></Grid>}
-                    {metaSummary.form_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Form Leads" value={fmtNum(metaSummary.form_leads)} color={COPPER} icon={<GroupsIcon />} sublabel={metaSummary.cpl_form != null ? `${fmtINR(metaSummary.cpl_form)}/lead` : null} /></Grid>}
-                    {metaSummary.whatsapp_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="WhatsApp Leads" value={fmtNum(metaSummary.whatsapp_leads)} color={BROWN} icon={<ChatIcon />} sublabel={metaSummary.cpl_whatsapp != null ? `${fmtINR(metaSummary.cpl_whatsapp)}/lead` : null} /></Grid>}
-                    {metaSummary.cpl != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPL (Overall)" value={fmtINR(metaSummary.cpl)} color={META_BLUE} icon={<MoneyIcon />} /></Grid>}
-                    {metaSummary.reach != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Reach" value={fmtNum(metaSummary.reach)} color={COPPER} icon={<PeopleIcon />} /></Grid>}
-                  </Grid>
-                  <Grid container spacing={1.5} sx={{ mb: 2 }}>
-                    {metaSummary.impressions != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Impressions" value={fmtNum(metaSummary.impressions)} color={META_BLUE} icon={<VisibilityIcon />} /></Grid>}
-                    {metaSummary.clicks != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Clicks" value={fmtNum(metaSummary.clicks)} color={COPPER} icon={<TrendingUpIcon />} /></Grid>}
-                    {metaSummary.ctr != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CTR" value={fmtPct(metaSummary.ctr)} color={BROWN} icon={<ShowChartIcon />} /></Grid>}
-                    {metaSummary.cpc != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPC" value={fmtINR(metaSummary.cpc)} color={META_BLUE} icon={<MoneyIcon />} /></Grid>}
-                    {metaSummary.cpm != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPM" value={fmtINR(metaSummary.cpm)} color={COPPER} icon={<MoneyIcon />} /></Grid>}
-                  </Grid>
-                </>
-              )}
-
-              {/* Campaigns — admin column set */}
-              <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                Campaigns {metaCampaigns.length > 0 && `(${metaCampaigns.length})`}
-              </Typography>
-              <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
-                <Table size="small" sx={{ minWidth: 1200 }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Campaign</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Objective</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Daily Budget</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Spend</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impr.</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPL</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Messages</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {metaCampaigns.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={11} align="center" sx={{ py: 3, color: 'text.secondary', fontStyle: 'italic' }}>
-                          No campaign data yet
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      metaCampaigns.map((c) => (
-                        <TableRow key={c.campaign_id} hover>
-                          <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                              <CampaignIcon sx={{ fontSize: 14, color: META_BLUE }} />
-                              {c.name}
-                            </Box>
-                          </TableCell>
-                          <TableCell><Chip label={c.objective} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600 }} /></TableCell>
-                          <TableCell><Chip label={c.status} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: c.status === 'ACTIVE' ? '#10b98115' : '#ef444415', color: c.status === 'ACTIVE' ? '#10b981' : '#ef4444' }} /></TableCell>
-                          <TableCell align="right">{c.daily_budget != null ? fmtINR(c.daily_budget) : '—'}</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtINR(c.spend)}</TableCell>
-                          <TableCell align="right">{fmtNum(c.impressions)}</TableCell>
-                          <TableCell align="right">{fmtNum(c.clicks)}</TableCell>
-                          <TableCell align="right">{fmtPct(c.ctr)}</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtNum(c.total_leads ?? c.form_leads ?? 0)}</TableCell>
-                          <TableCell align="right">{c.cpl != null ? fmtINR(c.cpl) : '—'}</TableCell>
-                          <TableCell align="right">{fmtNum(c.messenger_leads ?? c.whatsapp_leads ?? 0)}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-
-              {/* Spike Chart */}
-              <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                Campaign Performance
-              </Typography>
-              <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
-                {metaDaily.length === 0 ? (
-                  <Box sx={{ py: 4, textAlign: 'center' }}>
-                    <Typography sx={{ color: 'text.secondary', fontSize: '0.82rem', fontStyle: 'italic' }}>
-                      Daily spend chart will appear here once data is available
-                    </Typography>
-                  </Box>
-                ) : (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart data={metaDaily} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
-                      <defs>
-                        <linearGradient id="cpMetaGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={META_BLUE} stopOpacity={0.35} />
-                          <stop offset="95%" stopColor={META_BLUE} stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `₹${v}`} />
-                      <RechartsTooltip />
-                      <Area type="linear" dataKey="spend" stroke={META_BLUE} fill="url(#cpMetaGrad)" strokeWidth={2.5} dot={{ r: 5, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                )}
-              </Paper>
-
-              {/* Lead Forms */}
-              {metaLeadForms.length > 0 && (
-                <>
-                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                    Lead Forms ({metaLeadForms.length})
-                  </Typography>
-                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Form Name</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Status</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads in Range</TableCell>
-                          <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Page ID</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {[...metaLeadForms].sort((a, b) => (Number(b.leads_in_range) || 0) - (Number(a.leads_in_range) || 0)).map((f) => {
-                          const isActive = f.status === 'ACTIVE';
-                          return (
-                            <TableRow key={f.form_id} hover>
-                              <TableCell sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{f.name}</TableCell>
-                              <TableCell>
-                                <Chip label={f.status || '—'} size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: isActive ? '#10b98115' : '#ef444415', color: isActive ? '#10b981' : '#ef4444' }} />
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: 600, color: META_BLUE }}>{fmtNum(f.leads_in_range)}</TableCell>
-                              <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace' }}>{f.page_id || '—'}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </>
-              )}
+              {/* Leads — same MetaLeadsTable used on the Meta Leads tab,
+                  pulled in here so the Meta Ads tab carries the data
+                  clients actually need (billing + leads + form responses)
+                  without the extra ad-management noise. */}
+              {(() => {
+                const portalLeads = (metaData?.leads_in_range?.length
+                  ? metaData.leads_in_range
+                  : (metaData?.recent_leads || []));
+                if (portalLeads.length === 0) {
+                  return (
+                    <Card variant="outlined">
+                      <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.5 }}>No leads in this date range</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Try widening the From/To dates above to see older lead submissions.
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  );
+                }
+                return (
+                  <>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
+                      <Box>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                          Leads ({portalLeads.length})
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.5 }}>
+                          Every lead and form response in the selected date range.
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
+                          onClick={() => exportLeadsToExcel(portalLeads, metaAccount, displayName)}
+                          sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
+                        >
+                          Excel
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
+                          onClick={() => exportLeadsToPdf(portalLeads, metaAccount, displayName)}
+                          sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
+                        >
+                          PDF
+                        </Button>
+                      </Box>
+                    </Box>
+                    <Box sx={{ mb: 2 }}>
+                      <MetaLeadsTable
+                        leads={portalLeads}
+                        metaAccount={metaAccount}
+                        maxHeight={520}
+                        onSaveLead={handleSaveMetaLead}
+                        onAddLead={handleAddMetaLead}
+                      />
+                    </Box>
+                  </>
+                );
+              })()}
 
               </>)}
             </>
@@ -1184,6 +1130,7 @@ const ClientPortalDashboard = () => {
                   metaAccount={metaAccount}
                   maxHeight={640}
                   onSaveLead={handleSaveMetaLead}
+                  onAddLead={handleAddMetaLead}
                 />
               </Box>
             </>

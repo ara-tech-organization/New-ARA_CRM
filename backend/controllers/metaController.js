@@ -1285,3 +1285,88 @@ export const getClientsAdsComparison = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// POST /api/meta/client/:clientId/leads
+// Create a manual lead row — used for WhatsApp leads that don't come
+// through the normal Meta lead-form sync. The portal admin and the
+// agency admin both hit this endpoint; access control is the same as
+// the rest of the meta tree (no middleware — clientId in the URL is
+// the scoping mechanism).
+//
+// Marks the lead as `source: 'meta'` + `platform: 'whatsapp'` so it
+// shows up in the same Leads table as the synced ones, distinguishable
+// by the source chip. The CRM telecaller fields (lead_location, etc.)
+// are accepted on create so the user can fill them in once instead of
+// creating then editing. We intentionally skip `meta_leadgen_id` —
+// manual rows don't have one, and the Lead schema's index is sparse so
+// missing values don't collide.
+export const createClientLead = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  const { name, phone, email, ...rest } = req.body || {};
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ success: false, message: 'Name is required' });
+  }
+  if (!phone || !String(phone).trim()) {
+    return res.status(400).json({ success: false, message: 'Phone is required' });
+  }
+
+  // Lead schema requires email — for manual WhatsApp leads we synthesize
+  // a placeholder so the row passes validation. The placeholder is
+  // recognisable (contains "manual-whatsapp") so future cleanup scripts
+  // can find these rows. If a real email is supplied, use it.
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const finalEmail = cleanEmail
+    || `manual-whatsapp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@placeholder.invalid`;
+
+  const doc = {
+    client: client._id,
+    source: 'meta',
+    platform: 'whatsapp',
+    name: String(name).trim(),
+    email: finalEmail,
+    phone: String(phone).trim(),
+    meta_form_name: 'WhatsApp (manual entry)',
+    // Treat the create timestamp as the "received" time. Any synced lead
+    // gets meta_created_time from Meta's `leadgen.created_time`; manual
+    // entries don't have one, so we set it to "now" so they sort
+    // alongside same-day synced rows.
+    meta_created_time: new Date(),
+  };
+
+  // Allow-list the CRM telecaller fields so a stray `assignedTo` or
+  // similar can't sneak in. Mirrors updateClientLead's CRM_EDITABLE_FIELDS.
+  for (const key of CRM_EDITABLE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(rest, key)) continue;
+    const value = rest[key];
+    if (key === 'follow_ups') {
+      doc.follow_ups = Array.isArray(value)
+        ? value.map((f) => ({
+            number: f.number,
+            date: f.date || null,
+            call_label: f.call_label || '',
+            remarks: f.remarks || '',
+            connected: !!f.connected,
+          }))
+        : [];
+    } else if (
+      key === 'first_call_date' ||
+      key === 'next_followup_date' ||
+      key === 'appointment_date' ||
+      key === 'appointment_booked_date'
+    ) {
+      doc[key] = value ? new Date(value) : null;
+    } else {
+      doc[key] = value;
+    }
+  }
+
+  try {
+    const lead = await Lead.create(doc);
+    res.status(201).json({ success: true, lead: lead.toObject() });
+  } catch (err) {
+    console.error('createClientLead error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

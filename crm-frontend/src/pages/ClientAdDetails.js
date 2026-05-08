@@ -262,6 +262,24 @@ const ClientAdDetails = () => {
     return updated;
   };
 
+  // Manual WhatsApp lead entry — POSTs to the same /meta/client/:id/leads
+  // route used by the portal. The created row is prepended to
+  // metaData.leads_in_range so the user sees it immediately without a
+  // refetch. The row counts as a Meta-source lead with platform=whatsapp.
+  const handleAddMetaLead = async (payload) => {
+    if (!clientId) throw new Error('Missing clientId');
+    const res = await api.post(`/meta/client/${clientId}/leads`, payload);
+    const created = res.data?.lead;
+    if (created) {
+      setMetaData((prev) => {
+        if (!prev) return { leads_in_range: [created] };
+        const nextLeads = [created, ...(prev.leads_in_range || [])];
+        return { ...prev, leads_in_range: nextLeads };
+      });
+    }
+    return created;
+  };
+
   // Fetch analytics as soon as we have a clientId — don't wait for the cached client record
   useEffect(() => {
     if (tab === 0 && clientId) {
@@ -1322,6 +1340,7 @@ const ClientAdDetails = () => {
                         metaAccount={metaAccount}
                         maxHeight={600}
                         onSaveLead={handleSaveMetaLead}
+                        onAddLead={handleAddMetaLead}
                       />
                     </Box>
                   </>

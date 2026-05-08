@@ -24,20 +24,30 @@ api.interceptors.request.use(
 
 // Response interceptor to handle 401 errors.
 //
-// Only force-logout on 401s that are CLEARLY about the JWT being bad.
-// Network blips, transient backend errors, and 401s from non-auth
-// endpoints with a generic message are now ignored — they bubble back
-// to the calling code so individual pages can show a friendly retry
-// prompt instead of yanking the user to /login.
-//
-// Specifically, the older logic kicked the user on ANY 401 from
-// `/auth/me` regardless of the message body. That meant a single
-// transient 401 (e.g., the backend was mid-boot and hadn't finished
-// loading the JWT secret, or a /auth/me call raced one of the on-boot
-// migrations) was enough to log everyone out. The new logic requires
-// an explicit token-error message even on /auth/me.
+// Only force-logout on 401s that are CLEARLY about the JWT being bad,
+// AND only after a short grace window. Network blips, mid-boot backend
+// states (the new on-startup migrations need a beat to finish), and
+// 401s from non-auth endpoints with a generic message no longer rip
+// the user out of the page mid-task. The grace window cancels the
+// pending redirect if ANY 200 response lands before it fires — that
+// way a single transient 401 surrounded by healthy traffic is treated
+// as an outlier instead of a session-killer.
+const REDIRECT_GRACE_MS = 800;
+let pendingLogoutTimer = null;
+const cancelPendingLogout = () => {
+  if (pendingLogoutTimer) {
+    clearTimeout(pendingLogoutTimer);
+    pendingLogoutTimer = null;
+  }
+};
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Any successful response means our session is still good — wipe
+    // any pending logout the previous error might have queued.
+    cancelPendingLogout();
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       const isAuthEndpoint = error.config?.url?.includes('/auth/');
@@ -56,10 +66,13 @@ api.interceptors.response.use(
       // /auth/login itself returns 401 on bad creds — never redirect on those.
       const isLoginAttempt = error.config?.url?.includes('/auth/login');
 
-      if (!isLoginAttempt && !isAuthEndpoint && isTokenError) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.replace('/login');
+      if (!isLoginAttempt && !isAuthEndpoint && isTokenError && !pendingLogoutTimer) {
+        pendingLogoutTimer = setTimeout(() => {
+          pendingLogoutTimer = null;
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.replace('/login');
+        }, REDIRECT_GRACE_MS);
       }
     }
     return Promise.reject(error);

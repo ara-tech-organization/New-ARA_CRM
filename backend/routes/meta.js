@@ -29,6 +29,7 @@ import {
   deleteClientSubscribePage,
   getClientAnalytics,
   updateClientLead,
+  createClientLead,
   getClientsAdsComparison,
 } from "../controllers/metaController.js";
 
@@ -83,6 +84,10 @@ router.get("/clients", getClientsAdsComparison);
 // /client-ads page and the client portal — same auth pattern as the
 // analytics route above.
 router.put("/client/:clientId/leads/:leadId", updateClientLead);
+
+// Manual lead entry — for WhatsApp / walk-in leads that don't come
+// through the normal Meta lead-form sync.
+router.post("/client/:clientId/leads", createClientLead);
 
 // Utilities
 router.get("/ad-account/:adAccountId/verify", getVerifyAdAccount);

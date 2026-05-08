@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, IconButton, Tooltip, Button, Chip, MenuItem, TextField,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  CircularProgress,
+  CircularProgress, FormControl, InputLabel, Select, Checkbox,
+  Dialog, DialogTitle, DialogContent, DialogActions, Divider,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 
 const META_BLUE = '#1877F2';
 const INSTAGRAM_PINK = '#E4405F';
@@ -198,13 +200,99 @@ const cellInputSx = {
 //   maxHeight:    optional override for the scroll container height
 //   onSaveLead:   async (leadId, payload) => updatedLead
 //                 If omitted the table is purely read-only (no edit cells).
-const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead }) => {
+//   onAddLead:    async (payload) => createdLead
+//                 If provided, an "Add WhatsApp Lead" button appears in
+//                 the filter bar that opens a dialog for manual entry.
+const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddLead }) => {
   const editable = typeof onSaveLead === 'function';
+  const canAdd = typeof onAddLead === 'function';
+
+  // Add-WhatsApp-lead dialog state. Mirrors every editable column on
+  // the leads table so a telecaller logging a WhatsApp lead can fill
+  // out the call disposition + appointment in one go instead of
+  // creating a stub then editing inline.
+  const emptyAddForm = {
+    // Lead details
+    name: '', phone: '', email: '',
+    lead_location: '', lead_category: '', telecaller_name: '',
+    // Initial call
+    first_call_date: '', first_call_label: '', response_label: '', remarks: '',
+    // Reminder + appointment
+    next_followup_date: '',
+    appointment_status: '', appointment_date: '', appointment_booked_date: '',
+  };
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState(emptyAddForm);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState('');
+
+  const openAddDialog = () => {
+    setAddForm(emptyAddForm);
+    setAddError('');
+    setAddBusy(false);
+    setAddOpen(true);
+  };
+  const closeAddDialog = () => {
+    if (addBusy) return;
+    setAddOpen(false);
+  };
+
+  const handleAddSubmit = async () => {
+    const name = addForm.name.trim();
+    const phone = addForm.phone.trim();
+    if (!name) {
+      setAddError('Name is required');
+      return;
+    }
+    if (!phone) {
+      setAddError('Phone is required');
+      return;
+    }
+    setAddBusy(true);
+    setAddError('');
+    try {
+      await onAddLead({
+        name,
+        phone,
+        email: addForm.email.trim(),
+        // Lead details
+        lead_location: addForm.lead_location.trim(),
+        lead_category: addForm.lead_category,
+        telecaller_name: addForm.telecaller_name.trim(),
+        // Initial call
+        first_call_date: addForm.first_call_date || null,
+        first_call_label: addForm.first_call_label,
+        response_label: addForm.response_label,
+        remarks: addForm.remarks.trim(),
+        // Reminder + appointment
+        next_followup_date: addForm.next_followup_date || null,
+        appointment_status: addForm.appointment_status,
+        appointment_date: addForm.appointment_date || null,
+        appointment_booked_date: addForm.appointment_booked_date || null,
+      });
+      setAddOpen(false);
+    } catch (err) {
+      setAddError(err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to add lead');
+    } finally {
+      setAddBusy(false);
+    }
+  };
 
   // edits[leadId] holds the in-progress field state for a row.
   const [edits, setEdits] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [savedFlash, setSavedFlash] = useState(null);
+
+  // Multi-select filters. Each is a Set of values (lowercased / uppercased
+  // exactly as the dropdown options are stored on the lead doc); a row
+  // matches when its value is in EVERY active set. Empty set = no filter
+  // for that field.
+  const [filterCallLabel, setFilterCallLabel] = useState([]);
+  const [filterResponse, setFilterResponse] = useState([]);
+  const [filterCategory, setFilterCategory] = useState([]);
+  const [filterAppointment, setFilterAppointment] = useState([]);
+  // Free-text search across name/email/phone/form-question values.
+  const [searchText, setSearchText] = useState('');
 
   // Re-seed edit state when the leads array changes (new fetch). We key by
   // _id so unrelated rows keep their in-flight edits across re-renders.
@@ -312,6 +400,72 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead }) => {
     followups: 2,
   }), []);
 
+  // Apply the filter bar selections + free-text search to the input
+  // leads. Filters are AND-combined across fields; within each field a
+  // selection of multiple values is OR-combined ("any-of"). Filter
+  // values are read from the in-progress edit state (`edits[leadId]`)
+  // when available so unsaved edits are reflected in the row visibility
+  // immediately — saves a confusing "I just changed CALL LABEL but the
+  // row didn't disappear" moment.
+  const filteredLeads = useMemo(() => {
+    const callSet = new Set(filterCallLabel);
+    const respSet = new Set(filterResponse);
+    const catSet = new Set(filterCategory);
+    const apptSet = new Set(filterAppointment);
+    const q = searchText.trim().toLowerCase();
+    const noFilters =
+      callSet.size === 0 && respSet.size === 0 &&
+      catSet.size === 0 && apptSet.size === 0 && !q;
+    if (noFilters) return leads;
+
+    return leads.filter((l) => {
+      const e = edits[l._id];
+      const callLabel = (e?.first_call_label ?? l.first_call_label ?? '').toString();
+      const respLabel = (e?.response_label ?? l.response_label ?? '').toString();
+      const category = (e?.lead_category ?? l.lead_category ?? '').toString();
+      const apptStatus = (e?.appointment_status ?? l.appointment_status ?? '').toString();
+
+      if (callSet.size > 0 && !callSet.has(callLabel)) return false;
+      if (respSet.size > 0 && !respSet.has(respLabel)) return false;
+      if (catSet.size > 0 && !catSet.has(category)) return false;
+      if (apptSet.size > 0 && !apptSet.has(apptStatus)) return false;
+
+      if (q) {
+        // Search hits name/email/phone/location/remarks + every form
+        // answer value so the user can find a lead by anything they
+        // remember about it.
+        const haystack = [
+          l.name, l.email, l.phone,
+          e?.lead_location ?? l.lead_location,
+          e?.remarks ?? l.remarks,
+          e?.telecaller_name ?? l.telecaller_name,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (haystack.includes(q)) return true;
+        const formEntries = extractFormEntries(l.raw_field_data);
+        return formEntries.some((entry) => String(entry.value || '').toLowerCase().includes(q));
+      }
+      return true;
+    });
+  }, [leads, edits, filterCallLabel, filterResponse, filterCategory, filterAppointment, searchText]);
+
+  const anyFilterActive =
+    filterCallLabel.length > 0 ||
+    filterResponse.length > 0 ||
+    filterCategory.length > 0 ||
+    filterAppointment.length > 0 ||
+    searchText.trim().length > 0;
+
+  const clearAllFilters = () => {
+    setFilterCallLabel([]);
+    setFilterResponse([]);
+    setFilterCategory([]);
+    setFilterAppointment([]);
+    setSearchText('');
+  };
+
   if (leads.length === 0) {
     return (
       <Box sx={{ p: 6, textAlign: 'center' }}>
@@ -320,7 +474,105 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead }) => {
     );
   }
 
+  // Helper to render one filter dropdown. Each is a multi-select MUI
+  // Select that renders selected values as <Chip>s in the input, so
+  // the user can see at a glance "I'm filtered to CONNECTED + RNR".
+  const renderFilter = (label, value, setValue, options, color = META_BLUE) => (
+    <FormControl size="small" sx={{ minWidth: 170 }}>
+      <InputLabel sx={{ fontSize: '0.78rem' }}>{label}</InputLabel>
+      <Select
+        multiple
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value;
+          setValue(typeof v === 'string' ? v.split(',') : v);
+        }}
+        label={label}
+        renderValue={(selected) => (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
+            {selected.map((v) => {
+              const chip = labelChipColor(v) || { bg: `${color}15`, fg: color };
+              return (
+                <Chip
+                  key={v}
+                  label={v || '—'}
+                  size="small"
+                  sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700, bgcolor: chip.bg, color: chip.fg }}
+                />
+              );
+            })}
+          </Box>
+        )}
+        sx={{ fontSize: '0.78rem' }}
+      >
+        {options.filter(Boolean).map((opt) => (
+          <MenuItem key={opt} value={opt} sx={{ fontSize: '0.82rem' }}>
+            <Checkbox checked={value.indexOf(opt) > -1} size="small" />
+            {opt}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
+
   return (
+    <Box>
+      {/* Filter bar */}
+      <Paper
+        variant="outlined"
+        sx={{
+          p: 1.2,
+          mb: 1,
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 1,
+          borderRadius: 0,
+        }}
+      >
+        <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, mr: 0.5 }}>
+          Filter
+        </Typography>
+        {renderFilter('Call Label', filterCallLabel, setFilterCallLabel, CALL_LABEL_OPTIONS)}
+        {renderFilter('Response', filterResponse, setFilterResponse, RESPONSE_LABEL_OPTIONS)}
+        {renderFilter('Hair / Skin', filterCategory, setFilterCategory, CATEGORY_OPTIONS)}
+        {renderFilter('Appointment', filterAppointment, setFilterAppointment, APPOINTMENT_STATUS_OPTIONS)}
+        <TextField
+          size="small"
+          placeholder="Search name / email / phone / form…"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          sx={{ minWidth: 240, flex: 1, '& .MuiInputBase-input': { fontSize: '0.78rem' } }}
+        />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
+          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+            Showing <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{filteredLeads.length}</Box> of {leads.length}
+          </Typography>
+          {anyFilterActive && (
+            <Button size="small" onClick={clearAllFilters} sx={{ fontSize: '0.72rem', textTransform: 'none' }}>
+              Clear all
+            </Button>
+          )}
+          {canAdd && (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<WhatsAppIcon sx={{ fontSize: 16 }} />}
+              onClick={openAddDialog}
+              sx={{
+                bgcolor: '#25D366',
+                '&:hover': { bgcolor: '#1ea855' },
+                fontSize: '0.72rem',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Add WhatsApp Lead
+            </Button>
+          )}
+        </Box>
+      </Paper>
+
     <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: maxHeight || 'calc(100vh - 200px)', borderRadius: 0 }}>
       <Table size="small" stickyHeader sx={{ '& td, & th': { borderRight: '1px solid', borderColor: 'divider' } }}>
         <TableHead>
@@ -367,7 +619,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead }) => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {leads.map((l, idx) => {
+          {filteredLeads.map((l, idx) => {
             const e = edits[l._id] || buildEditState(l);
             const isIG = String(l.platform).toLowerCase() === 'instagram';
             const platformColor = isIG ? INSTAGRAM_PINK : META_BLUE;
@@ -739,6 +991,188 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead }) => {
         </TableBody>
       </Table>
     </TableContainer>
+
+    {/* Add-WhatsApp-Lead dialog */}
+    <Dialog open={addOpen} onClose={closeAddDialog} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+        <WhatsAppIcon sx={{ color: '#25D366' }} />
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
+            Add WhatsApp Lead
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Manual entry for leads that came in via WhatsApp / walk-in.
+          </Typography>
+        </Box>
+      </DialogTitle>
+      <Divider />
+      <DialogContent>
+        {addError && (
+          <Box sx={{ mb: 2, p: 1.2, bgcolor: '#ef444415', color: '#b91c1c', borderRadius: 1, fontSize: '0.82rem' }}>
+            {addError}
+          </Box>
+        )}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          {/* ── Lead Details ── */}
+          <Box>
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5, borderLeft: '3px solid #7C2D12', pl: 1, mb: 1 }}>
+              Lead Details
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <TextField
+                  label="Name" required size="small" sx={{ flex: 1, minWidth: 200 }}
+                  value={addForm.name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+                  disabled={addBusy}
+                  autoFocus
+                />
+                <TextField
+                  label="Phone" required size="small" sx={{ flex: 1, minWidth: 180 }}
+                  value={addForm.phone}
+                  onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))}
+                  disabled={addBusy}
+                />
+              </Box>
+              <TextField
+                label="Email (optional)" fullWidth size="small"
+                value={addForm.email}
+                onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+                disabled={addBusy}
+                helperText="Leave blank if the lead didn't share an email."
+              />
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <TextField
+                  label="Location" size="small" sx={{ flex: 1, minWidth: 180 }}
+                  value={addForm.lead_location}
+                  onChange={(e) => setAddForm((f) => ({ ...f, lead_location: e.target.value }))}
+                  disabled={addBusy}
+                />
+                <TextField
+                  select label="Hair / Skin" size="small" sx={{ flex: 1, minWidth: 160 }}
+                  value={addForm.lead_category}
+                  onChange={(e) => setAddForm((f) => ({ ...f, lead_category: e.target.value }))}
+                  disabled={addBusy}
+                >
+                  {CATEGORY_OPTIONS.map((o) => (
+                    <MenuItem key={o || '__none'} value={o}>{o || '—'}</MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  label="Telecaller" size="small" sx={{ flex: 1, minWidth: 180 }}
+                  value={addForm.telecaller_name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, telecaller_name: e.target.value }))}
+                  disabled={addBusy}
+                />
+              </Box>
+            </Box>
+          </Box>
+
+          {/* ── Initial Call Details ── */}
+          <Box>
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5, borderLeft: '3px solid #9A3412', pl: 1, mb: 1 }}>
+              Initial Call Details
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <TextField
+                  type="date" label="First Call Date" size="small" sx={{ flex: 1, minWidth: 170 }}
+                  InputLabelProps={{ shrink: true }}
+                  value={addForm.first_call_date}
+                  onChange={(e) => setAddForm((f) => ({ ...f, first_call_date: e.target.value }))}
+                  disabled={addBusy}
+                />
+                <TextField
+                  select label="Call Label" size="small" sx={{ flex: 1, minWidth: 170 }}
+                  value={addForm.first_call_label}
+                  onChange={(e) => setAddForm((f) => ({ ...f, first_call_label: e.target.value }))}
+                  disabled={addBusy}
+                >
+                  {CALL_LABEL_OPTIONS.map((o) => (
+                    <MenuItem key={o || '__none'} value={o}>{o || '—'}</MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select label="Response" size="small" sx={{ flex: 1, minWidth: 200 }}
+                  value={addForm.response_label}
+                  onChange={(e) => setAddForm((f) => ({ ...f, response_label: e.target.value }))}
+                  disabled={addBusy}
+                >
+                  {RESPONSE_LABEL_OPTIONS.map((o) => (
+                    <MenuItem key={o || '__none'} value={o}>{o || '—'}</MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+              <TextField
+                label="Remarks" multiline maxRows={3} fullWidth size="small"
+                value={addForm.remarks}
+                onChange={(e) => setAddForm((f) => ({ ...f, remarks: e.target.value }))}
+                disabled={addBusy}
+              />
+            </Box>
+          </Box>
+
+          {/* ── Reminder & Appointment ── */}
+          <Box>
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5, borderLeft: '3px solid #0E7490', pl: 1, mb: 1 }}>
+              Reminder & Appointment
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <TextField
+                type="date" label="Next Follow-up" fullWidth size="small"
+                InputLabelProps={{ shrink: true }}
+                value={addForm.next_followup_date}
+                onChange={(e) => setAddForm((f) => ({ ...f, next_followup_date: e.target.value }))}
+                disabled={addBusy}
+              />
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <TextField
+                  select label="Appointment Status" size="small" sx={{ flex: 1, minWidth: 200 }}
+                  value={addForm.appointment_status}
+                  onChange={(e) => setAddForm((f) => ({ ...f, appointment_status: e.target.value }))}
+                  disabled={addBusy}
+                >
+                  {APPOINTMENT_STATUS_OPTIONS.map((o) => (
+                    <MenuItem key={o || '__none'} value={o}>{o || '—'}</MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  type="date" label="Appointment Date" size="small" sx={{ flex: 1, minWidth: 170 }}
+                  InputLabelProps={{ shrink: true }}
+                  value={addForm.appointment_date}
+                  onChange={(e) => setAddForm((f) => ({ ...f, appointment_date: e.target.value }))}
+                  disabled={addBusy}
+                />
+                <TextField
+                  type="date" label="Booked On" size="small" sx={{ flex: 1, minWidth: 170 }}
+                  InputLabelProps={{ shrink: true }}
+                  value={addForm.appointment_booked_date}
+                  onChange={(e) => setAddForm((f) => ({ ...f, appointment_booked_date: e.target.value }))}
+                  disabled={addBusy}
+                />
+              </Box>
+            </Box>
+          </Box>
+
+          <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', fontStyle: 'italic' }}>
+            Tip: Follow-up attempts can be added once the lead is created — open the row in the table and click the + in the Latest / History column.
+          </Typography>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={closeAddDialog} disabled={addBusy}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={handleAddSubmit}
+          disabled={addBusy}
+          startIcon={addBusy ? <CircularProgress size={14} color="inherit" /> : <WhatsAppIcon sx={{ fontSize: 16 }} />}
+          sx={{ bgcolor: '#25D366', '&:hover': { bgcolor: '#1ea855' } }}
+        >
+          {addBusy ? 'Adding…' : 'Add Lead'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+    </Box>
   );
 };
 
