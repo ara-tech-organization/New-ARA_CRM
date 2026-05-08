@@ -288,6 +288,27 @@ const ClientPortalDashboard = () => {
     return created;
   };
 
+  // Delete a manual WhatsApp lead from the portal. Same scope as the
+  // admin handler — backend gates by clientId+manual-entry marker.
+  const handleDeleteMetaLead = async (leadId) => {
+    const clientId = clientData?._id;
+    if (!clientId) throw new Error('Client session expired — please log in again.');
+    await clientApi.delete(
+      `/meta/client/${clientId}/leads/${leadId}`,
+      { timeout: 20000 }
+    );
+    setData((prev) => {
+      if (!prev?.meta?.leads_in_range) return prev;
+      return {
+        ...prev,
+        meta: {
+          ...prev.meta,
+          leads_in_range: prev.meta.leads_in_range.filter((l) => l._id !== leadId),
+        },
+      };
+    });
+  };
+
   // Auto-select the tab that has data, once, on first load. If the client
   // has only Meta linked (no Google), jump them straight to the Meta tab
   // instead of making them see the "Google not linked" banner first.
@@ -1028,6 +1049,7 @@ const ClientPortalDashboard = () => {
                         maxHeight={520}
                         onSaveLead={handleSaveMetaLead}
                         onAddLead={handleAddMetaLead}
+                        onDeleteLead={handleDeleteMetaLead}
                       />
                     </Box>
                   </>
@@ -1131,6 +1153,7 @@ const ClientPortalDashboard = () => {
                   maxHeight={640}
                   onSaveLead={handleSaveMetaLead}
                   onAddLead={handleAddMetaLead}
+                  onDeleteLead={handleDeleteMetaLead}
                 />
               </Box>
             </>

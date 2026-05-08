@@ -1370,3 +1370,42 @@ export const createClientLead = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// DELETE /api/meta/client/:clientId/leads/:leadId
+// Removes a manually-entered WhatsApp lead. Synced Meta-form leads
+// are intentionally NOT deletable through this endpoint — they're an
+// audit record of what Meta delivered, and removing them silently
+// would corrupt counts on the analytics aggregations. We identify
+// manual entries by the marker the create endpoint sets:
+//   meta_form_name === 'WhatsApp (manual entry)'  AND
+//   platform === 'whatsapp'  AND
+//   no meta_leadgen_id (synced rows always have one).
+export const deleteClientLead = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  const { leadId } = req.params;
+  if (!mongoose.isValidObjectId(leadId)) {
+    return res.status(400).json({ success: false, message: 'Invalid leadId' });
+  }
+
+  const lead = await Lead.findOne({ _id: leadId, client: client._id });
+  if (!lead) {
+    return res.status(404).json({ success: false, message: 'Lead not found' });
+  }
+
+  const isManualEntry =
+    !lead.meta_leadgen_id &&
+    lead.platform === 'whatsapp' &&
+    lead.meta_form_name === 'WhatsApp (manual entry)';
+
+  if (!isManualEntry) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only manually-entered WhatsApp leads can be deleted. Synced Meta form leads are immutable.',
+    });
+  }
+
+  await lead.deleteOne();
+  res.json({ success: true, message: 'Lead deleted', leadId });
+};

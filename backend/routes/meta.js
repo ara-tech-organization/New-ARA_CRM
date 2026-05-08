@@ -30,6 +30,7 @@ import {
   getClientAnalytics,
   updateClientLead,
   createClientLead,
+  deleteClientLead,
   getClientsAdsComparison,
 } from "../controllers/metaController.js";
 
@@ -88,6 +89,10 @@ router.put("/client/:clientId/leads/:leadId", updateClientLead);
 // Manual lead entry — for WhatsApp / walk-in leads that don't come
 // through the normal Meta lead-form sync.
 router.post("/client/:clientId/leads", createClientLead);
+
+// Delete a manual WhatsApp lead. Synced Meta-form leads are blocked
+// by the controller — this endpoint only removes manual entries.
+router.delete("/client/:clientId/leads/:leadId", deleteClientLead);
 
 // Utilities
 router.get("/ad-account/:adAccountId/verify", getVerifyAdAccount);

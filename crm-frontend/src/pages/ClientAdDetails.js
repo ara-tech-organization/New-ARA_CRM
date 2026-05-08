@@ -280,6 +280,22 @@ const ClientAdDetails = () => {
     return created;
   };
 
+  // Delete a manual WhatsApp lead. The backend rejects deletion of
+  // synced Meta-form rows with a 403, so the only thing reaching here
+  // should be a manual entry — but the success path still patches by
+  // _id so it'd be safe either way.
+  const handleDeleteMetaLead = async (leadId) => {
+    if (!clientId) throw new Error('Missing clientId');
+    await api.delete(`/meta/client/${clientId}/leads/${leadId}`);
+    setMetaData((prev) => {
+      if (!prev?.leads_in_range) return prev;
+      return {
+        ...prev,
+        leads_in_range: prev.leads_in_range.filter((l) => l._id !== leadId),
+      };
+    });
+  };
+
   // Fetch analytics as soon as we have a clientId — don't wait for the cached client record
   useEffect(() => {
     if (tab === 0 && clientId) {
@@ -1341,6 +1357,7 @@ const ClientAdDetails = () => {
                         maxHeight={600}
                         onSaveLead={handleSaveMetaLead}
                         onAddLead={handleAddMetaLead}
+                        onDeleteLead={handleDeleteMetaLead}
                       />
                     </Box>
                   </>

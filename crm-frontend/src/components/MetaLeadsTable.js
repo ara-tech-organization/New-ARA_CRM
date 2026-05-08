@@ -203,9 +203,62 @@ const cellInputSx = {
 //   onAddLead:    async (payload) => createdLead
 //                 If provided, an "Add WhatsApp Lead" button appears in
 //                 the filter bar that opens a dialog for manual entry.
-const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddLead }) => {
+//   onDeleteLead: async (leadId) => void
+//                 If provided, manually-entered WhatsApp rows show a
+//                 trash icon in the action column. Synced Meta-form
+//                 rows never show the icon (those are immutable audit
+//                 records — the backend rejects deletion anyway).
+const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddLead, onDeleteLead }) => {
   const editable = typeof onSaveLead === 'function';
   const canAdd = typeof onAddLead === 'function';
+  const canDelete = typeof onDeleteLead === 'function';
+
+  // Helper used by the row renderer to decide whether to show the
+  // delete icon. Mirrors the backend's `isManualEntry` check so the
+  // UI doesn't offer a button that would always 403.
+  const isManualEntryLead = (l) =>
+    !l?.meta_leadgen_id &&
+    String(l?.platform || '').toLowerCase() === 'whatsapp' &&
+    l?.meta_form_name === 'WhatsApp (manual entry)';
+
+  // Centred MUI confirmation dialog instead of `window.confirm` so it
+  // matches the rest of the app's chrome and can show formatted lead
+  // info (name + phone) for clarity before the destructive action.
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);   // lead object or null
+  const [deleteError, setDeleteError] = useState('');
+
+  const requestDelete = (lead) => {
+    if (!canDelete) return;
+    setDeleteError('');
+    setDeleteTarget(lead);
+  };
+
+  const closeDeleteDialog = () => {
+    if (deletingId) return;          // don't dismiss while in flight
+    setDeleteTarget(null);
+    setDeleteError('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || !canDelete) return;
+    const lead = deleteTarget;
+    setDeletingId(lead._id);
+    setDeleteError('');
+    try {
+      await onDeleteLead(lead._id);
+      setDeleteTarget(null);          // close dialog on success
+    } catch (err) {
+      setDeleteError(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to delete lead'
+      );
+    } finally {
+      setDeletingId((cur) => (cur === lead._id ? null : cur));
+    }
+  };
 
   // Add-WhatsApp-lead dialog state. Mirrors every editable column on
   // the leads table so a telecaller logging a WhatsApp lead can fill
@@ -968,20 +1021,36 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
                     </Box>
                   </TableCell>
 
-                  {/* Save action */}
+                  {/* Save + (manual-entry only) Delete actions */}
                   {editable && (
                     <TableCell sx={{ position: 'sticky', right: 0, bgcolor: rowBg, zIndex: 2 }}>
-                      <Button
-                        size="small"
-                        variant={justSaved ? 'outlined' : 'contained'}
-                        color={justSaved ? 'success' : 'primary'}
-                        startIcon={isSaving ? <CircularProgress size={12} color="inherit" /> : <SaveIcon sx={{ fontSize: 14 }} />}
-                        onClick={() => handleSave(l._id)}
-                        disabled={isSaving}
-                        sx={{ fontSize: '0.65rem', py: 0.4, minWidth: 0 }}
-                      >
-                        {justSaved ? 'Saved' : (isSaving ? 'Saving' : 'Save')}
-                      </Button>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Button
+                          size="small"
+                          variant={justSaved ? 'outlined' : 'contained'}
+                          color={justSaved ? 'success' : 'primary'}
+                          startIcon={isSaving ? <CircularProgress size={12} color="inherit" /> : <SaveIcon sx={{ fontSize: 14 }} />}
+                          onClick={() => handleSave(l._id)}
+                          disabled={isSaving}
+                          sx={{ fontSize: '0.65rem', py: 0.4, minWidth: 0 }}
+                        >
+                          {justSaved ? 'Saved' : (isSaving ? 'Saving' : 'Save')}
+                        </Button>
+                        {canDelete && isManualEntryLead(l) && (
+                          <Tooltip title="Delete this manual WhatsApp lead">
+                            <IconButton
+                              size="small"
+                              onClick={() => requestDelete(l)}
+                              disabled={deletingId === l._id}
+                              sx={{ p: 0.4, '&:hover': { bgcolor: '#FEE2E2' } }}
+                            >
+                              {deletingId === l._id
+                                ? <CircularProgress size={14} sx={{ color: '#B91C1C' }} />
+                                : <DeleteOutlineIcon sx={{ fontSize: 16, color: '#B91C1C' }} />}
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Box>
                     </TableCell>
                   )}
                 </TableRow>
@@ -1169,6 +1238,75 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
           sx={{ bgcolor: '#25D366', '&:hover': { bgcolor: '#1ea855' } }}
         >
           {addBusy ? 'Adding…' : 'Add Lead'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    {/* Delete confirmation — centered modal asking for explicit
+        confirmation before removing a manual WhatsApp lead. */}
+    <Dialog
+      open={!!deleteTarget}
+      onClose={closeDeleteDialog}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{ sx: { borderTop: '4px solid #B91C1C' } }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+        <DeleteOutlineIcon sx={{ color: '#B91C1C' }} />
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
+            Delete WhatsApp Lead?
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            This cannot be undone.
+          </Typography>
+        </Box>
+      </DialogTitle>
+      <Divider />
+      <DialogContent>
+        {deleteError && (
+          <Box sx={{ mb: 2, p: 1.2, bgcolor: '#ef444415', color: '#b91c1c', borderRadius: 1, fontSize: '0.82rem' }}>
+            {deleteError}
+          </Box>
+        )}
+        <Typography sx={{ fontSize: '0.88rem', mb: 1.5 }}>
+          You're about to permanently remove this manual WhatsApp lead:
+        </Typography>
+        {deleteTarget && (
+          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'grey.50' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '90px 1fr', rowGap: 0.6, columnGap: 1.2, alignItems: 'baseline' }}>
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>Name</Typography>
+              <Typography sx={{ fontSize: '0.88rem', fontWeight: 600 }}>{deleteTarget.name || '—'}</Typography>
+              <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>Phone</Typography>
+              <Typography sx={{ fontSize: '0.85rem', fontFamily: 'monospace' }}>{deleteTarget.phone || '—'}</Typography>
+              {deleteTarget.lead_location && (
+                <>
+                  <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>Location</Typography>
+                  <Typography sx={{ fontSize: '0.85rem' }}>{deleteTarget.lead_location}</Typography>
+                </>
+              )}
+              {deleteTarget.lead_category && (
+                <>
+                  <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>Hair / Skin</Typography>
+                  <Typography sx={{ fontSize: '0.85rem' }}>{deleteTarget.lead_category}</Typography>
+                </>
+              )}
+            </Box>
+          </Paper>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={closeDeleteDialog} disabled={!!deletingId}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          color="error"
+          onClick={confirmDelete}
+          disabled={!!deletingId}
+          startIcon={deletingId ? <CircularProgress size={14} color="inherit" /> : <DeleteOutlineIcon sx={{ fontSize: 16 }} />}
+        >
+          {deletingId ? 'Deleting…' : 'Delete Lead'}
         </Button>
       </DialogActions>
     </Dialog>
