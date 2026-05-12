@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout, loadUserFromStorage } from '../store/slices/authSlice';
 import api from '../api/axios';
 import { ThemeContext } from '../contexts/ThemeContext';
+import leadMatrixLogo from '../assets/Lead-Matrix-Logo.png';
 import {
   Box,
   Drawer,
@@ -295,35 +296,37 @@ const MainLayout = () => {
       overflow: 'hidden',
       borderRight: isDarkMode ? '1px solid rgba(208,165,116,0.08)' : 'none'
     }}>
-      {/* Header with Logo and Collapse Button */}
+      {/* Header with Lead Matrix logo + collapse button */}
       <Box sx={{ p: sidebarCollapsed ? 1.5 : 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, overflow: 'hidden' }}>
-          <Box
-            sx={{
-              width: 38,
-              height: 38,
-              borderRadius: '5px',
-              backgroundColor: '#C08552',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: '1.3rem',
-              color: '#FFFFFF',
-              flexShrink: 0,
-            }}
-          >
-            C
-          </Box>
-          {!sidebarCollapsed && (
-            <Box sx={{ overflow: 'hidden' }}>
-              <Typography sx={{ fontWeight: 700, color: 'white', lineHeight: 1.2, whiteSpace: 'nowrap', fontSize: '0.95rem' }}>
-                CRM Pro
-              </Typography>
-              <Typography sx={{ color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', fontSize: '0.7rem' }}>
-                ARA discover Pvt.Ltd
-              </Typography>
-            </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, overflow: 'hidden', flex: 1 }}>
+          {sidebarCollapsed ? (
+            // Collapsed: show just the symbol portion of the logo, cropped to a square.
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 1,
+                backgroundImage: `url(${leadMatrixLogo})`,
+                backgroundRepeat: 'no-repeat',
+                backgroundSize: '170% auto',
+                backgroundPosition: 'left center',
+                flexShrink: 0,
+              }}
+            />
+          ) : (
+            // Expanded: show the full Lead Matrix logo image.
+            <Box
+              component="img"
+              src={leadMatrixLogo}
+              alt="Lead Matrix"
+              sx={{
+                height: 36,
+                width: 'auto',
+                maxWidth: '85%',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
           )}
         </Box>
         {!sidebarCollapsed && (

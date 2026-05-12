@@ -2,8 +2,6 @@ import React, { useState, useEffect, useContext } from 'react';
 import { ThemeContext } from '../contexts/ThemeContext';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   Grid,
   Chip,
@@ -26,20 +24,30 @@ import {
   IconButton,
   Snackbar,
   Tooltip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Menu,
+  Stack,
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Shield as ShieldIcon,
   CheckCircle as CheckCircleIcon,
   Block as BlockIcon,
   Edit as EditIcon,
-  Add as AddIcon,
   Delete as DeleteIcon,
   Visibility,
   VisibilityOff,
   Lock as LockIcon,
   Key as KeyIcon,
   PowerSettingsNew as PowerIcon,
+  MoreVert as MoreVertIcon,
+  Group as GroupIcon,
+  PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
 import userApi from '../api/userApi';
 
@@ -97,6 +105,18 @@ const AccessManagement = () => {
   const [passwordUser, setPasswordUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // Row 3-dot menu state (less-used actions tucked here so the row stays clean).
+  const [rowMenuAnchor, setRowMenuAnchor] = useState(null);
+  const [rowMenuUser, setRowMenuUser] = useState(null);
+  const openRowMenu = (event, user) => {
+    setRowMenuAnchor(event.currentTarget);
+    setRowMenuUser(user);
+  };
+  const closeRowMenu = () => {
+    setRowMenuAnchor(null);
+    setRowMenuUser(null);
+  };
 
   // New user form state
   const [newUser, setNewUser] = useState({
@@ -364,24 +384,37 @@ const AccessManagement = () => {
     );
   }
 
+  // Counts for the slim header summary.
+  const activeCount = users.filter((u) => u.isActive).length;
+  const inactiveCount = users.length - activeCount;
+  const adminCount = users.filter((u) => u.role === 'admin').length;
+  const roleLabelMap = {
+    admin: 'Admin',
+    SMM: 'Social Media Manager',
+    PMM: 'Performance Marketing Manager',
+  };
+
   return (
     <Box>
-      {/* Header */}
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      {/* ── Page header ── */}
+      <Box sx={{ mb: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, flexWrap: 'wrap', gap: 1.5 }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
-            User Management
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <GroupIcon sx={{ color: primaryColor }} />
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>Team Access</Typography>
+          </Box>
           <Typography variant="body2" color="text.secondary">
-            Create users and control page access permissions based on their roles
+            Manage who can sign in and which pages each person can see.
           </Typography>
         </Box>
         <Button
           variant="contained"
-          startIcon={<AddIcon />}
+          startIcon={<PersonAddIcon />}
           onClick={() => setCreateDialogOpen(true)}
           sx={{
             bgcolor: primaryColor,
+            textTransform: 'none',
+            fontWeight: 600,
             '&:hover': { bgcolor: secondaryColor, color: 'white' },
           }}
         >
@@ -389,261 +422,248 @@ const AccessManagement = () => {
         </Button>
       </Box>
 
-      {/* Stats Row */}
-      <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        {[
-          { label: 'Total Users', value: users.length, color: '#C08552', icon: <ShieldIcon /> },
-          { label: 'Active Users', value: users.filter((u) => u.isActive).length, color: '#10b981', icon: <ShieldIcon /> },
-          { label: 'Inactive Users', value: users.filter((u) => !u.isActive).length, color: '#C08552', icon: <ShieldIcon /> },
-        ].map((s, i) => (
-          <Grid key={i} size={{ xs: 12, sm: 4 }}>
-            <Card variant="outlined" sx={{ borderLeft: `3px solid ${s.color}` }}>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 20 } })}
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
-                  <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+      {/* ── Slim stats pill bar ── */}
+      <Paper variant="outlined" sx={{ p: 1.2, mb: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: primaryColor }} />
+            <Typography sx={{ fontSize: '0.82rem' }}>
+              <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{users.length}</Box>{' '}
+              <Box component="span" sx={{ color: 'text.secondary' }}>total</Box>
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#10b981' }} />
+            <Typography sx={{ fontSize: '0.82rem' }}>
+              <Box component="span" sx={{ fontWeight: 700, color: '#10b981' }}>{activeCount}</Box>{' '}
+              <Box component="span" sx={{ color: 'text.secondary' }}>active</Box>
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#94a3b8' }} />
+            <Typography sx={{ fontSize: '0.82rem' }}>
+              <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{inactiveCount}</Box>{' '}
+              <Box component="span" sx={{ color: 'text.secondary' }}>inactive</Box>
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#ef4444' }} />
+            <Typography sx={{ fontSize: '0.82rem' }}>
+              <Box component="span" sx={{ fontWeight: 700, color: '#ef4444' }}>{adminCount}</Box>{' '}
+              <Box component="span" sx={{ color: 'text.secondary' }}>admin{adminCount === 1 ? '' : 's'}</Box>
+            </Typography>
+          </Box>
+        </Stack>
+        <Box sx={{ flex: 1, minWidth: 220 }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search by name or email"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            autoComplete="off"
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" color="action" />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        </Box>
+      </Paper>
 
-      {/* Search */}
-      <TextField
-        fullWidth
-        placeholder="Search by name, email, or User ID..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        autoComplete="off"
-        size="small"
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon color="action" />
-              </InputAdornment>
-            ),
-          },
-        }}
-        sx={{ mb: 2 }}
-      />
+      {/* ── Users table ── */}
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: `${primaryColor}08`, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 0.4, color: 'text.secondary' } }}>
+              <TableCell>User</TableCell>
+              <TableCell>Role</TableCell>
+              <TableCell>Team</TableCell>
+              <TableCell>Pages they can see</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredUsers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
+                  {searchQuery
+                    ? `No users found matching "${searchQuery}".`
+                    : 'No users yet. Click Add New User to invite the first one.'}
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredUsers.map((user) => {
+                const permCount = user.permissions?.length || 0;
+                const permLabel = user.role === 'admin'
+                  ? 'All pages'
+                  : (permCount === 0
+                    ? 'No pages yet'
+                    : `${permCount} of ${availablePages.length}`);
+                const permTooltip = user.role === 'admin'
+                  ? 'Admins see every page automatically.'
+                  : (permCount === 0
+                    ? 'This user has no page access yet. Click Edit Access to grant pages.'
+                    : (user.permissions || [])
+                        .map((id) => availablePages.find((p) => p.id === id)?.name)
+                        .filter(Boolean)
+                        .join(', '));
 
-      {/* Users List */}
-      <Grid container spacing={1.5}>
-        {filteredUsers.length === 0 ? (
-          <Grid size={{ xs: 12 }}>
-            <Card>
-              <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                <Typography color="text.secondary">
-                  {searchQuery ? 'No users found matching your search' : 'No users found. Create your first user!'}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ) : (
-          filteredUsers.map((user) => (
-            <Grid size={{ xs: 12, md: 6, lg: 4 }} key={user._id}>
-              <Card
-                variant="outlined"
-                sx={{
-                  height: '100%',
-                  overflow: 'hidden',
-                  borderLeft: `3px solid ${user.isActive ? primaryColor : '#94a3b8'}`,
-                  opacity: user.isActive ? 1 : 0.65,
-                  transition: 'all 0.2s',
-                  '&:hover': { borderColor: primaryColor },
-                }}
-              >
-                <CardContent sx={{ p: 2 }}>
-                  {/* Top row: Avatar + Info + Status */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                    <Avatar
-                      sx={{
-                        width: 42,
-                        height: 42,
-                        bgcolor: user.isActive ? primaryColor : 'grey.400',
-                        fontSize: '1.1rem',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {user.name?.charAt(0) || 'U'}
-                    </Avatar>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {user.name}
-                        </Typography>
-                        {user.isActive ? (
-                          <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
-                        ) : (
-                          <BlockIcon sx={{ fontSize: 16, color: 'error.main', flexShrink: 0 }} />
-                        )}
+                return (
+                  <TableRow key={user._id} hover sx={{ opacity: user.isActive ? 1 : 0.6 }}>
+                    {/* User column — avatar + name + email */}
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                        <Avatar sx={{ width: 36, height: 36, bgcolor: user.isActive ? primaryColor : 'grey.400', fontSize: '0.95rem', fontWeight: 700 }}>
+                          {user.name?.charAt(0) || 'U'}
+                        </Avatar>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.88rem', lineHeight: 1.2 }}>{user.name}</Typography>
+                          <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {user.email}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {user.email}
-                      </Typography>
-                    </Box>
-                  </Box>
+                    </TableCell>
 
-                  {/* Info chips */}
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 2 }}>
-                    <Chip
-                      label={user.userID}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontSize: '0.7rem', height: 24 }}
-                    />
-                    <Chip
-                      label={user.role}
-                      size="small"
-                      color={getRoleColor(user.role)}
-                      sx={{ fontSize: '0.7rem', height: 24, fontWeight: 600 }}
-                    />
-                    {user.team && (
+                    {/* Role */}
+                    <TableCell>
                       <Chip
-                        label={user.team.replace('SMM ', '')}
+                        label={roleLabelMap[user.role] || user.role}
                         size="small"
-                        color="success"
-                        variant="outlined"
-                        sx={{ fontSize: '0.7rem', height: 24 }}
+                        color={getRoleColor(user.role)}
+                        sx={{ fontSize: '0.7rem', height: 22, fontWeight: 600 }}
                       />
-                    )}
-                    {user.role === 'admin' && (
-                      <Chip
-                        label="Full Access"
-                        size="small"
-                        color="warning"
-                        sx={{ fontSize: '0.7rem', height: 24 }}
-                      />
-                    )}
-                    {!user.isActive && (
-                      <Chip
-                        label="Inactive"
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        sx={{ fontSize: '0.7rem', height: 24 }}
-                      />
-                    )}
-                  </Box>
+                    </TableCell>
 
-                  {/* Permissions bar (visual indicator) */}
-                  {user.role !== 'admin' && (
-                    <Box sx={{ mb: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                          Access
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {user.permissions?.length || 0}/{availablePages.length}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ height: 4, bgcolor: 'action.hover', borderRadius: 2, overflow: 'hidden' }}>
-                        <Box
-                          sx={{
-                            height: '100%',
-                            width: `${((user.permissions?.length || 0) / availablePages.length) * 100}%`,
-                            bgcolor: primaryColor,
-                            borderRadius: 2,
-                            transition: 'width 0.3s ease',
-                          }}
-                        />
-                      </Box>
-                    </Box>
-                  )}
-
-                  <Divider sx={{ mb: 1.5 }} />
-
-                  {/* Action buttons - icon style */}
-                  <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                    <Tooltip title="Edit User">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenEditUser(user)}
-                        sx={{
-                          bgcolor: `${primaryColor}14`,
-                          color: primaryColor,
-                          '&:hover': { bgcolor: `${primaryColor}28` },
-                        }}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    {user.role !== 'admin' && (
-                      <Tooltip title="Edit Access">
-                        <IconButton
+                    {/* Team */}
+                    <TableCell>
+                      {user.team ? (
+                        <Chip
+                          label={user.team.replace('SMM ', '')}
                           size="small"
-                          onClick={() => handleEditAccess(user)}
-                          sx={{
-                            bgcolor: 'info.main',
-                            color: 'white',
-                            '&:hover': { bgcolor: 'info.dark' },
-                          }}
-                        >
-                          <KeyIcon fontSize="small" />
-                        </IconButton>
+                          variant="outlined"
+                          color="success"
+                          sx={{ fontSize: '0.7rem', height: 22 }}
+                        />
+                      ) : (
+                        <Typography sx={{ fontSize: '0.78rem', color: 'text.disabled' }}>—</Typography>
+                      )}
+                    </TableCell>
+
+                    {/* Pages access summary */}
+                    <TableCell>
+                      <Tooltip title={permTooltip} arrow>
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
+                          <KeyIcon sx={{ fontSize: 14, color: user.role === 'admin' ? '#ef4444' : primaryColor }} />
+                          <Typography sx={{ fontSize: '0.8rem', fontWeight: 500 }}>{permLabel}</Typography>
+                        </Box>
                       </Tooltip>
-                    )}
-                    <Tooltip title="Change Password">
-                      <IconButton
+                    </TableCell>
+
+                    {/* Status */}
+                    <TableCell>
+                      <Chip
+                        icon={user.isActive ? <CheckCircleIcon sx={{ fontSize: '14px !important' }} /> : <BlockIcon sx={{ fontSize: '14px !important' }} />}
+                        label={user.isActive ? 'Active' : 'Inactive'}
                         size="small"
-                        onClick={() => {
-                          setPasswordUser(user);
-                          setNewPassword('');
-                          setShowNewPassword(false);
-                          setPasswordDialogOpen(true);
-                        }}
                         sx={{
-                          bgcolor: 'warning.main',
-                          color: 'white',
-                          '&:hover': { bgcolor: 'warning.dark' },
+                          height: 22,
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          bgcolor: user.isActive ? '#10b98115' : '#94a3b815',
+                          color: user.isActive ? '#10b981' : '#64748b',
+                          '& .MuiChip-icon': { color: 'inherit' },
                         }}
-                      >
-                        <LockIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={user.isActive ? 'Deactivate' : 'Activate'}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleToggleUserStatus(user._id)}
-                        disabled={actionLoading}
-                        sx={{
-                          bgcolor: user.isActive ? 'error.main' : 'success.main',
-                          color: 'white',
-                          '&:hover': { bgcolor: user.isActive ? 'error.dark' : 'success.dark' },
-                          '&.Mui-disabled': { bgcolor: 'action.disabledBackground' },
-                        }}
-                      >
-                        <PowerIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete User">
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          setUserToDelete(user);
-                          setDeleteDialogOpen(true);
-                        }}
-                        sx={{
-                          bgcolor: 'grey.200',
-                          color: 'error.main',
-                          '&:hover': { bgcolor: 'error.main', color: 'white' },
-                        }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))
-        )}
-      </Grid>
+                      />
+                    </TableCell>
+
+                    {/* Actions: Edit profile, Manage access, More menu */}
+                    <TableCell align="right">
+                      <Box sx={{ display: 'inline-flex', gap: 0.4 }}>
+                        <Tooltip title="Edit profile">
+                          <IconButton size="small" onClick={() => handleOpenEditUser(user)} sx={{ color: primaryColor }}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {user.role !== 'admin' && (
+                          <Tooltip title="Manage page access">
+                            <IconButton size="small" onClick={() => handleEditAccess(user)} sx={{ color: '#3b82f6' }}>
+                              <KeyIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip title="More">
+                          <IconButton size="small" onClick={(e) => openRowMenu(e, user)} sx={{ color: 'text.secondary' }}>
+                            <MoreVertIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* ── Row 3-dot menu: less-frequent actions ── */}
+      <Menu
+        anchorEl={rowMenuAnchor}
+        open={Boolean(rowMenuAnchor)}
+        onClose={closeRowMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => {
+            const user = rowMenuUser;
+            closeRowMenu();
+            if (!user) return;
+            setPasswordUser(user);
+            setNewPassword('');
+            setShowNewPassword(false);
+            setPasswordDialogOpen(true);
+          }}
+        >
+          <LockIcon fontSize="small" sx={{ mr: 1.2, color: 'warning.main' }} />
+          Reset password
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            const user = rowMenuUser;
+            closeRowMenu();
+            if (!user) return;
+            handleToggleUserStatus(user._id);
+          }}
+        >
+          <PowerIcon
+            fontSize="small"
+            sx={{ mr: 1.2, color: rowMenuUser?.isActive ? 'error.main' : 'success.main' }}
+          />
+          {rowMenuUser?.isActive ? 'Deactivate user' : 'Activate user'}
+        </MenuItem>
+        <Divider />
+        <MenuItem
+          onClick={() => {
+            const user = rowMenuUser;
+            closeRowMenu();
+            if (!user) return;
+            setUserToDelete(user);
+            setDeleteDialogOpen(true);
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <DeleteIcon fontSize="small" sx={{ mr: 1.2 }} />
+          Delete user
+        </MenuItem>
+      </Menu>
 
       {/* Create User Dialog */}
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth fullScreen={false}>
@@ -773,12 +793,16 @@ const AccessManagement = () => {
             disabled={!newUser.name || !newUser.email || !newUser.password || actionLoading}
             sx={{
               bgcolor: primaryColor,
+              color: '#fff',
               '&:hover': {
-                bgcolor: secondaryColor,
+                bgcolor: primaryColor,
+                filter: 'brightness(0.88)',
+                color: '#fff',
               },
+              '&.Mui-disabled': { color: 'rgba(255,255,255,0.7)' },
             }}
           >
-            {actionLoading ? <CircularProgress size={24} /> : 'Create User'}
+            {actionLoading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Create User'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -861,13 +885,23 @@ const AccessManagement = () => {
             onClick={handleSavePermissions}
             disabled={actionLoading}
             sx={{
+              // Force white text in BOTH states so the button is always
+              // readable regardless of which accent palette the user has
+              // picked. Hover uses a brightness filter on the same base
+              // color instead of swapping to a theme-dependent
+              // secondaryColor, which used to flip white-on-white when
+              // the accent's primary was a light shade.
               bgcolor: primaryColor,
+              color: '#fff',
               '&:hover': {
-                bgcolor: secondaryColor,
+                bgcolor: primaryColor,
+                filter: 'brightness(0.88)',
+                color: '#fff',
               },
+              '&.Mui-disabled': { color: 'rgba(255,255,255,0.7)' },
             }}
           >
-            {actionLoading ? <CircularProgress size={24} /> : 'Save Permissions'}
+            {actionLoading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Save Permissions'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -957,12 +991,16 @@ const AccessManagement = () => {
             disabled={!editUserData?.name || !editUserData?.email || actionLoading}
             sx={{
               bgcolor: primaryColor,
+              color: '#fff',
               '&:hover': {
-                bgcolor: secondaryColor,
+                bgcolor: primaryColor,
+                filter: 'brightness(0.88)',
+                color: '#fff',
               },
+              '&.Mui-disabled': { color: 'rgba(255,255,255,0.7)' },
             }}
           >
-            {actionLoading ? <CircularProgress size={24} /> : 'Save Changes'}
+            {actionLoading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Save Changes'}
           </Button>
         </DialogActions>
       </Dialog>

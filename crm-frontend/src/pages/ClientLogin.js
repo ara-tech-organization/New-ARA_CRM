@@ -5,6 +5,7 @@ import {
   Box, TextField, Button, Typography, Alert, InputAdornment, IconButton, Stack,
 } from '@mui/material';
 import { Visibility, VisibilityOff, Lock, Person as PersonIcon } from '@mui/icons-material';
+import leadMatrixLogo from '../assets/Lead-Matrix-Logo.png';
 
 const COPPER = '#C08552';
 const BROWN = '#3E2723';
@@ -63,14 +64,23 @@ const ClientLogin = () => {
         flex: 1, display: { xs: 'none', md: 'flex' }, flexDirection: 'column',
         justifyContent: 'center', alignItems: 'center', bgcolor: BROWN, color: 'white', p: 6,
       }}>
-        <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 800, fontSize: '2.5rem', mb: 2 }}>
-          Client Portal
+        <Box
+          component="img"
+          src={leadMatrixLogo}
+          alt="Lead Matrix"
+          sx={{
+            width: '100%',
+            maxWidth: 360,
+            height: 'auto',
+            mb: 3,
+            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
+          }}
+        />
+        <Typography sx={{ fontSize: '0.95rem', opacity: 0.85, textAlign: 'center', maxWidth: 400, mb: 4 }}>
+          Track every Meta and Google lead, manage telecaller follow ups, and stay on top of campaign performance.
         </Typography>
-        <Typography sx={{ fontSize: '1.1rem', opacity: 0.85, textAlign: 'center', maxWidth: 400 }}>
-          View your Google Ads performance, campaign insights, and keyword analytics in real time.
-        </Typography>
-        <Box sx={{ mt: 4, display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {['Campaign Metrics', 'Keyword Analytics', 'Daily Trends', 'Performance Reports'].map(f => (
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {['Live Leads', 'Campaign Metrics', 'Daily Trends', 'Performance Reports'].map(f => (
             <Box key={f} sx={{ px: 2, py: 1, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
               <Typography sx={{ fontSize: '0.82rem', fontWeight: 500 }}>{f}</Typography>
             </Box>
@@ -82,10 +92,18 @@ const ClientLogin = () => {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: { xs: 3, sm: 4, md: 6 } }}>
         <Box sx={{ width: '100%', maxWidth: 440 }}>
           {/* Mobile header */}
-          <Box sx={{ display: { xs: 'block', md: 'none' }, textAlign: 'center', mb: 4 }}>
-            <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 800, fontSize: '1.8rem', color: BROWN }}>
-              Client Portal
-            </Typography>
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 4 }}>
+            <Box
+              component="img"
+              src={leadMatrixLogo}
+              alt="Lead Matrix"
+              sx={{
+                width: '100%',
+                maxWidth: 260,
+                height: 'auto',
+                filter: 'invert(15%) saturate(0%)',
+              }}
+            />
           </Box>
 
           <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '1.8rem', mb: 0.5 }}>

@@ -46,6 +46,7 @@ import {
 } from 'recharts';
 import { PageLoader } from '../components/Loading';
 import { useDataCache } from '../contexts/DataCacheContext';
+import api from '../api/axios';
 
 // Colors for different metrics
 const METRIC_CONFIG = {
@@ -224,34 +225,12 @@ const MetricBarChart = ({ data, metricKey, title }) => {
 };
 
 const Reports = () => {
-  const { leads: cachedLeads, clients: cachedClients, leadsLoading: loading, fetchLeads, refreshAll } = useDataCache();
+  const { clients: cachedClients } = useDataCache();
 
-  // Trigger the lazy all-leads fetch when this page mounts
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
-
-  // Transform cached data to match expected formats
+  // Transform cached client list to the simple shape this page needs.
   const clients = useMemo(() =>
     cachedClients.map(c => ({ _id: c._id, name: c.clientName })),
   [cachedClients]);
-
-  const entries = useMemo(() =>
-    cachedLeads.map(lead => ({
-      _id: lead._id,
-      date: lead.date,
-      client: lead.clientId,
-      clientName: lead.clientName,
-      metaForm: lead.metaFormLead || 0,
-      metaWhatsapp: lead.metaWhatsappLead || 0,
-      metaTotalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0),
-      googleWebsite: lead.googleWebsiteLead || 0,
-      googleCall: lead.googleCallLead || 0,
-      googleTotalLeads: (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
-      totalLeads: (lead.metaFormLead || 0) + (lead.metaWhatsappLead || 0) + (lead.googleCallLead || 0) + (lead.googleWebsiteLead || 0),
-      totalSpend: (lead.metaFund || 0) + (lead.googleFund || 0),
-    })),
-  [cachedLeads]);
-
-  const fetchAllData = () => refreshAll();
 
   // Filter states
   const [selectedClient, setSelectedClient] = useState('');
@@ -272,20 +251,111 @@ const Reports = () => {
     }
   }, [clients, selectedClient]);
 
-  // Filter entries based on selected client and date range
+  // ────────────────────────────────────────────────────────────────────
+  // Data fetch — Meta analytics. The previous version of this page
+  // tried to derive entries from /api/leads but the Lead docs don't
+  // carry the flat metaFormLead/metaWhatsappLead fields the JSX
+  // expected, so every chart and stat rendered zero. We now hit
+  // /api/meta/client/:id/analytics which already returns a daily_trend
+  // array per client per date range, then map snake_case → camelCase
+  // so the existing JSX needs no changes.
+  // ────────────────────────────────────────────────────────────────────
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [barAnalytics, setBarAnalytics] = useState(null);
+  const loading = analyticsLoading;
+
+  // Line-chart / stats / table fetch — uses the picked From/To dates.
+  useEffect(() => {
+    if (!selectedClient) {
+      setAnalytics(null);
+      return;
+    }
+    let cancelled = false;
+    setAnalyticsLoading(true);
+    api.get(`/meta/client/${selectedClient}/analytics`, {
+      params: { from: fromDate, to: toDate },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setAnalytics(res.data || null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Reports analytics fetch failed:', err);
+        setAnalytics(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyticsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedClient, fromDate, toDate]);
+
+  // Bar-chart fetch — uses the Last 1/3/6/12 Months toggle, which is a
+  // wider range than the user's manually picked dates.
+  const barRange = useMemo(() => {
+    const today = new Date();
+    const months = parseInt(monthFilter);
+    const start = new Date(today);
+    start.setMonth(start.getMonth() - months);
+    return {
+      start: start.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0],
+    };
+  }, [monthFilter]);
+
+  useEffect(() => {
+    if (!selectedClient) {
+      setBarAnalytics(null);
+      return;
+    }
+    let cancelled = false;
+    api.get(`/meta/client/${selectedClient}/analytics`, {
+      params: { from: barRange.start, to: barRange.end },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setBarAnalytics(res.data || null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Reports bar-chart fetch failed:', err);
+        setBarAnalytics(null);
+      })
+      .finally(() => {});
+    return () => { cancelled = true; };
+  }, [selectedClient, barRange.start, barRange.end]);
+
+  // Map the backend's daily_trend rows into the camelCase shape the
+  // existing JSX (line chart, stats, table) consumes.
   const filteredEntries = useMemo(() => {
-    if (!selectedClient) return [];
-    return entries.filter((entry) => {
-      try {
-        const entryDate = entry.date?.split('T')[0] || new Date(entry.date).toISOString().split('T')[0];
-        const withinDateRange = entryDate >= fromDate && entryDate <= toDate;
-        const clientId = entry.client?._id || entry.client;
-        return clientId === selectedClient && withinDateRange;
-      } catch {
-        return false;
-      }
-    });
-  }, [entries, selectedClient, fromDate, toDate]);
+    const daily = analytics?.daily_trend || [];
+    return daily.map((d) => ({
+      date: d.date,                            // 'YYYY-MM-DD'
+      metaForm: d.form_leads || 0,
+      metaWhatsapp: d.whatsapp_leads || 0,
+      metaTotalLeads: d.total_leads ?? ((d.form_leads || 0) + (d.whatsapp_leads || 0)),
+      totalSpend: d.spend || 0,
+    }));
+  }, [analytics]);
+
+  const fetchAllData = () => {
+    // Force a refetch by toggling a no-op state via the existing
+    // useEffects' deps — easiest is to bump the dates. Instead we
+    // simply call the API again directly. Reuses both endpoints.
+    if (!selectedClient) return;
+    setAnalyticsLoading(true);
+    Promise.all([
+      api.get(`/meta/client/${selectedClient}/analytics`, { params: { from: fromDate, to: toDate } })
+        .then((res) => setAnalytics(res.data || null))
+        .catch(() => {})
+        .finally(() => setAnalyticsLoading(false)),
+      api.get(`/meta/client/${selectedClient}/analytics`, { params: { from: barRange.start, to: barRange.end } })
+        .then((res) => setBarAnalytics(res.data || null))
+        .catch(() => {})
+        .finally(() => {}),
+    ]);
+  };
 
   // Get unique dates sorted
   const sortedDates = useMemo(() => {
@@ -330,32 +400,18 @@ const Reports = () => {
     return Object.values(dateMap);
   }, [filteredEntries, sortedDates]);
 
-  // Calculate month range for bar chart
-  const barChartDateRange = useMemo(() => {
-    const today = new Date();
-    const months = parseInt(monthFilter);
-    const startDate = new Date(today);
-    startDate.setMonth(startDate.getMonth() - months);
-    return {
-      start: startDate.toISOString().split('T')[0],
-      end: today.toISOString().split('T')[0],
-    };
-  }, [monthFilter]);
-
-  // Filter entries for bar chart
+  // Bar chart entries — same camelCase mapping as the line chart but
+  // sourced from the wider-range `barAnalytics` fetch.
   const barChartEntries = useMemo(() => {
-    if (!selectedClient) return [];
-    return entries.filter((entry) => {
-      try {
-        const entryDate = entry.date?.split('T')[0] || new Date(entry.date).toISOString().split('T')[0];
-        const withinRange = entryDate >= barChartDateRange.start && entryDate <= barChartDateRange.end;
-        const clientId = entry.client?._id || entry.client;
-        return clientId === selectedClient && withinRange;
-      } catch {
-        return false;
-      }
-    });
-  }, [entries, selectedClient, barChartDateRange]);
+    const daily = barAnalytics?.daily_trend || [];
+    return daily.map((d) => ({
+      date: d.date,
+      metaForm: d.form_leads || 0,
+      metaWhatsapp: d.whatsapp_leads || 0,
+      metaTotalLeads: d.total_leads ?? ((d.form_leads || 0) + (d.whatsapp_leads || 0)),
+      totalSpend: d.spend || 0,
+    }));
+  }, [barAnalytics]);
 
   // Prepare bar chart data - group by month
   const barChartData = useMemo(() => {
@@ -488,7 +544,7 @@ const Reports = () => {
         </CardContent>
       </Card>
 
-      {loading && entries.length === 0 ? (
+      {loading && filteredEntries.length === 0 ? (
         <PageLoader message="Loading reports data..." />
       ) : !selectedClient ? (
         <Card sx={{ p: 4, textAlign: 'center' }}>

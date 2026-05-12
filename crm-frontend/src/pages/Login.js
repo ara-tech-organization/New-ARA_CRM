@@ -22,13 +22,13 @@ import {
   Email,
   LightMode,
   DarkMode,
-  BusinessCenter,
   TrendingUp,
   People,
   Assessment,
   CheckCircle,
 } from '@mui/icons-material';
 import { ThemeContext } from '../contexts/ThemeContext';
+import leadMatrixLogo from '../assets/Lead-Matrix-Logo.png';
 
 const validationSchema = Yup.object({
   email: Yup.string()
@@ -150,67 +150,26 @@ const Login = () => {
         />
 
         <Box sx={{ position: 'relative', zIndex: 1, maxWidth: '500px', textAlign: 'center' }}>
-          {/* CRM Illustration SVG */}
-          <Box sx={{ mb: 4 }}>
-            <svg
-              viewBox="0 0 400 300"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              style={{ width: '100%', height: 'auto', maxWidth: '400px' }}
-            >
-              {/* Dashboard/Screen */}
-              <rect x="50" y="40" width="300" height="180" rx="8" fill="white" fillOpacity="0.95" />
-              <rect x="50" y="40" width="300" height="40" rx="8" fill={COPPER} />
+          {/* Lead Matrix logo */}
+          <Box
+            component="img"
+            src={leadMatrixLogo}
+            alt="Lead Matrix"
+            sx={{
+              width: '100%',
+              maxWidth: 360,
+              height: 'auto',
+              mb: 3,
+              mx: 'auto',
+              display: 'block',
+              filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
+            }}
+          />
 
-              {/* Header dots */}
-              <circle cx="70" cy="60" r="4" fill="white" fillOpacity="0.8" />
-              <circle cx="85" cy="60" r="4" fill="white" fillOpacity="0.8" />
-              <circle cx="100" cy="60" r="4" fill="white" fillOpacity="0.8" />
-
-              {/* Chart/Analytics */}
-              <rect x="70" y="100" width="120" height="100" rx="4" fill={CREAM} />
-              <path d="M 80 180 L 100 160 L 120 170 L 140 145 L 160 150 L 180 130" stroke={COPPER} strokeWidth="3" fill="none" />
-              <circle cx="80" cy="180" r="4" fill={COPPER} />
-              <circle cx="100" cy="160" r="4" fill={COPPER} />
-              <circle cx="120" cy="170" r="4" fill={COPPER} />
-              <circle cx="140" cy="145" r="4" fill={COPPER} />
-              <circle cx="160" cy="150" r="4" fill={COPPER} />
-              <circle cx="180" cy="130" r="4" fill={COPPER} />
-
-              {/* Cards/Info boxes */}
-              <rect x="210" y="100" width="120" height="45" rx="4" fill={CREAM} />
-              <rect x="210" y="155" width="120" height="45" rx="4" fill="#F5E6D3" />
-
-              {/* People/Users */}
-              <circle cx="100" cy="250" r="20" fill="white" fillOpacity="0.9" />
-              <circle cx="100" cy="245" r="7" fill={COPPER} />
-              <path d="M 85 260 Q 100 255 115 260" fill={COPPER} />
-
-              <circle cx="150" cy="250" r="20" fill="white" fillOpacity="0.9" />
-              <circle cx="150" cy="245" r="7" fill={BROWN} />
-              <path d="M 135 260 Q 150 255 165 260" fill={BROWN} />
-
-              <circle cx="200" cy="250" r="20" fill="white" fillOpacity="0.9" />
-              <circle cx="200" cy="245" r="7" fill={COPPER} />
-              <path d="M 185 260 Q 200 255 215 260" fill={COPPER} />
-
-              {/* Connection lines */}
-              <path d="M 120 250 L 130 250" stroke="white" strokeWidth="2" strokeDasharray="4 2" />
-              <path d="M 170 250 L 180 250" stroke="white" strokeWidth="2" strokeDasharray="4 2" />
-
-              {/* Checkmark badge */}
-              <circle cx="320" cy="50" r="25" fill="#10b981" />
-              <path d="M 310 50 L 317 57 L 330 44" stroke="white" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Box>
-
-          {/* Branding Text */}
-          <Typography variant="h3" fontWeight={800} gutterBottom>
-            ARA CRM
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.95, fontWeight: 400 }}>
-            ARA Discoveries Pvt. Ltd.
-          </Typography>
+          {/* Tagline */}
+          {/* <Typography variant="h6" sx={{ mb: 4, opacity: 0.95, fontWeight: 400 }}>
+            Where every lead becomes a story.
+          </Typography> */}
 
           {/* Features */}
           <Stack spacing={2} alignItems="flex-start" sx={{ maxWidth: '400px', mx: 'auto' }}>
@@ -255,22 +214,18 @@ const Login = () => {
       >
         <Box sx={{ width: '100%', maxWidth: '480px' }}>
           {/* Logo for mobile */}
-          <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 5 }}>
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 4 }}>
             <Box
+              component="img"
+              src={leadMatrixLogo}
+              alt="Lead Matrix"
               sx={{
-                width: 72,
-                height: 72,
-                borderRadius: 2.5,
-                background: BROWN,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white',
-                boxShadow: `0 8px 24px ${COPPER}4D`,
+                width: '100%',
+                maxWidth: 280,
+                height: 'auto',
+                filter: mode === 'light' ? 'invert(15%) saturate(0%)' : 'none',
               }}
-            >
-              <BusinessCenter sx={{ fontSize: 36 }} />
-            </Box>
+            />
           </Box>
 
           {/* Header */}
