@@ -102,6 +102,16 @@ const leadSchema = new mongoose.Schema(
     lead_category: { type: String, trim: true, default: '' },   // e.g. HAIR / SKIN
     telecaller_name: { type: String, trim: true, default: '' },
 
+    // Source bucket for manual entries — used by the EOD dashboard's
+    // Leads Abstract. Synced Meta-form leads infer their bucket from
+    // `platform` + `meta_form_name`; manual entries set this explicitly.
+    // 'whatsapp' is the default to preserve the existing manual flow.
+    manual_source_type: {
+      type: String,
+      enum: ['', 'whatsapp', 'instagram', 'facebook', 'google_lead', 'justdial', 'walk_in', 'referral', 'physical_marketing', 'incall_google', 'incall_fb', 'incall_insta', 'incall_self'],
+      default: '',
+    },
+
     // Initial call
     first_call_date: { type: Date },
     first_call_label: { type: String, trim: true, default: '' },   // CONNECTED / NOT CONNECTED / DISCONNECTED / INVALID

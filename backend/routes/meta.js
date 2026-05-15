@@ -32,6 +32,9 @@ import {
   createClientLead,
   deleteClientLead,
   getClientsAdsComparison,
+  getTelecallingReport,
+  getMonthlyAbstract,
+  updateTelecallingTargets,
 } from "../controllers/metaController.js";
 
 const router = express.Router();
@@ -93,6 +96,18 @@ router.post("/client/:clientId/leads", createClientLead);
 // Delete a manual WhatsApp lead. Synced Meta-form leads are blocked
 // by the controller — this endpoint only removes manual entries.
 router.delete("/client/:clientId/leads/:leadId", deleteClientLead);
+
+// EOD telecalling report — aggregates day + month metrics for the
+// telecalling dashboard tab on admin and the client portal.
+router.get("/client/:clientId/telecalling-report", getTelecallingReport);
+
+// Edit the four daily/monthly targets that appear in the EOD report's
+// "Target" columns. Admin + portal both call this endpoint.
+router.put("/client/:clientId/telecalling-targets", updateTelecallingTargets);
+
+// Monthly abstract — one row per date with source / call / appointment
+// columns. Powers the "Monthly Abstract" view in the EOD section.
+router.get("/client/:clientId/monthly-abstract", getMonthlyAbstract);
 
 // Utilities
 router.get("/ad-account/:adAccountId/verify", getVerifyAdAccount);

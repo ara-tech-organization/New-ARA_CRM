@@ -25,6 +25,8 @@ import { PageLoader } from '../components/Loading';
 import { useDataCache } from '../contexts/DataCacheContext';
 import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
 import MetaLeadsTable from '../components/MetaLeadsTable';
+import TelecallingReport from '../components/TelecallingReport';
+import MonthlyAbstract from '../components/MonthlyAbstract';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -70,7 +72,10 @@ const ClientAdDetails = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const { clients, clientsLoading } = useDataCache();
-  const [tab, setTab] = useState(0); // 0 = Google, 1 = Meta
+  const [tab, setTab] = useState(0); // 0 = Google, 1 = Meta, 2 = EOD Report
+  // Filter handoff from the EOD tab to the Meta Ads tab's leads table.
+  // EOD clicks set this; MetaLeadsTable's onFilterPresetConsumed clears it.
+  const [leadsFilterPreset, setLeadsFilterPreset] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -507,6 +512,7 @@ const ClientAdDetails = () => {
             sx={{ px: 2, '& .MuiTabs-indicator': { bgcolor: currentColor, height: 3 }, '& .Mui-selected': { color: `${currentColor} !important` } }}>
             <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
             <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+            <Tab label="EOD Report" sx={{ textTransform: 'none', fontWeight: 600 }} />
           </Tabs>
         </Box>
 
@@ -1358,6 +1364,8 @@ const ClientAdDetails = () => {
                         onSaveLead={handleSaveMetaLead}
                         onAddLead={handleAddMetaLead}
                         onDeleteLead={handleDeleteMetaLead}
+                        filterPreset={leadsFilterPreset}
+                        onFilterPresetConsumed={() => setLeadsFilterPreset(null)}
                       />
                     </Box>
                   </>
@@ -1371,6 +1379,19 @@ const ClientAdDetails = () => {
               </>
             );
           })()}
+
+          {/* EOD TAB — Daily snapshot + Monthly Abstract, toggled in-tab */}
+          {tab === 2 && (
+            <AdminEodReportPanel
+              clientId={clientId}
+              clientName={displayName}
+              apiInstance={api}
+              onJumpToLeads={(preset) => {
+                setLeadsFilterPreset(preset);
+                setTab(1);
+              }}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -1388,6 +1409,66 @@ const ClientAdDetails = () => {
           {resyncSnack.message}
         </Alert>
       </Snackbar>
+    </Box>
+  );
+};
+
+// Admin EOD panel — Daily snapshot + Monthly Abstract toggle. Mirrors
+// the portal's EodReportPanel; kept separate because the admin page
+// uses the agency `api` instance instead of the portal's clientApi.
+const AdminEodReportPanel = ({ clientId, clientName, apiInstance, onJumpToLeads }) => {
+  const [view, setView] = useState('daily');
+  const SELECTED = '#8B1F2F';
+
+  const ToggleBtn = ({ value, label }) => {
+    const active = view === value;
+    return (
+      <Button
+        size="small"
+        onClick={() => setView(value)}
+        sx={{
+          textTransform: 'none', fontWeight: 700, px: 2, py: 0.6,
+          bgcolor: active ? SELECTED : '#fff',
+          color: active ? '#fff' : SELECTED,
+          border: `1px solid ${SELECTED}`,
+          borderRadius: 1,
+          minWidth: 110,
+          '&:hover': {
+            bgcolor: active ? SELECTED : `${SELECTED}10`,
+            filter: active ? 'brightness(0.92)' : 'none',
+          },
+        }}
+      >
+        {label}
+      </Button>
+    );
+  };
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+        <ToggleBtn value="daily" label="Daily EOD" />
+        <ToggleBtn value="monthly" label="Monthly Abstract" />
+        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', ml: 1 }}>
+          {view === 'daily'
+            ? 'Single-day snapshot — Day vs Target, Appointment Status, Day Summary.'
+            : 'Per-day grid for the selected month — sources, calls, appointments, conversion.'}
+        </Typography>
+      </Box>
+
+      {view === 'daily' ? (
+        <TelecallingReport
+          clientId={clientId}
+          clientName={clientName}
+          apiInstance={apiInstance}
+          onJumpToLeads={onJumpToLeads}
+        />
+      ) : (
+        <MonthlyAbstract
+          clientId={clientId}
+          apiInstance={apiInstance}
+        />
+      )}
     </Box>
   );
 };

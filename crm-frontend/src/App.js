@@ -27,6 +27,7 @@ import ClientAdDetails from './pages/ClientAdDetails';
 import ClientPortalAccess from './pages/ClientPortalAccess';
 import ClientLogin from './pages/ClientLogin';
 import ClientPortalDashboard from './pages/ClientPortalDashboard';
+import ClientPortalLeads from './pages/ClientPortalLeads';
 import { DataCacheProvider } from './contexts/DataCacheContext';
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/client-login" element={<ClientLogin />} />
         <Route path="/client-portal" element={<ClientPortalDashboard />} />
+        <Route path="/client-portal/leads" element={<ClientPortalLeads />} />
         <Route
           path="/"
           element={

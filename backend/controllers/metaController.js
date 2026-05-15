@@ -1304,7 +1304,7 @@ export const createClientLead = async (req, res) => {
   const client = await loadClientOr404(req, res);
   if (!client) return;
 
-  const { name, phone, email, ...rest } = req.body || {};
+  const { name, phone, email, manual_source_type, ...rest } = req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ success: false, message: 'Name is required' });
   }
@@ -1312,26 +1312,55 @@ export const createClientLead = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Phone is required' });
   }
 
-  // Lead schema requires email — for manual WhatsApp leads we synthesize
-  // a placeholder so the row passes validation. The placeholder is
-  // recognisable (contains "manual-whatsapp") so future cleanup scripts
-  // can find these rows. If a real email is supplied, use it.
+  // Normalize the source — defaults to whatsapp for backwards compat
+  // with the original Add-WhatsApp-Lead flow. The dashboard's Leads
+  // Abstract groups rows by this field.
+  const allowedSources = new Set([
+    'whatsapp', 'instagram', 'facebook', 'google_lead', 'justdial',
+    'walk_in', 'referral', 'physical_marketing',
+    'incall_google', 'incall_fb', 'incall_insta', 'incall_self',
+  ]);
+  const sourceType = allowedSources.has(manual_source_type) ? manual_source_type : 'whatsapp';
+  const sourceLabelMap = {
+    whatsapp: 'WhatsApp (manual entry)',
+    instagram: 'Instagram (manual entry)',
+    facebook: 'Facebook (manual entry)',
+    google_lead: 'Google Lead (manual entry)',
+    justdial: 'Justdial (manual entry)',
+    walk_in: 'Walk-In (manual entry)',
+    referral: 'Referral (manual entry)',
+    physical_marketing: 'Physical Marketing (manual entry)',
+    incall_google: 'Incall — Google (manual entry)',
+    incall_fb: 'Incall — Facebook (manual entry)',
+    incall_insta: 'Incall — Instagram (manual entry)',
+    incall_self: 'Incall — Self (manual entry)',
+  };
+  // platform must match the Lead schema's enum; map the bucket to the
+  // closest existing value, fall back to 'unknown' for the new ones.
+  const platformByType = {
+    whatsapp: 'whatsapp',
+    instagram: 'instagram',
+    facebook: 'facebook',
+    incall_fb: 'facebook',
+    incall_insta: 'instagram',
+  };
+
+  // Lead schema requires email — for manual entries we synthesize a
+  // recognisable placeholder so the row passes validation. If a real
+  // email is supplied, use it.
   const cleanEmail = String(email || '').trim().toLowerCase();
   const finalEmail = cleanEmail
-    || `manual-whatsapp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@placeholder.invalid`;
+    || `manual-${sourceType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@placeholder.invalid`;
 
   const doc = {
     client: client._id,
     source: 'meta',
-    platform: 'whatsapp',
+    platform: platformByType[sourceType] || 'unknown',
+    manual_source_type: sourceType,
     name: String(name).trim(),
     email: finalEmail,
     phone: String(phone).trim(),
-    meta_form_name: 'WhatsApp (manual entry)',
-    // Treat the create timestamp as the "received" time. Any synced lead
-    // gets meta_created_time from Meta's `leadgen.created_time`; manual
-    // entries don't have one, so we set it to "now" so they sort
-    // alongside same-day synced rows.
+    meta_form_name: sourceLabelMap[sourceType],
     meta_created_time: new Date(),
   };
 
@@ -1394,18 +1423,552 @@ export const deleteClientLead = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Lead not found' });
   }
 
+  // Manual entries are identifiable in two ways: the new
+  // `manual_source_type` field (set on every manual create going
+  // forward), or the legacy `meta_form_name` marker ending in
+  // "(manual entry)" for rows created before the field was added.
+  // Both checks must agree that there's no Meta leadgen id.
   const isManualEntry =
     !lead.meta_leadgen_id &&
-    lead.platform === 'whatsapp' &&
-    lead.meta_form_name === 'WhatsApp (manual entry)';
+    (
+      (typeof lead.manual_source_type === 'string' && lead.manual_source_type.length > 0)
+      || (typeof lead.meta_form_name === 'string' && lead.meta_form_name.endsWith('(manual entry)'))
+    );
 
   if (!isManualEntry) {
     return res.status(403).json({
       success: false,
-      message: 'Only manually-entered WhatsApp leads can be deleted. Synced Meta form leads are immutable.',
+      message: 'Only manually-entered leads can be deleted. Synced Meta form leads are immutable.',
     });
   }
 
   await lead.deleteOne();
   res.json({ success: true, message: 'Lead deleted', leadId });
+};
+
+// GET /api/meta/client/:clientId/telecalling-report?date=YYYY-MM-DD
+// Powers the EOD Report tab on both the admin Client Ad Details page
+// and the client portal. Aggregates a single client's Lead documents
+// for the given day + current month + a week of appointment windows.
+// Returns plain numbers — no charts, no time series — so the React
+// page can render every section without further math.
+export const getTelecallingReport = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  // Resolve the target date (defaults to today in server timezone).
+  const targetDateStr = (req.query.date && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date))
+    ? req.query.date
+    : new Date().toISOString().slice(0, 10);
+  const targetDate = new Date(`${targetDateStr}T00:00:00.000Z`);
+  const targetEnd = new Date(`${targetDateStr}T23:59:59.999Z`);
+
+  // Month window — from the 1st of the month through end of target day.
+  const monthStart = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth(), 1));
+  const monthEnd = targetEnd;
+
+  // Yesterday/today/future 5 days for the Appointment Status table.
+  const dayWindow = (offset) => {
+    const start = new Date(targetDate);
+    start.setUTCDate(start.getUTCDate() + offset);
+    start.setUTCHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setUTCHours(23, 59, 59, 999);
+    return { start, end };
+  };
+
+  // Pull every lead for the month — small enough to aggregate in JS
+  // and lets us count multiple metrics from one fetch.
+  const monthLeads = await Lead.find({
+    client: client._id,
+    source: 'meta',
+    $or: [
+      { meta_created_time: { $gte: monthStart, $lte: monthEnd } },
+      { createdAt: { $gte: monthStart, $lte: monthEnd } },
+    ],
+  })
+    .select('meta_created_time createdAt platform meta_form_name manual_source_type is_duplicate first_call_label response_label appointment_status appointment_date appointment_booked_date follow_ups')
+    .lean();
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  const dateMatches = (lead, start, end) => {
+    const t = lead.meta_created_time || lead.createdAt;
+    if (!t) return false;
+    const d = new Date(t);
+    return d >= start && d <= end;
+  };
+
+  // Bucket a lead into one of the dashboard's source columns.
+  const sourceBucketOf = (lead) => {
+    if (lead.manual_source_type) return lead.manual_source_type;
+    const plat = String(lead.platform || '').toLowerCase();
+    if (plat === 'whatsapp') return 'whatsapp';
+    if (plat === 'instagram') return 'instagram';
+    if (plat === 'facebook') return 'facebook';
+    return 'facebook';   // unknown synced rows default to Facebook
+  };
+
+  const isConnected = (lead) => {
+    const lbl = String(lead.first_call_label || '').toUpperCase();
+    if (lbl === 'CONNECTED') return true;
+    return Array.isArray(lead.follow_ups) && lead.follow_ups.some((f) => f.connected || String(f.call_label || '').toUpperCase() === 'CONNECTED');
+  };
+  const isNotConnected = (lead) => {
+    const lbl = String(lead.first_call_label || '').toUpperCase();
+    return ['NOT CONNECTED', 'DISCONNECTED', 'RNR', 'BUSY'].includes(lbl);
+  };
+  const isInvalidOrDuplicate = (lead) => {
+    if (lead.is_duplicate) return true;
+    const lbl = String(lead.first_call_label || '').toUpperCase();
+    if (lbl === 'INVALID') return true;
+    return String(lead.response_label || '').toUpperCase() === 'DUPLICATE';
+  };
+
+  // ── DAY aggregate ─────────────────────────────────────────────────
+  const dayLeads = monthLeads.filter((l) => dateMatches(l, targetDate, targetEnd));
+
+  const bucketCounts = {
+    whatsapp: 0, instagram: 0, facebook: 0, google_lead: 0,
+    justdial: 0, walk_in: 0, referral: 0, physical_marketing: 0,
+    incall: 0,   // Incall_* are summed into one bucket on the dashboard.
+  };
+  dayLeads.forEach((l) => {
+    const b = sourceBucketOf(l);
+    if (b.startsWith('incall_')) bucketCounts.incall += 1;
+    else if (bucketCounts[b] != null) bucketCounts[b] += 1;
+    else bucketCounts.facebook += 1;
+  });
+
+  const totalLeadsDay = dayLeads.length;
+  const connectedDay = dayLeads.filter(isConnected).length;
+  const notConnectedDay = dayLeads.filter((l) => !isConnected(l) && isNotConnected(l)).length;
+  const invalidDuplicateDay = dayLeads.filter(isInvalidOrDuplicate).length;
+  const validDay = Math.max(totalLeadsDay - invalidDuplicateDay, 0);
+
+  // Call totals — fresh = first call on the target day, callback = any
+  // follow_up dated on the target day.
+  const sameDay = (d) => {
+    if (!d) return false;
+    const x = new Date(d);
+    return x.getUTCFullYear() === targetDate.getUTCFullYear()
+      && x.getUTCMonth() === targetDate.getUTCMonth()
+      && x.getUTCDate() === targetDate.getUTCDate();
+  };
+
+  let freshCallsDay = 0;
+  let callbackCallsDay = 0;
+  let freshConnectedDay = 0;
+  let callbackConnectedDay = 0;
+  monthLeads.forEach((l) => {
+    if (l.first_call_date && sameDay(l.first_call_date)) {
+      freshCallsDay += 1;
+      if (String(l.first_call_label || '').toUpperCase() === 'CONNECTED') freshConnectedDay += 1;
+    }
+    (l.follow_ups || []).forEach((f) => {
+      if (f.date && sameDay(f.date)) {
+        callbackCallsDay += 1;
+        if (f.connected || String(f.call_label || '').toUpperCase() === 'CONNECTED') callbackConnectedDay += 1;
+      }
+    });
+  });
+
+  // Appointments booked on the day (booked-on date).
+  const appointmentsBookedDay = monthLeads.filter((l) =>
+    l.appointment_booked_date && sameDay(l.appointment_booked_date)
+  ).length;
+
+  // Consulted / converted — anchored to the response_label updated on
+  // the lead today. Approximation: if the lead has the right label and
+  // any call activity on the target day, count it.
+  const touchedToday = (l) =>
+    sameDay(l.first_call_date)
+    || (l.follow_ups || []).some((f) => sameDay(f.date))
+    || sameDay(l.appointment_date)
+    || sameDay(l.appointment_booked_date);
+
+  const consultedDay = monthLeads.filter((l) =>
+    String(l.response_label || '').toUpperCase() === 'CONSULTED' && touchedToday(l)
+  ).length;
+  const convertedDay = monthLeads.filter((l) =>
+    ['TREATMENT BOOKED', 'CLOSED'].includes(String(l.response_label || '').toUpperCase()) && touchedToday(l)
+  ).length;
+  // Converted value isn't tracked on Lead — return 0 so the UI keeps
+  // the row in place; revisit when a `converted_value` field is added.
+  const convertedValueDay = 0;
+
+  // ── MONTH aggregate ───────────────────────────────────────────────
+  const consultedMonth = monthLeads.filter((l) =>
+    String(l.response_label || '').toUpperCase() === 'CONSULTED'
+  ).length;
+  const connectedMonth = monthLeads.reduce((sum, l) => {
+    let count = 0;
+    if (String(l.first_call_label || '').toUpperCase() === 'CONNECTED') count += 1;
+    (l.follow_ups || []).forEach((f) => {
+      if (f.connected || String(f.call_label || '').toUpperCase() === 'CONNECTED') count += 1;
+    });
+    return sum + count;
+  }, 0);
+
+  // Working-day projection: extrapolate the current pace to full month.
+  const daysElapsed = targetDate.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(targetDate.getUTCFullYear(), targetDate.getUTCMonth() + 1, 0)).getUTCDate();
+  const project = (achieved) => Math.round((achieved / Math.max(daysElapsed, 1)) * daysInMonth);
+
+  // Read tunable targets from the client doc (with sensible defaults).
+  // The defaults match the original hardcoded values so existing
+  // clients keep showing the same numbers until an admin edits them.
+  const t = client.telecalling_targets || {};
+  const DAY_CONSULT_TARGET = Number.isFinite(t.day_consult) ? t.day_consult : 10;
+  const DAY_CALL_TARGET = Number.isFinite(t.day_calls) ? t.day_calls : 100;
+  const MONTH_CONSULT_TARGET = Number.isFinite(t.month_consult) ? t.month_consult : DAY_CONSULT_TARGET * 31;
+  const MONTH_CALL_TARGET = Number.isFinite(t.month_calls) ? t.month_calls : DAY_CALL_TARGET * 31;
+
+  // ── APPOINTMENT STATUS (yesterday, today, next 5 days) ───────────
+  const appointmentDays = [-1, 0, 1, 2, 3, 4, 5].map((offset) => {
+    const { start, end } = dayWindow(offset);
+    const onThisDay = monthLeads.filter((l) =>
+      l.appointment_date && new Date(l.appointment_date) >= start && new Date(l.appointment_date) <= end
+    );
+    // Pull a wider slice for the future days that aren't in monthLeads (next month spillover).
+    return {
+      offset,
+      date: start.toISOString().slice(0, 10),
+      day_name: start.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
+      booked: onThisDay.length,
+      visited: onThisDay.filter((l) => String(l.appointment_status || '').toUpperCase() === 'COMPLETED').length,
+      rescheduled: onThisDay.filter((l) => String(l.appointment_status || '').toUpperCase() === 'RESCHEDULED').length,
+      not_visited: onThisDay.filter((l) => {
+        const s = String(l.appointment_status || '').toUpperCase();
+        return s !== 'COMPLETED' && s !== 'RESCHEDULED';
+      }).length,
+    };
+  });
+
+  // Future-day appointments can land in the next month; pull them too.
+  const futureRange = dayWindow(5);
+  if (futureRange.end > monthEnd) {
+    const futureLeads = await Lead.find({
+      client: client._id,
+      source: 'meta',
+      appointment_date: { $gte: targetDate, $lte: futureRange.end },
+    })
+      .select('appointment_date appointment_status')
+      .lean();
+    appointmentDays.forEach((row) => {
+      if (row.offset <= 0) return;
+      const { start, end } = dayWindow(row.offset);
+      const onDay = futureLeads.filter((l) =>
+        l.appointment_date && new Date(l.appointment_date) >= start && new Date(l.appointment_date) <= end
+      );
+      row.booked = onDay.length;
+      row.visited = onDay.filter((l) => String(l.appointment_status || '').toUpperCase() === 'COMPLETED').length;
+      row.rescheduled = onDay.filter((l) => String(l.appointment_status || '').toUpperCase() === 'RESCHEDULED').length;
+      row.not_visited = onDay.filter((l) => {
+        const s = String(l.appointment_status || '').toUpperCase();
+        return s !== 'COMPLETED' && s !== 'RESCHEDULED';
+      }).length;
+    });
+  }
+
+  res.json({
+    date: targetDateStr,
+    month: targetDateStr.slice(0, 7),
+    client_name: client.clientName || '',
+    targets: {
+      day_consult: DAY_CONSULT_TARGET,
+      day_calls: DAY_CALL_TARGET,
+      month_consult: MONTH_CONSULT_TARGET,
+      month_calls: MONTH_CALL_TARGET,
+    },
+    day: {
+      target_consulted: { target: DAY_CONSULT_TARGET, achieved: consultedDay },
+      target_calls: freshCallsDay + callbackCallsDay,
+      target_connected: { target: DAY_CALL_TARGET, achieved: freshConnectedDay + callbackConnectedDay },
+      leads_abstract: {
+        ...bucketCounts,
+        total: totalLeadsDay,
+        valid: validDay,
+        connected: connectedDay,
+        not_connected: notConnectedDay,
+        connected_pct: validDay > 0 ? Math.round((connectedDay / validDay) * 100) : 0,
+        valid_pct: totalLeadsDay > 0 ? Math.round((validDay / totalLeadsDay) * 100) : 0,
+      },
+      calls: {
+        fresh: freshCallsDay,
+        callback: callbackCallsDay,
+        total: freshCallsDay + callbackCallsDay,
+        fresh_connected: freshConnectedDay,
+        callback_connected: callbackConnectedDay,
+        connected_total: freshConnectedDay + callbackConnectedDay,
+      },
+      appointments_booked: appointmentsBookedDay,
+      consultation: {
+        consulted: consultedDay,
+        converted: convertedDay,
+        converted_value: convertedValueDay,
+      },
+    },
+    month_target: {
+      consulted: {
+        target: MONTH_CONSULT_TARGET,
+        achieved: consultedMonth,
+        projection: project(consultedMonth),
+        achieved_pct: MONTH_CONSULT_TARGET > 0 ? Math.round((consultedMonth / MONTH_CONSULT_TARGET) * 100) : 0,
+        projection_pct: MONTH_CONSULT_TARGET > 0 ? Math.round((project(consultedMonth) / MONTH_CONSULT_TARGET) * 100) : 0,
+      },
+      connected: {
+        target: MONTH_CALL_TARGET,
+        achieved: connectedMonth,
+        projection: project(connectedMonth),
+        achieved_pct: MONTH_CALL_TARGET > 0 ? Math.round((connectedMonth / MONTH_CALL_TARGET) * 100) : 0,
+        projection_pct: MONTH_CALL_TARGET > 0 ? Math.round((project(connectedMonth) / MONTH_CALL_TARGET) * 100) : 0,
+      },
+    },
+    appointment_status: appointmentDays,
+  });
+};
+
+// PUT /api/meta/client/:clientId/telecalling-targets
+// Body: { day_consult, day_calls, month_consult, month_calls }
+// Updates the four telecalling targets on the client doc. Each field
+// is optional — only the provided keys are written. The full target
+// block is returned so the caller can refresh state without a second
+// GET.
+export const updateTelecallingTargets = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  const fields = ['day_consult', 'day_calls', 'month_consult', 'month_calls'];
+  if (!client.telecalling_targets) client.telecalling_targets = {};
+
+  fields.forEach((key) => {
+    const raw = req.body?.[key];
+    if (raw === undefined || raw === null || raw === '') return;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      throw Object.assign(new Error(`Invalid ${key}: must be a non-negative number`), { status: 400 });
+    }
+    client.telecalling_targets[key] = Math.round(n);
+  });
+
+  await client.save();
+  res.json({
+    success: true,
+    targets: {
+      day_consult: client.telecalling_targets.day_consult ?? 10,
+      day_calls: client.telecalling_targets.day_calls ?? 100,
+      month_consult: client.telecalling_targets.month_consult ?? 310,
+      month_calls: client.telecalling_targets.month_calls ?? 3100,
+    },
+  });
+};
+
+// GET /api/meta/client/:clientId/monthly-abstract?month=YYYY-MM
+// Powers the "Monthly Abstract" sheet — one row per date in the
+// month, columns for every source bucket plus call/appointment/
+// consult/convert counts. Returned shape is a flat list of rows so
+// the frontend can render the grid without further math.
+export const getMonthlyAbstract = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  // Month input (YYYY-MM) — defaults to current server month.
+  const monthStr = (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month))
+    ? req.query.month
+    : new Date().toISOString().slice(0, 7);
+  const [year, month] = monthStr.split('-').map(Number);
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  const daysInMonth = monthEnd.getUTCDate();
+
+  // Single fetch: every lead created in this month + every follow-up
+  // (need their dates for the call/connect breakdown). Same approach
+  // as the daily report — small data set, aggregate in JS.
+  const leads = await Lead.find({
+    client: client._id,
+    source: 'meta',
+    $or: [
+      { meta_created_time: { $gte: monthStart, $lte: monthEnd } },
+      { createdAt: { $gte: monthStart, $lte: monthEnd } },
+    ],
+  })
+    .select('meta_created_time createdAt platform manual_source_type is_duplicate first_call_date first_call_label response_label appointment_booked_date follow_ups')
+    .lean();
+
+  // We also need leads whose first_call_date / follow_up.date fall
+  // within the month even if the lead itself was created earlier
+  // (call-back rows from previous months). Pull those in addition.
+  const olderActivity = await Lead.find({
+    client: client._id,
+    source: 'meta',
+    $or: [
+      { first_call_date: { $gte: monthStart, $lte: monthEnd } },
+      { 'follow_ups.date': { $gte: monthStart, $lte: monthEnd } },
+      { appointment_booked_date: { $gte: monthStart, $lte: monthEnd } },
+    ],
+    _id: { $nin: leads.map((l) => l._id) },
+  })
+    .select('meta_created_time createdAt platform manual_source_type is_duplicate first_call_date first_call_label response_label appointment_booked_date follow_ups')
+    .lean();
+
+  const allLeads = leads.concat(olderActivity);
+
+  // Helper: bucket a lead by source for the per-day row.
+  const bucketOf = (lead) => {
+    if (lead.manual_source_type) return lead.manual_source_type;
+    const plat = String(lead.platform || '').toLowerCase();
+    if (plat === 'whatsapp') return 'whatsapp';
+    if (plat === 'instagram') return 'instagram';
+    if (plat === 'facebook') return 'facebook';
+    return 'facebook';
+  };
+
+  const isConnectedLbl = (lbl) => String(lbl || '').toUpperCase() === 'CONNECTED';
+  const isNotConnectedLbl = (lbl) =>
+    ['NOT CONNECTED', 'DISCONNECTED', 'RNR', 'BUSY'].includes(String(lbl || '').toUpperCase());
+
+  // Build an empty row template — one entry per UTC date in the month.
+  const blankRow = () => ({
+    date: '',
+    // source buckets (the screenshot's 13 columns before "Total Leads")
+    whatsapp: 0, instagram: 0, facebook: 0, google_lead: 0,
+    justdial: 0, walk_in: 0, referral: 0, physical_marketing: 0,
+    incall_google: 0, incall_fb: 0, incall_insta: 0, incall_self: 0,
+    incall: 0,
+    // lead status
+    total_leads: 0,
+    connected: 0,
+    not_connected: 0,
+    invalid_duplicate: 0,
+    // calls
+    fresh_calls: 0,
+    callback_1: 0,
+    callback_2: 0,
+    callback_3: 0,
+    callback: 0,
+    total_calls: 0,
+    fresh_calls_connected: 0,
+    callback_connected: 0,
+    total_connected_calls: 0,
+    // appointments + consultation
+    total_appointments: 0,
+    consulted: 0,
+    convert: 0,
+    convert_value: 0,
+  });
+
+  const rows = [];
+  for (let d = 1; d <= daysInMonth; d += 1) {
+    const dateStr = `${monthStr}-${String(d).padStart(2, '0')}`;
+    const row = blankRow();
+    row.date = dateStr;
+    rows.push(row);
+  }
+  const rowByDate = new Map(rows.map((r) => [r.date, r]));
+
+  const dateKey = (d) => {
+    if (!d) return null;
+    const x = new Date(d);
+    if (Number.isNaN(x.getTime())) return null;
+    const y = x.getUTCFullYear();
+    const m = String(x.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(x.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // Pass 1 — lead-level columns (source bucket, totals, connected/not).
+  // Anchored to the lead's *created* date so the source columns line up
+  // with the daily lead-volume row.
+  allLeads.forEach((lead) => {
+    const created = lead.meta_created_time || lead.createdAt;
+    const k = dateKey(created);
+    const row = k && rowByDate.get(k);
+    if (!row) return;
+    row.total_leads += 1;
+    const b = bucketOf(lead);
+    if (b === 'incall_google') { row.incall_google += 1; row.incall += 1; }
+    else if (b === 'incall_fb') { row.incall_fb += 1; row.incall += 1; }
+    else if (b === 'incall_insta') { row.incall_insta += 1; row.incall += 1; }
+    else if (b === 'incall_self') { row.incall_self += 1; row.incall += 1; }
+    else if (row[b] != null) row[b] += 1;
+    else row.facebook += 1;
+
+    const lbl = String(lead.first_call_label || '').toUpperCase();
+    const hasConnectedFollow = (lead.follow_ups || []).some((f) =>
+      f.connected || isConnectedLbl(f.call_label)
+    );
+    if (lbl === 'CONNECTED' || hasConnectedFollow) row.connected += 1;
+    else if (isNotConnectedLbl(lbl)) row.not_connected += 1;
+
+    if (lead.is_duplicate || lbl === 'INVALID'
+        || String(lead.response_label || '').toUpperCase() === 'DUPLICATE') {
+      row.invalid_duplicate += 1;
+    }
+  });
+
+  // Pass 2 — call activity columns (fresh + callback). Each is
+  // anchored to the call's own date, not the lead's created date,
+  // so a lead created last month with a follow-up today still adds
+  // to today's call totals.
+  allLeads.forEach((lead) => {
+    const freshK = dateKey(lead.first_call_date);
+    if (freshK) {
+      const r = rowByDate.get(freshK);
+      if (r) {
+        r.fresh_calls += 1;
+        if (isConnectedLbl(lead.first_call_label)) r.fresh_calls_connected += 1;
+      }
+    }
+    (lead.follow_ups || []).forEach((f, idx) => {
+      const k = dateKey(f.date);
+      const r = k && rowByDate.get(k);
+      if (!r) return;
+      // Call-back N column buckets the first three follow-ups; later
+      // ones still count toward "Call Back" total.
+      if (idx === 0) r.callback_1 += 1;
+      else if (idx === 1) r.callback_2 += 1;
+      else if (idx === 2) r.callback_3 += 1;
+      r.callback += 1;
+      if (f.connected || isConnectedLbl(f.call_label)) r.callback_connected += 1;
+    });
+
+    // Appointments + consult/convert — anchored to the booked date
+    // (when the appointment was created), matching how the screenshot
+    // tracks "Total Appointments" per day.
+    const bookedK = dateKey(lead.appointment_booked_date);
+    if (bookedK) {
+      const r = rowByDate.get(bookedK);
+      if (r) {
+        r.total_appointments += 1;
+        const respLbl = String(lead.response_label || '').toUpperCase();
+        if (respLbl === 'CONSULTED') r.consulted += 1;
+        if (['TREATMENT BOOKED', 'CLOSED'].includes(respLbl)) {
+          r.convert += 1;
+          // converted_value isn't tracked on Lead yet; leave 0.
+        }
+      }
+    }
+  });
+
+  // Finalise computed columns.
+  rows.forEach((r) => {
+    r.total_calls = r.fresh_calls + r.callback;
+    r.total_connected_calls = r.fresh_calls_connected + r.callback_connected;
+  });
+
+  // Totals row — sum every numeric column across the month.
+  const total = blankRow();
+  total.date = 'TOTAL';
+  Object.keys(total).forEach((k) => {
+    if (k === 'date') return;
+    total[k] = rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+  });
+
+  res.json({
+    month: monthStr,
+    client_name: client.clientName || '',
+    days_in_month: daysInMonth,
+    rows,
+    total,
+  });
 };

@@ -5,9 +5,9 @@ import {
   Box, Card, CardContent, Typography, Grid, Chip, Button, Avatar,
   TextField, LinearProgress, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, CircularProgress, Alert, IconButton, Collapse,
-  Tabs, Tab,
   Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, InputLabel, Select, MenuItem, Snackbar,
+  Tooltip,
 } from '@mui/material';
 import {
   Google as GoogleIcon, Facebook as FacebookIcon, Logout as LogoutIcon, Refresh as RefreshIcon,
@@ -17,20 +17,29 @@ import {
   KeyboardArrowDown as ArrowDownIcon, KeyboardArrowUp as ArrowUpIcon,
   People as PeopleIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon,
   FileDownload as FileDownloadIcon, PictureAsPdf as PdfIcon,
+  Dashboard as DashboardIcon,
+  Assessment as AssessmentIcon,
+  Group as GroupIcon,
+  MenuOpen as MenuOpenIcon,
+  Menu as MenuIcon,
 } from '@mui/icons-material';
 import { InputAdornment } from '@mui/material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
-import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
 import MetaLeadsTable from '../components/MetaLeadsTable';
+import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
+import TelecallingReport from '../components/TelecallingReport';
+import MonthlyAbstract from '../components/MonthlyAbstract';
+import PortalDashboardToday from '../components/PortalDashboardToday';
 
 const COPPER = '#C08552';
 const BROWN = '#3E2723';
 const CREAM = '#FFF8F0';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
+const MAROON = '#8B1F2F';
 
 // Match the main CRM axios config: always point at the real backend
 // (REACT_APP_API_URL from .env), falling back to the production host.
@@ -77,13 +86,28 @@ const ClientPortalDashboard = () => {
   });
   const role = portalUser?.role || 'admin';
   const isAdmin = role === 'admin';
-  const isTelecaller = role === 'telecaller';
 
   const token = localStorage.getItem('clientToken');
 
-  // Initial tab: telecallers go straight to Meta Leads (their only tab),
-  // admins start on Google Ads.
-  const [tab, setTab] = useState(isTelecaller ? 2 : 0);
+  // Tab indices after adding the Home launcher at 0:
+  //   0 = Home (everyone)
+  //   1 = Google Ads (admin only)
+  //   2 = Meta Ads (admin only)
+  //   3 = Meta Leads (everyone)
+  //   4 = EOD Report (everyone)
+  //   5 = Users (admin only)
+  // Everyone lands on Home so the page acts like a launcher.
+  const [tab, setTab] = useState(0);
+  // Sidebar is wide by default; collapses to a 68px icon-only rail
+  // on click of the toggle button at the bottom.
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Defense-in-depth: if a telecaller's `tab` state ever lands on an
+  // admin-only index (1 Google, 2 Meta, 5 Users), snap them back to
+  // the Dashboard. The sidebar already hides those entries so this
+  // only fires if state was set via a stale value or future code path.
+  useEffect(() => {
+    if (!isAdmin && [1, 2, 5].includes(tab)) setTab(0);
+  }, [isAdmin, tab]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -242,10 +266,10 @@ const ClientPortalDashboard = () => {
 
   useEffect(() => { if (token) fetchAnalytics(); }, [dateFrom, dateTo]);
 
-  // Inline-edit save callback for MetaLeadsTable. PATCHes the lead via the
-  // client-portal-friendly route added to /api/meta and patches the lead
-  // in-place inside data.meta.leads_in_range so the table reflects the
-  // server response without a full refetch.
+  // Inline-edit save callback for the leads table embedded on the
+  // Meta Ads tab. PATCHes the lead via the portal route and patches
+  // it in-place inside data.meta.leads_in_range so the table reflects
+  // the server response without a full refetch.
   const handleSaveMetaLead = async (leadId, payload) => {
     const clientId = clientData?._id;
     if (!clientId) throw new Error('Client session expired — please log in again.');
@@ -258,16 +282,16 @@ const ClientPortalDashboard = () => {
     if (updated) {
       setData((prev) => {
         if (!prev?.meta?.leads_in_range) return prev;
-        const nextLeads = prev.meta.leads_in_range.map((l) => (l._id === leadId ? { ...l, ...updated } : l));
+        const nextLeads = prev.meta.leads_in_range.map((l) =>
+          (l._id === leadId ? { ...l, ...updated } : l)
+        );
         return { ...prev, meta: { ...prev.meta, leads_in_range: nextLeads } };
       });
     }
     return updated;
   };
 
-  // Manual WhatsApp lead entry from the portal. POSTs through clientApi
-  // (carries the portal token) and prepends the new lead to
-  // data.meta.leads_in_range so the row appears immediately.
+  // Manual WhatsApp / walk-in lead entry. Prepends the created lead.
   const handleAddMetaLead = async (payload) => {
     const clientId = clientData?._id;
     if (!clientId) throw new Error('Client session expired — please log in again.');
@@ -281,15 +305,13 @@ const ClientPortalDashboard = () => {
       setData((prev) => {
         if (!prev) return prev;
         const meta = prev.meta || {};
-        const nextLeads = [created, ...(meta.leads_in_range || [])];
-        return { ...prev, meta: { ...meta, leads_in_range: nextLeads } };
+        return { ...prev, meta: { ...meta, leads_in_range: [created, ...(meta.leads_in_range || [])] } };
       });
     }
     return created;
   };
 
-  // Delete a manual WhatsApp lead from the portal. Same scope as the
-  // admin handler — backend gates by clientId+manual-entry marker.
+  // Delete a manual lead. Backend gates by clientId + manual-entry marker.
   const handleDeleteMetaLead = async (leadId) => {
     const clientId = clientData?._id;
     if (!clientId) throw new Error('Client session expired — please log in again.');
@@ -313,20 +335,13 @@ const ClientPortalDashboard = () => {
   // has only Meta linked (no Google), jump them straight to the Meta tab
   // instead of making them see the "Google not linked" banner first.
   // If neither is linked, stay on Google so the banner explains why.
-  const autoSwitchedRef = useRef(false);
-  useEffect(() => {
-    if (autoSwitchedRef.current) return;
-    if (!data?.integrations) return;
-    // Telecallers only have access to Meta Leads, so skip the auto-switch
-    // logic entirely — they're already pinned to tab 2.
-    if (isTelecaller) {
-      autoSwitchedRef.current = true;
-      return;
-    }
-    const { google_enabled, meta_enabled } = data.integrations;
-    if (!google_enabled && meta_enabled) setTab(1);
-    autoSwitchedRef.current = true;
-  }, [data, isTelecaller]);
+  // Auto-switch disabled now that Home (index 0) is the landing tab —
+  // both admins and telecallers see the launcher first and pick a
+  // section from the hero cards. The previous logic flipped admins
+  // straight onto the Meta tab when Google wasn't linked, which would
+  // skip the new Home tab.
+  const autoSwitchedRef = useRef(true);
+  void autoSwitchedRef;
 
   const handleLogout = () => {
     localStorage.removeItem('clientToken');
@@ -417,71 +432,173 @@ const ClientPortalDashboard = () => {
     );
   };
 
+  // Sidebar nav config — order = display order. `index` is the same
+  // numeric `tab` value the existing section panels below check
+  // against, so we don't have to rewire any panel rendering.
+  const navItems = [
+    { index: 0, key: 'dashboard', label: 'Dashboard', Icon: DashboardIcon, visible: true, color: MAROON },
+    { index: -1, key: 'leads', label: 'Leads', Icon: GroupIcon, visible: true, color: '#15803D', route: '/client-portal/leads' },
+    { index: 4, key: 'eod', label: 'EOD Report', Icon: AssessmentIcon, visible: true, color: '#B45309' },
+    { index: 1, key: 'google', label: 'Google Ads', Icon: GoogleIcon, visible: isAdmin, color: GOOGLE_GREEN },
+    { index: 2, key: 'meta', label: 'Meta Ads', Icon: FacebookIcon, visible: isAdmin, color: META_BLUE },
+    { index: 5, key: 'users', label: 'Users', Icon: PeopleIcon, visible: isAdmin, color: '#7E22CE' },
+  ].filter((n) => n.visible);
+
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: CREAM }}>
-      {/* Top Bar */}
-      <Box sx={{ bgcolor: BROWN, color: 'white', px: 3, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ width: 36, height: 36, bgcolor: COPPER, fontWeight: 700, fontSize: '1rem' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: CREAM, display: 'flex' }}>
+      {/* ── Left Sidebar ─────────────────────────────────────────── */}
+      <Box
+        sx={{
+          width: sidebarOpen ? 240 : 68,
+          flexShrink: 0,
+          bgcolor: BROWN,
+          color: '#fff',
+          transition: 'width 0.2s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          overflow: 'hidden',
+          boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
+        }}
+      >
+        {/* Sidebar header — avatar + client name + collapse button */}
+        <Box sx={{ p: sidebarOpen ? 2 : 1.2, display: 'flex', alignItems: 'center', gap: 1.2, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <Avatar sx={{ width: 38, height: 38, bgcolor: COPPER, fontWeight: 700, fontSize: '1rem', flexShrink: 0 }}>
             {displayName?.charAt(0)}
           </Avatar>
-          <Box>
-            <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '1.1rem' }}>{displayName}</Typography>
-            <Typography sx={{ fontSize: '0.7rem', opacity: 0.7 }}>Client Portal</Typography>
-          </Box>
+          {sidebarOpen && (
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '0.98rem', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {displayName}
+              </Typography>
+              <Typography sx={{ fontSize: '0.66rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                {role === 'admin' ? 'Admin' : 'Telecaller'}
+              </Typography>
+            </Box>
+          )}
         </Box>
-        <Button variant="outlined" size="small" startIcon={<LogoutIcon />} onClick={handleLogout}
-          sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.08)' } }}>
-          Logout
-        </Button>
+
+        {/* Nav items */}
+        <Box sx={{ flex: 1, py: 1, overflowY: 'auto' }}>
+          {navItems.map((item) => {
+            const active = item.index >= 0 && tab === item.index;
+            return (
+              <Tooltip key={item.key} title={sidebarOpen ? '' : item.label} placement="right" arrow>
+                <Box
+                  onClick={() => {
+                    if (item.route) { navigate(item.route); return; }
+                    setTab(item.index);
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: sidebarOpen ? 2 : 0,
+                    py: 1.1,
+                    cursor: 'pointer',
+                    color: active ? '#fff' : 'rgba(255,255,255,0.78)',
+                    bgcolor: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    borderLeft: active ? `3px solid ${item.color}` : '3px solid transparent',
+                    transition: 'background-color 0.15s',
+                    justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
+                  }}
+                >
+                  <item.Icon sx={{ fontSize: 20, color: active ? item.color : 'inherit' }} />
+                  {sidebarOpen && (
+                    <Typography sx={{ fontWeight: active ? 700 : 500, fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+                      {item.label}
+                    </Typography>
+                  )}
+                </Box>
+              </Tooltip>
+            );
+          })}
+        </Box>
+
+        {/* Sidebar footer — collapse toggle + logout */}
+        <Box sx={{ p: 1, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Tooltip title={sidebarOpen ? 'Collapse' : 'Expand'} placement="right" arrow>
+            <Box
+              onClick={() => setSidebarOpen((v) => !v)}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.2,
+                px: sidebarOpen ? 1.5 : 0, py: 0.9, cursor: 'pointer',
+                color: 'rgba(255,255,255,0.78)',
+                borderRadius: 1,
+                justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.06)' },
+              }}
+            >
+              {sidebarOpen ? <MenuOpenIcon sx={{ fontSize: 20 }} /> : <MenuIcon sx={{ fontSize: 20 }} />}
+              {sidebarOpen && <Typography sx={{ fontSize: '0.8rem' }}>Collapse</Typography>}
+            </Box>
+          </Tooltip>
+          <Tooltip title={sidebarOpen ? '' : 'Logout'} placement="right" arrow>
+            <Box
+              onClick={handleLogout}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1.2,
+                px: sidebarOpen ? 1.5 : 0, py: 0.9, cursor: 'pointer',
+                color: '#fca5a5',
+                borderRadius: 1,
+                justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                '&:hover': { bgcolor: 'rgba(252,165,165,0.08)' },
+              }}
+            >
+              <LogoutIcon sx={{ fontSize: 20 }} />
+              {sidebarOpen && <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }}>Logout</Typography>}
+            </Box>
+          </Tooltip>
+        </Box>
       </Box>
 
-      {/* Content */}
-      <Box sx={{ maxWidth: 1400, mx: 'auto', p: { xs: 2, md: 3 } }}>
-        {/* Platform Tabs */}
-        <Card variant="outlined" sx={{ mb: 2 }}>
-          <Tabs
-            value={tab}
-            onChange={(e, v) => setTab(v)}
-            sx={{
-              px: 2,
-              '& .MuiTabs-indicator': { bgcolor: tab === 0 ? GOOGLE_GREEN : META_BLUE, height: 3 },
-              '& .Mui-selected': { color: `${tab === 0 ? GOOGLE_GREEN : META_BLUE} !important` },
-            }}
-          >
-            {/* MUI <Tabs> uses each child's index as the value. Conditionally
-                rendering tabs would shift indices — instead each <Tab> stays
-                in place but is hidden via `display: 'none'` for roles that
-                shouldn't see it. Telecallers: only Meta Leads. */}
-            <Tab
-              icon={<GoogleIcon sx={{ fontSize: 18 }} />}
-              iconPosition="start"
-              label="Google Ads"
-              sx={{ textTransform: 'none', fontWeight: 600, display: isAdmin ? 'inline-flex' : 'none' }}
-            />
-            <Tab
-              icon={<FacebookIcon sx={{ fontSize: 18 }} />}
-              iconPosition="start"
-              label="Meta Ads"
-              sx={{ textTransform: 'none', fontWeight: 600, display: isAdmin ? 'inline-flex' : 'none' }}
-            />
-            <Tab
-              icon={<FacebookIcon sx={{ fontSize: 18 }} />}
-              iconPosition="start"
-              label="Meta Leads"
-              sx={{ textTransform: 'none', fontWeight: 600 }}
-            />
-            <Tab
-              icon={<PeopleIcon sx={{ fontSize: 18 }} />}
-              iconPosition="start"
-              label="Users"
-              sx={{ textTransform: 'none', fontWeight: 600, display: isAdmin ? 'inline-flex' : 'none' }}
-            />
-          </Tabs>
-        </Card>
+      {/* ── Main content area ────────────────────────────────────── */}
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Slim top breadcrumb / section title bar */}
+        <Box
+          sx={{
+            px: 3, py: 1.5,
+            bgcolor: '#fff',
+            borderBottom: '1px solid #E5E7EB',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            position: 'sticky', top: 0, zIndex: 10,
+          }}
+        >
+          <Box>
+            <Typography sx={{ fontSize: '0.66rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Client Portal
+            </Typography>
+            <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', color: BROWN }}>
+              {tab === 0 ? 'Dashboard'
+                : (tab === 1 && isAdmin) ? 'Google Ads'
+                : (tab === 2 && isAdmin) ? 'Meta Ads'
+                : tab === 4 ? 'EOD Report'
+                : (tab === 5 && isAdmin) ? 'Users'
+                : 'Dashboard'}
+            </Typography>
+          </Box>
+        </Box>
 
-        {/* GOOGLE ADS TAB */}
-        {tab === 0 && (<>
+      {/* Content */}
+      <Box sx={{ maxWidth: 1400, mx: 'auto', width: '100%', p: { xs: 2, md: 3 } }}>
+        {/* DASHBOARD — landing tab. Today's snapshot, auto-refreshes
+            every 30s as telecallers add leads / log calls / book
+            appointments. */}
+        {tab === 0 && (
+          <PortalDashboardToday
+            clientId={clientData?._id}
+            apiInstance={clientApi}
+            displayName={displayName}
+          />
+        )}
+
+        {/* GOOGLE ADS TAB — admin only. Telecallers shouldn't see ad
+            spend data; the snap-to-0 effect above is the primary gate
+            and this inline check is defense in depth. */}
+        {tab === 1 && isAdmin && (<>
         {/* Date Filter */}
         <Card variant="outlined" sx={{ mb: 2, position: 'relative', overflow: 'hidden' }}>
           {loading && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, bgcolor: `${GOOGLE_GREEN}20`, '& .MuiLinearProgress-bar': { bgcolor: GOOGLE_GREEN } }} />}
@@ -851,8 +968,10 @@ const ClientPortalDashboard = () => {
         )}
         </>)}
 
-        {/* META ADS TAB — mirrors the admin ClientAdDetails Meta tab exactly */}
-        {tab === 1 && (() => {
+        {/* META ADS TAB — admin only (telecallers don't see ad spend
+            or billing). Snap-to-0 effect handles the primary case;
+            this inline `&& isAdmin` is the second line of defence. */}
+        {tab === 2 && isAdmin && (() => {
           // Slimmed Meta Ads tab — only billing + leads. Account info,
           // performance KPIs, campaigns, daily trend and lead forms have
           // been removed for the client-portal view (admins still see
@@ -990,19 +1109,23 @@ const ClientPortalDashboard = () => {
                 </Card>
               )}
 
-              {/* Leads — same MetaLeadsTable used on the Meta Leads tab,
-                  pulled in here so the Meta Ads tab carries the data
-                  clients actually need (billing + leads + form responses)
-                  without the extra ad-management noise. */}
+              {/* KPI grid — Meta Ads performance + lead counts. */}
+              <MetaAdsKpiGrid metaData={metaData} />
+
+              {/* Leads table — same MetaLeadsTable rendered below the
+                  KPI cards so admins can scan the campaign metrics and
+                  drill into the actual leads in one place. */}
               {(() => {
                 const portalLeads = (metaData?.leads_in_range?.length
                   ? metaData.leads_in_range
                   : (metaData?.recent_leads || []));
                 if (portalLeads.length === 0) {
                   return (
-                    <Card variant="outlined">
+                    <Card variant="outlined" sx={{ mt: 2 }}>
                       <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                        <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.5 }}>No leads in this date range</Typography>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.5 }}>
+                          No leads in this date range
+                        </Typography>
                         <Typography variant="body2" color="text.secondary">
                           Try widening the From/To dates above to see older lead submissions.
                         </Typography>
@@ -1011,48 +1134,44 @@ const ClientPortalDashboard = () => {
                   );
                 }
                 return (
-                  <>
+                  <Box sx={{ mt: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
                       <Box>
                         <Typography sx={{ fontWeight: 700, fontSize: '1rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
                           Leads ({portalLeads.length})
                         </Typography>
-                        <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.5 }}>
-                          Every lead and form response in the selected date range.
+                        <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.8 }}>
+                          Every Meta + manual WhatsApp lead in the selected date range.
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                         <Button
-                          size="small"
-                          variant="outlined"
+                          size="small" variant="outlined"
                           startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
-                          onClick={() => exportLeadsToExcel(portalLeads, metaAccount, displayName)}
+                          onClick={() => exportLeadsToExcel(portalLeads, metaData?.meta_account, displayName)}
                           sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
                         >
                           Excel
                         </Button>
                         <Button
-                          size="small"
-                          variant="outlined"
+                          size="small" variant="outlined"
                           startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
-                          onClick={() => exportLeadsToPdf(portalLeads, metaAccount, displayName)}
+                          onClick={() => exportLeadsToPdf(portalLeads, metaData?.meta_account, displayName)}
                           sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
                         >
                           PDF
                         </Button>
                       </Box>
                     </Box>
-                    <Box sx={{ mb: 2 }}>
-                      <MetaLeadsTable
-                        leads={portalLeads}
-                        metaAccount={metaAccount}
-                        maxHeight={520}
-                        onSaveLead={handleSaveMetaLead}
-                        onAddLead={handleAddMetaLead}
-                        onDeleteLead={handleDeleteMetaLead}
-                      />
-                    </Box>
-                  </>
+                    <MetaLeadsTable
+                      leads={portalLeads}
+                      metaAccount={metaData?.meta_account}
+                      maxHeight={560}
+                      onSaveLead={handleSaveMetaLead}
+                      onAddLead={handleAddMetaLead}
+                      onDeleteLead={handleDeleteMetaLead}
+                    />
+                  </Box>
                 );
               })()}
 
@@ -1061,109 +1180,26 @@ const ClientPortalDashboard = () => {
           );
         })()}
 
-        {/* META LEADS TAB — leads + form responses for the selected date range.
-            Reuses the same Meta analytics payload (`metaData`) the Meta Ads tab
-            consumes; no extra fetch needed. The MetaLeadsTable component is the
-            same one the admin ClientAdDetails page uses, so inline editing of
-            CRM fields and the +Add Follow-up flow work identically here. */}
-        {tab === 2 && (() => {
-          const metaAccount = metaData?.meta_account;
-          const portalLeads = (metaData?.leads_in_range?.length
-            ? metaData.leads_in_range
-            : (metaData?.recent_leads || []));
-          const metaLinked = (data?.integrations?.meta_enabled === true)
-            || (data?.integrations === undefined && metaData != null);
-
-          if (loading && !metaData) {
-            return (
-              <Box sx={{ textAlign: 'center', py: 8 }}>
-                <CircularProgress size={40} sx={{ color: META_BLUE }} />
-                <Typography sx={{ mt: 2, color: 'text.secondary' }}>Fetching your Meta leads...</Typography>
-              </Box>
-            );
-          }
-
-          if (!metaLinked) {
-            return (
-              <Alert
-                severity="info"
-                icon={<FacebookIcon sx={{ color: META_BLUE }} />}
-                sx={{ mb: 2, borderLeft: `4px solid ${META_BLUE}` }}
-              >
-                <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', mb: 0.3 }}>
-                  Meta Ads is not linked for this account
-                </Typography>
-                <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
-                  Your Meta lead form submissions will appear here once your agency connects your Meta Ads account.
-                </Typography>
-              </Alert>
-            );
-          }
-
-          if (portalLeads.length === 0) {
-            return (
-              <Card variant="outlined">
-                <CardContent sx={{ textAlign: 'center', py: 6 }}>
-                  <FacebookIcon sx={{ fontSize: 48, color: META_BLUE, mb: 1 }} />
-                  <Typography sx={{ fontWeight: 600, fontSize: '1rem', mb: 0.5 }}>No leads in this date range</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Try widening the From/To dates above to see older lead submissions.
-                  </Typography>
-                </CardContent>
-              </Card>
-            );
-          }
-
-          return (
-            <>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1, flexWrap: 'wrap' }}>
-                <Box>
-                  <Typography sx={{ fontWeight: 700, fontSize: '1rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                    Leads ({portalLeads.length})
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.5 }}>
-                    Every lead and form response in the selected date range.
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<FileDownloadIcon sx={{ fontSize: 16 }} />}
-                    onClick={() => exportLeadsToExcel(portalLeads, metaAccount, displayName)}
-                    sx={{ borderColor: '#10b981', color: '#10b981', '&:hover': { borderColor: '#0e9b6f', bgcolor: '#10b98110' } }}
-                  >
-                    Excel
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<PdfIcon sx={{ fontSize: 16 }} />}
-                    onClick={() => exportLeadsToPdf(portalLeads, metaAccount, displayName)}
-                    sx={{ borderColor: '#ef4444', color: '#ef4444', '&:hover': { borderColor: '#dc2626', bgcolor: '#ef444410' } }}
-                  >
-                    PDF
-                  </Button>
-                </Box>
-              </Box>
-              <Box sx={{ mb: 2 }}>
-                <MetaLeadsTable
-                  leads={portalLeads}
-                  metaAccount={metaAccount}
-                  maxHeight={640}
-                  onSaveLead={handleSaveMetaLead}
-                  onAddLead={handleAddMetaLead}
-                  onDeleteLead={handleDeleteMetaLead}
-                />
-              </Box>
-            </>
-          );
-        })()}
+        {/* EOD REPORT TAB — index 4. Two sub-views: Daily (one-day
+            snapshot mirroring the spreadsheet) and Monthly Abstract
+            (per-day grid for the selected month). Click-through on
+            any number navigates to the full Leads dashboard with the
+            corresponding filter preset attached via router state. */}
+        {tab === 4 && (
+          <EodReportPanel
+            clientId={clientData?._id}
+            clientName={displayName}
+            clientApi={clientApi}
+            onJumpToLeads={(preset) => {
+              navigate('/client-portal/leads', { state: { filterPreset: preset } });
+            }}
+          />
+        )}
 
         {/* USERS TAB — admin only. Telecallers can't reach this tab via the
             UI (display:none on the <Tab>), but we still gate the body so
             anyone fiddling with state can't render it. */}
-        {tab === 3 && isAdmin && (
+        {tab === 5 && isAdmin && (
           <UsersTabPanel
             clientApi={clientApi}
             currentUser={portalUser}
@@ -1174,13 +1210,183 @@ const ClientPortalDashboard = () => {
           />
         )}
       </Box>
+      </Box>
     </Box>
   );
 };
 
-// Inline component — kept in this file because it shares the clientApi
-// instance and is only rendered from one place. Pull into its own file
-// if it grows beyond ~200 lines.
+// Meta Ads KPI grid — replaces the embedded leads table on the
+// Meta Ads tab. Renders the same KPI tiles the screenshot mockup
+// shows: Total Leads, Form Leads, WhatsApp Leads, CPL Overall,
+// Reach, Clicks, CTR, CPC, CPM, Impressions. Pure presentation —
+// takes the live `metaData` payload the parent already fetched.
+const MetaAdsKpiGrid = ({ metaData }) => {
+  const summary = metaData?.summary || {};
+  const allLeads = metaData?.leads_in_range || metaData?.recent_leads || [];
+
+  // Bucket leads — form leads come from Meta's lead-form sync, WhatsApp
+  // (and other manual entries) come from the manual-entry button on
+  // the leads table. The backend marks manual entries with either a
+  // `manual_source_type` field or no `meta_leadgen_id`.
+  const isManual = (l) =>
+    !!l?.manual_source_type
+    || (!l?.meta_leadgen_id && String(l?.platform || '').toLowerCase() === 'whatsapp')
+    || l?.meta_form_name === 'WhatsApp (manual entry)';
+  const whatsappLeads = allLeads.filter((l) =>
+    String(l?.platform || '').toLowerCase() === 'whatsapp'
+    || (l?.manual_source_type === 'whatsapp')
+  ).length;
+  const formLeads = allLeads.filter((l) => !isManual(l)).length;
+  const totalLeads = allLeads.length;
+
+  // Performance pulls — fall back to 0 when Meta hasn't returned data.
+  const spend = Number(summary.spend) || 0;
+  const reach = Number(summary.reach) || 0;
+  const impressions = Number(summary.impressions) || 0;
+  const clicks = Number(summary.clicks) || 0;
+  // Some Meta payloads use ctr (already %), some give it as 0-1.
+  const rawCtr = Number(summary.ctr ?? 0);
+  const ctrPct = rawCtr > 1 ? rawCtr : rawCtr * 100;
+  const cpc = clicks > 0 ? spend / clicks : Number(summary.cpc) || 0;
+  const cpm = impressions > 0 ? (spend / impressions) * 1000 : Number(summary.cpm) || 0;
+
+  // CPL — split per-bucket because WhatsApp leads carry no Meta spend.
+  // Overall CPL uses TOTAL leads (matches the screenshot's "CPL Overall").
+  const cplForm = formLeads > 0 ? spend / formLeads : 0;
+  const cplOverall = totalLeads > 0 ? spend / totalLeads : 0;
+
+  const fmt = (n) => Number(n || 0).toLocaleString('en-IN');
+  const fmtINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  const fmtPct = (n) => `${Number(n || 0).toFixed(2)}%`;
+
+  // Tile palette mirrors the screenshot — alternating blue / copper /
+  // black accents on the left border + icon background.
+  const tiles = [
+    { label: 'TOTAL LEADS', value: fmt(totalLeads), sub: `${fmtINR(cplOverall)}/lead`, color: '#1877F2', symbol: '👥' },
+    { label: 'FORM LEADS', value: fmt(formLeads), sub: `${fmtINR(cplForm)}/lead`, color: '#C08552', symbol: '👤' },
+    { label: 'WHATSAPP LEADS', value: fmt(whatsappLeads), sub: '₹0/lead', color: '#111827', symbol: '💬' },
+    { label: 'CPL (OVERALL)', value: fmtINR(cplOverall), sub: 'spend ÷ total leads', color: '#1877F2', symbol: '₹' },
+    { label: 'REACH', value: fmt(reach), sub: 'unique users', color: '#C08552', symbol: '👤' },
+    { label: 'IMPRESSIONS', value: fmt(impressions), sub: 'ad views', color: '#7C3AED', symbol: '👁' },
+    { label: 'CLICKS', value: fmt(clicks), sub: 'on ads', color: '#C08552', symbol: '📈' },
+    { label: 'CTR', value: fmtPct(ctrPct), sub: 'click-through rate', color: '#111827', symbol: '📉' },
+    { label: 'CPC', value: fmtINR(cpc), sub: 'cost per click', color: '#1877F2', symbol: '₹' },
+    { label: 'CPM', value: fmtINR(cpm), sub: 'cost per 1k impressions', color: '#C08552', symbol: '₹' },
+  ];
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box>
+        <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: BROWN, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+          Performance Overview
+        </Typography>
+        <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', pl: 1.8 }}>
+          Meta Ads insights for the selected date range. CPL is split between paid form leads and overall (which includes WhatsApp/manual entries that carry no media spend).
+        </Typography>
+      </Box>
+
+      <Grid container spacing={1.5}>
+        {tiles.map((t) => (
+          <Grid key={t.label} size={{ xs: 6, sm: 4, md: 'auto' }} sx={{ minWidth: 200, flex: { md: '1 1 200px' } }}>
+            <Card
+              variant="outlined"
+              sx={{
+                height: '100%',
+                borderLeft: `4px solid ${t.color}`,
+                transition: 'transform 0.15s, box-shadow 0.15s',
+                '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 6px 16px rgba(0,0,0,0.08)' },
+              }}
+            >
+              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1.5 }}>
+                <Box sx={{
+                  width: 42, height: 42, borderRadius: '50%',
+                  bgcolor: `${t.color}15`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                  fontSize: '1.05rem',
+                }}>
+                  <span style={{ color: t.color }}>{t.symbol}</span>
+                </Box>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography sx={{ fontSize: '0.66rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {t.label}
+                  </Typography>
+                  <Typography sx={{ fontWeight: 800, fontSize: '1.35rem', color: t.color, lineHeight: 1.1 }}>
+                    {t.value}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.66rem', color: 'text.secondary', mt: 0.2 }}>
+                    {t.sub}
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  );
+};
+
+// EOD Report panel — wraps the daily TelecallingReport and the
+// MonthlyAbstract grid behind a simple Daily / Monthly toggle so the
+// EOD tab can show both views without occupying two top-level tabs.
+const EodReportPanel = ({ clientId, clientName, clientApi, onJumpToLeads }) => {
+  const [view, setView] = useState('daily');     // 'daily' | 'monthly'
+  const SELECTED = '#8B1F2F';
+
+  const ToggleBtn = ({ value, label }) => {
+    const active = view === value;
+    return (
+      <Button
+        size="small"
+        onClick={() => setView(value)}
+        sx={{
+          textTransform: 'none', fontWeight: 700, px: 2, py: 0.6,
+          bgcolor: active ? SELECTED : '#fff',
+          color: active ? '#fff' : SELECTED,
+          border: `1px solid ${SELECTED}`,
+          borderRadius: 1,
+          minWidth: 110,
+          '&:hover': {
+            bgcolor: active ? SELECTED : `${SELECTED}10`,
+            filter: active ? 'brightness(0.92)' : 'none',
+          },
+        }}
+      >
+        {label}
+      </Button>
+    );
+  };
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+        <ToggleBtn value="daily" label="Daily EOD" />
+        <ToggleBtn value="monthly" label="Monthly Abstract" />
+        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', ml: 1 }}>
+          {view === 'daily'
+            ? 'Single-day snapshot — Day vs Target, Appointment Status, Day Summary.'
+            : 'Per-day grid for the selected month — sources, calls, appointments, conversion.'}
+        </Typography>
+      </Box>
+
+      {view === 'daily' ? (
+        <TelecallingReport
+          clientId={clientId}
+          clientName={clientName}
+          apiInstance={clientApi}
+          onJumpToLeads={onJumpToLeads}
+        />
+      ) : (
+        <MonthlyAbstract
+          clientId={clientId}
+          apiInstance={clientApi}
+        />
+      )}
+    </Box>
+  );
+};
+
 const UsersTabPanel = ({ clientApi, currentUser, onCurrentUserChange }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);

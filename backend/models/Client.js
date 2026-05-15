@@ -224,6 +224,17 @@ const clientSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // Editable telecalling targets per client. These power the
+    // "Target" cells in the EOD report — were hardcoded as 10 daily
+    // consults / 100 daily calls; admins can now tune them.
+    // Monthly targets default to daily × 31 unless overridden.
+    telecalling_targets: {
+      day_consult: { type: Number, default: 10, min: 0 },
+      day_calls: { type: Number, default: 100, min: 0 },
+      month_consult: { type: Number, default: 310, min: 0 },
+      month_calls: { type: Number, default: 3100, min: 0 },
+    },
   },
   {
     timestamps: true,

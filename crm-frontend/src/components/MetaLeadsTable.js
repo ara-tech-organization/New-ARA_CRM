@@ -208,7 +208,7 @@ const cellInputSx = {
 //                 trash icon in the action column. Synced Meta-form
 //                 rows never show the icon (those are immutable audit
 //                 records — the backend rejects deletion anyway).
-const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddLead, onDeleteLead }) => {
+const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddLead, onDeleteLead, filterPreset, onFilterPresetConsumed }) => {
   const editable = typeof onSaveLead === 'function';
   const canAdd = typeof onAddLead === 'function';
   const canDelete = typeof onDeleteLead === 'function';
@@ -260,11 +260,14 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
     }
   };
 
-  // Add-WhatsApp-lead dialog state. Mirrors every editable column on
-  // the leads table so a telecaller logging a WhatsApp lead can fill
+  // Manual-lead dialog state. Mirrors every editable column on
+  // the leads table so a telecaller logging a lead can fill
   // out the call disposition + appointment in one go instead of
-  // creating a stub then editing inline.
+  // creating a stub then editing inline. The Source dropdown picks
+  // which channel the lead came from (WhatsApp, Instagram, Justdial,
+  // Walk-In etc.) — the dashboard's Leads Abstract counts by this.
   const emptyAddForm = {
+    manual_source_type: 'whatsapp',
     // Lead details
     name: '', phone: '', email: '',
     lead_location: '', lead_category: '', telecaller_name: '',
@@ -305,6 +308,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
     setAddError('');
     try {
       await onAddLead({
+        manual_source_type: addForm.manual_source_type,
         name,
         phone,
         email: addForm.email.trim(),
@@ -344,8 +348,32 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
   const [filterResponse, setFilterResponse] = useState([]);
   const [filterCategory, setFilterCategory] = useState([]);
   const [filterAppointment, setFilterAppointment] = useState([]);
+  const [filterSource, setFilterSource] = useState([]);
   // Free-text search across name/email/phone/form-question values.
   const [searchText, setSearchText] = useState('');
+  // Compact mode hides the rarely-edited columns so the table fits
+  // on narrower screens. The user-facing toggle was removed; we keep
+  // the variable so the conditional hidden-cell logic below still
+  // works. To switch the default to full-width, change `true` → `false`.
+  // on a normal laptop screen without horizontal scroll.
+  // eslint-disable-next-line no-unused-vars
+  const [compactView, setCompactView] = useState(true);
+
+  // External filter handoff — when the EOD report dispatches a
+  // navigation request the parent passes a `filterPreset` object.
+  // We apply it once, then notify the parent so it can clear the
+  // preset and let the user adjust filters normally.
+  useEffect(() => {
+    if (!filterPreset) return;
+    if (filterPreset.callLabel) setFilterCallLabel(filterPreset.callLabel);
+    if (filterPreset.response) setFilterResponse(filterPreset.response);
+    if (filterPreset.category) setFilterCategory(filterPreset.category);
+    if (filterPreset.appointment) setFilterAppointment(filterPreset.appointment);
+    if (filterPreset.source) setFilterSource(filterPreset.source);
+    if (typeof filterPreset.searchText === 'string') setSearchText(filterPreset.searchText);
+    if (typeof onFilterPresetConsumed === 'function') onFilterPresetConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterPreset]);
 
   // Re-seed edit state when the leads array changes (new fetch). We key by
   // _id so unrelated rows keep their in-flight edits across re-renders.
@@ -445,13 +473,18 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
   // Reminder = Next Follow-up (1)
   // Appointment = Status, Appt Date, Booked On (3)
   // Follow-up = FU#, Latest/History (2)
+  // Lead Details band hides 4 cells in compact mode (Form Name, Form
+  // Responses, Email, Telecaller). Appointment band hides Booked On.
   const groups = useMemo(() => ({
-    lead: 11,
+    lead: compactView ? 7 : 11,
     call: 4,
     reminder: 1,
-    appointment: 3,
+    appointment: compactView ? 2 : 3,
     followups: 2,
-  }), []);
+  }), [compactView]);
+
+  // Tiny helper — applies display:none to hidden cells in compact mode.
+  const hiddenSx = compactView ? { display: 'none' } : null;
 
   // Apply the filter bar selections + free-text search to the input
   // leads. Filters are AND-combined across fields; within each field a
@@ -460,15 +493,27 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
   // when available so unsaved edits are reflected in the row visibility
   // immediately — saves a confusing "I just changed CALL LABEL but the
   // row didn't disappear" moment.
+  // Bucket helper — mirrors the backend's sourceBucketOf for filtering.
+  const bucketOf = (l) => {
+    if (l.manual_source_type) return l.manual_source_type;
+    const plat = String(l.platform || '').toLowerCase();
+    if (plat === 'whatsapp') return 'whatsapp';
+    if (plat === 'instagram') return 'instagram';
+    if (plat === 'facebook') return 'facebook';
+    return 'facebook';
+  };
+
   const filteredLeads = useMemo(() => {
     const callSet = new Set(filterCallLabel);
     const respSet = new Set(filterResponse);
     const catSet = new Set(filterCategory);
     const apptSet = new Set(filterAppointment);
+    const srcSet = new Set(filterSource);
     const q = searchText.trim().toLowerCase();
     const noFilters =
       callSet.size === 0 && respSet.size === 0 &&
-      catSet.size === 0 && apptSet.size === 0 && !q;
+      catSet.size === 0 && apptSet.size === 0 &&
+      srcSet.size === 0 && !q;
     if (noFilters) return leads;
 
     return leads.filter((l) => {
@@ -477,11 +522,13 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
       const respLabel = (e?.response_label ?? l.response_label ?? '').toString();
       const category = (e?.lead_category ?? l.lead_category ?? '').toString();
       const apptStatus = (e?.appointment_status ?? l.appointment_status ?? '').toString();
+      const src = bucketOf(l);
 
       if (callSet.size > 0 && !callSet.has(callLabel)) return false;
       if (respSet.size > 0 && !respSet.has(respLabel)) return false;
       if (catSet.size > 0 && !catSet.has(category)) return false;
       if (apptSet.size > 0 && !apptSet.has(apptStatus)) return false;
+      if (srcSet.size > 0 && !srcSet.has(src)) return false;
 
       if (q) {
         // Search hits name/email/phone/location/remarks + every form
@@ -502,13 +549,14 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
       }
       return true;
     });
-  }, [leads, edits, filterCallLabel, filterResponse, filterCategory, filterAppointment, searchText]);
+  }, [leads, edits, filterCallLabel, filterResponse, filterCategory, filterAppointment, filterSource, searchText]);
 
   const anyFilterActive =
     filterCallLabel.length > 0 ||
     filterResponse.length > 0 ||
     filterCategory.length > 0 ||
     filterAppointment.length > 0 ||
+    filterSource.length > 0 ||
     searchText.trim().length > 0;
 
   const clearAllFilters = () => {
@@ -516,6 +564,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
     setFilterResponse([]);
     setFilterCategory([]);
     setFilterAppointment([]);
+    setFilterSource([]);
     setSearchText('');
   };
 
@@ -586,6 +635,11 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
         <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, mr: 0.5 }}>
           Filter
         </Typography>
+        {renderFilter('Source', filterSource, setFilterSource, [
+          'whatsapp', 'instagram', 'facebook', 'google_lead', 'justdial',
+          'walk_in', 'referral', 'physical_marketing',
+          'incall_google', 'incall_fb', 'incall_insta', 'incall_self',
+        ])}
         {renderFilter('Call Label', filterCallLabel, setFilterCallLabel, CALL_LABEL_OPTIONS)}
         {renderFilter('Response', filterResponse, setFilterResponse, RESPONSE_LABEL_OPTIONS)}
         {renderFilter('Hair / Skin', filterCategory, setFilterCategory, CATEGORY_OPTIONS)}
@@ -620,7 +674,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
                 fontWeight: 600,
               }}
             >
-              Add WhatsApp Lead
+              Add Lead
             </Button>
           )}
         </Box>
@@ -648,12 +702,12 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
             <TableCell sx={{ ...headerCellSx, minWidth: 110 }}>Source</TableCell>
             <TableCell sx={{ ...headerCellSx, minWidth: 160 }}>Name</TableCell>
             <TableCell sx={{ ...headerCellSx, minWidth: 140 }}>Contact</TableCell>
-            <TableCell sx={{ ...headerCellSx, minWidth: 180 }}>Form Name</TableCell>
-            <TableCell sx={{ ...headerCellSx, minWidth: 360 }}>Form Responses</TableCell>
-            <TableCell sx={{ ...headerCellSx, minWidth: 240 }}>Email</TableCell>
+            <TableCell sx={{ ...headerCellSx, minWidth: 180, ...hiddenSx }}>Form Name</TableCell>
+            <TableCell sx={{ ...headerCellSx, minWidth: 360, ...hiddenSx }}>Form Responses</TableCell>
+            <TableCell sx={{ ...headerCellSx, minWidth: 240, ...hiddenSx }}>Email</TableCell>
             <TableCell sx={{ ...headerCellSx, minWidth: 150 }}>Location</TableCell>
             <TableCell sx={{ ...headerCellSx, minWidth: 120 }}>Hair / Skin</TableCell>
-            <TableCell sx={{ ...headerCellSx, minWidth: 160 }}>Telecaller</TableCell>
+            <TableCell sx={{ ...headerCellSx, minWidth: 160, ...hiddenSx }}>Telecaller</TableCell>
             {/* Initial Call Details */}
             <TableCell sx={{ ...headerCellSx, minWidth: 150 }}>First Call Date</TableCell>
             <TableCell sx={{ ...headerCellSx, minWidth: 170 }}>Call Label</TableCell>
@@ -664,7 +718,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
             {/* Appointment */}
             <TableCell sx={{ ...headerCellSx, minWidth: 200 }}>Status</TableCell>
             <TableCell sx={{ ...headerCellSx, minWidth: 160 }}>Appt. Date</TableCell>
-            <TableCell sx={{ ...headerCellSx, minWidth: 160 }}>Booked On</TableCell>
+            <TableCell sx={{ ...headerCellSx, minWidth: 160, ...hiddenSx }}>Booked On</TableCell>
             {/* Follow-up Status */}
             <TableCell sx={{ ...headerCellSx, minWidth: 90 }}>FU #</TableCell>
             <TableCell sx={{ ...headerCellSx, minWidth: 520 }}>Latest / History</TableCell>
@@ -714,9 +768,9 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
                   {/* Contact / phone */}
                   <TableCell sx={{ fontSize: '0.75rem', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{l.phone || '—'}</TableCell>
                   {/* Form name */}
-                  <TableCell sx={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{l.meta_form_name || '—'}</TableCell>
+                  <TableCell sx={{ fontSize: '0.72rem', whiteSpace: 'nowrap', ...hiddenSx }}>{l.meta_form_name || '—'}</TableCell>
                   {/* Form responses (label/value pairs from raw_field_data) */}
-                  <TableCell sx={{ minWidth: 360, py: 1 }}>
+                  <TableCell sx={{ minWidth: 360, py: 1, ...hiddenSx }}>
                     {entries.length === 0 ? (
                       <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>—</Typography>
                     ) : (
@@ -734,7 +788,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
                   </TableCell>
                   {/* Email — single line, column grows to fit. Container
                       scrolls horizontally if the address is unusually long. */}
-                  <TableCell sx={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{l.email || '—'}</TableCell>
+                  <TableCell sx={{ fontSize: '0.72rem', whiteSpace: 'nowrap', ...hiddenSx }}>{l.email || '—'}</TableCell>
                   {/* Location (editable) */}
                   <TableCell>
                     {editable ? (
@@ -764,7 +818,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
                     )}
                   </TableCell>
                   {/* Telecaller (editable free-text) */}
-                  <TableCell>
+                  <TableCell sx={hiddenSx}>
                     {editable ? (
                       <TextField
                         size="small" fullWidth variant="outlined"
@@ -880,7 +934,7 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
                     )}
                   </TableCell>
                   {/* Booked On */}
-                  <TableCell>
+                  <TableCell sx={hiddenSx}>
                     {editable ? (
                       <TextField
                         type="date" size="small" fullWidth variant="outlined"
@@ -1067,10 +1121,10 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
         <WhatsAppIcon sx={{ color: '#25D366' }} />
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
-            Add WhatsApp Lead
+            Add Lead
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Manual entry for leads that came in via WhatsApp / walk-in.
+            Manual entry for leads that didn't come through a Meta form.
           </Typography>
         </Box>
       </DialogTitle>
@@ -1088,6 +1142,26 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
               Lead Details
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <TextField
+                select required label="Source" size="small" fullWidth
+                value={addForm.manual_source_type}
+                onChange={(e) => setAddForm((f) => ({ ...f, manual_source_type: e.target.value }))}
+                disabled={addBusy}
+                helperText="Which channel did this lead come from?"
+              >
+                <MenuItem value="whatsapp">WhatsApp</MenuItem>
+                <MenuItem value="instagram">Instagram</MenuItem>
+                <MenuItem value="facebook">Facebook</MenuItem>
+                <MenuItem value="google_lead">Google Lead</MenuItem>
+                <MenuItem value="justdial">Justdial</MenuItem>
+                <MenuItem value="walk_in">Walk-In</MenuItem>
+                <MenuItem value="referral">Referral</MenuItem>
+                <MenuItem value="physical_marketing">Physical Marketing</MenuItem>
+                <MenuItem value="incall_google">Incall — Google</MenuItem>
+                <MenuItem value="incall_fb">Incall — Facebook</MenuItem>
+                <MenuItem value="incall_insta">Incall — Instagram</MenuItem>
+                <MenuItem value="incall_self">Incall — Self</MenuItem>
+              </TextField>
               <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                 <TextField
                   label="Name" required size="small" sx={{ flex: 1, minWidth: 200 }}
