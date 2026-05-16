@@ -907,6 +907,7 @@ export const getClientAnalytics = async (req, res) => {
         spend: { $sum: '$spend' },
         impressions: { $sum: '$impressions' },
         clicks: { $sum: '$clicks' },
+        reach: { $sum: '$reach' },
         form_leads: { $sum: '$leads' },
         whatsapp_leads: { $sum: '$messaging_conversations_started' },
       },
@@ -919,9 +920,40 @@ export const getClientAnalytics = async (req, res) => {
         spend: { $round: ['$spend', 2] },
         impressions: 1,
         clicks: 1,
+        reach: 1,
         form_leads: 1,
         whatsapp_leads: 1,
         total_leads: { $add: ['$form_leads', '$whatsapp_leads'] },
+        // Derived per-day metrics — saves the frontend from repeating
+        // these calcs in every cell. Guard with cond to avoid div/0.
+        ctr: {
+          $cond: [
+            { $gt: ['$impressions', 0] },
+            { $round: [{ $multiply: [{ $divide: ['$clicks', '$impressions'] }, 100] }, 2] },
+            0,
+          ],
+        },
+        cpc: {
+          $cond: [
+            { $gt: ['$clicks', 0] },
+            { $round: [{ $divide: ['$spend', '$clicks'] }, 2] },
+            0,
+          ],
+        },
+        cpm: {
+          $cond: [
+            { $gt: ['$impressions', 0] },
+            { $round: [{ $multiply: [{ $divide: ['$spend', '$impressions'] }, 1000] }, 2] },
+            0,
+          ],
+        },
+        cpl: {
+          $cond: [
+            { $gt: [{ $add: ['$form_leads', '$whatsapp_leads'] }, 0] },
+            { $round: [{ $divide: ['$spend', { $add: ['$form_leads', '$whatsapp_leads'] }] }, 2] },
+            0,
+          ],
+        },
         // legacy alias
         leads: { $add: ['$form_leads', '$whatsapp_leads'] },
       },
@@ -1764,22 +1796,40 @@ export const updateTelecallingTargets = async (req, res) => {
 };
 
 // GET /api/meta/client/:clientId/monthly-abstract?month=YYYY-MM
-// Powers the "Monthly Abstract" sheet — one row per date in the
-// month, columns for every source bucket plus call/appointment/
-// consult/convert counts. Returned shape is a flat list of rows so
-// the frontend can render the grid without further math.
+//      ?from=YYYY-MM-DD&to=YYYY-MM-DD (overrides month)
+// Powers the "Monthly Abstract" sheet AND the per-client Lead Check
+// panel — one row per date in the given window, columns for every
+// source bucket plus call/appointment/consult/convert counts. When
+// `from`+`to` are given, the window is exactly that range; otherwise
+// the whole `month` is returned. Returned shape is a flat list of
+// rows so the frontend can render the grid without further math.
 export const getMonthlyAbstract = async (req, res) => {
   const client = await loadClientOr404(req, res);
   if (!client) return;
 
-  // Month input (YYYY-MM) — defaults to current server month.
-  const monthStr = (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month))
-    ? req.query.month
-    : new Date().toISOString().slice(0, 7);
-  const [year, month] = monthStr.split('-').map(Number);
-  const monthStart = new Date(Date.UTC(year, month - 1, 1));
-  const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-  const daysInMonth = monthEnd.getUTCDate();
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  const ym = /^\d{4}-\d{2}$/;
+
+  // Prefer explicit from/to. Fall back to month, then current month.
+  let monthStart;
+  let monthEnd;
+  if (ymd.test(req.query.from || '') && ymd.test(req.query.to || '')) {
+    monthStart = new Date(`${req.query.from}T00:00:00.000Z`);
+    monthEnd = new Date(`${req.query.to}T23:59:59.999Z`);
+    // Guard against a reversed range — swap so the loop below still works.
+    if (monthEnd < monthStart) {
+      const tmp = monthStart; monthStart = monthEnd; monthEnd = tmp;
+    }
+  } else {
+    const monthStr = ym.test(req.query.month || '')
+      ? req.query.month
+      : new Date().toISOString().slice(0, 7);
+    const [year, month] = monthStr.split('-').map(Number);
+    monthStart = new Date(Date.UTC(year, month - 1, 1));
+    monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+  }
+  // Number of days in the requested window — replaces daysInMonth.
+  const daysInMonth = Math.floor((monthEnd - monthStart) / 86400000) + 1;
 
   // Single fetch: every lead created in this month + every follow-up
   // (need their dates for the call/connect breakdown). Same approach
@@ -1857,11 +1907,21 @@ export const getMonthlyAbstract = async (req, res) => {
     convert_value: 0,
   });
 
+  // Walk the range day-by-day so the rows cover the *requested* window
+  // (which may span months when from/to are given) instead of being
+  // glued to a single month index.
+  const isoDate = (d) => {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
   const rows = [];
-  for (let d = 1; d <= daysInMonth; d += 1) {
-    const dateStr = `${monthStr}-${String(d).padStart(2, '0')}`;
+  for (let i = 0; i < daysInMonth; i += 1) {
+    const d = new Date(monthStart);
+    d.setUTCDate(d.getUTCDate() + i);
     const row = blankRow();
-    row.date = dateStr;
+    row.date = isoDate(d);
     rows.push(row);
   }
   const rowByDate = new Map(rows.map((r) => [r.date, r]));
@@ -1965,7 +2025,11 @@ export const getMonthlyAbstract = async (req, res) => {
   });
 
   res.json({
-    month: monthStr,
+    // `month` is preserved for backward compat with the Monthly Abstract
+    // view (it reads YYYY-MM from the range start).
+    month: isoDate(monthStart).slice(0, 7),
+    from: isoDate(monthStart),
+    to: isoDate(monthEnd),
     client_name: client.clientName || '',
     days_in_month: daysInMonth,
     rows,

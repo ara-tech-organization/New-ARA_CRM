@@ -27,6 +27,7 @@ import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
 import MetaLeadsTable from '../components/MetaLeadsTable';
 import TelecallingReport from '../components/TelecallingReport';
 import MonthlyAbstract from '../components/MonthlyAbstract';
+import LeadCheckPanel from '../components/LeadCheckPanel';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -513,6 +514,7 @@ const ClientAdDetails = () => {
             <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
             <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
             <Tab label="EOD Report" sx={{ textTransform: 'none', fontWeight: 600 }} />
+            <Tab label="Lead Check" sx={{ textTransform: 'none', fontWeight: 600 }} />
           </Tabs>
         </Box>
 
@@ -1391,6 +1393,13 @@ const ClientAdDetails = () => {
                 setTab(1);
               }}
             />
+          )}
+
+          {/* LEAD CHECK TAB — day-wise lead counts for this client,
+              with Daily / Weekly / Monthly preset toggle plus a
+              custom from/to range. */}
+          {tab === 3 && (
+            <LeadCheckPanel clientId={clientId} apiInstance={api} />
           )}
         </CardContent>
       </Card>
