@@ -43,23 +43,25 @@ const cleanupOrphanedSyncRuns = async () => {
   try {
     const cutoff = new Date(Date.now() - ZOMBIE_RUN_THRESHOLD_MS);
     const result = await MetaSyncRun.updateMany(
-      { status: 'running', duration_ms: 0, started_at: { $lt: cutoff } },
+      { status: "running", duration_ms: 0, started_at: { $lt: cutoff } },
       {
-        $set: { status: 'failed', ended_at: new Date() },
+        $set: { status: "failed", ended_at: new Date() },
         $push: {
           errors: {
-            stage: 'startup',
-            message: 'orphaned by restart — marked failed at boot',
+            stage: "startup",
+            message: "orphaned by restart — marked failed at boot",
             at: new Date(),
           },
         },
-      }
+      },
     );
     if (result.modifiedCount > 0) {
-      console.log(`[server] cleaned up ${result.modifiedCount} orphaned MetaSyncRun records`);
+      console.log(
+        `[server] cleaned up ${result.modifiedCount} orphaned MetaSyncRun records`,
+      );
     }
   } catch (err) {
-    console.error('[server] orphaned sync-run cleanup failed:', err.message);
+    console.error("[server] orphaned sync-run cleanup failed:", err.message);
   }
 };
 
@@ -67,7 +69,7 @@ connectDB()
   .then(cleanupOrphanedSyncRuns)
   .then(() => startSyncScheduler())
   .catch((err) => {
-    console.error('[server] boot sequence failed:', err);
+    console.error("[server] boot sequence failed:", err);
     process.exit(1);
   });
 
@@ -85,6 +87,7 @@ app.use(
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "https://crm.aradiscoveries.com",
+  "https://leadmatrix.discovertechnologies.co",
   "http://localhost:3000",
 ].filter(Boolean);
 
@@ -128,7 +131,7 @@ app.use(
         req.rawBody = buf;
       }
     },
-  })
+  }),
 );
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -196,7 +199,7 @@ const server = app.listen(PORT, () => {
     ==========================================
     Server is running in ${process.env.NODE_ENV} mode
     Port: ${PORT}
-    API URL: ${process.env.NODE_ENV === 'production' ? 'https://crm.aradiscoveries.com' : `http://localhost:${PORT}`}
+    API URL: ${process.env.NODE_ENV === "production" ? "https://crm.aradiscoveries.com" : `http://localhost:${PORT}`}
     ==========================================
   `);
 });
