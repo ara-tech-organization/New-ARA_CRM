@@ -34,6 +34,7 @@ import {
   Divider,
   Tabs,
   Tab,
+  Autocomplete,
 } from '@mui/material';
 import {
   Add,
@@ -643,31 +644,42 @@ const DailyEntry = () => {
                   fullWidth
                   error={formik.touched.client && Boolean(formik.errors.client)}
                 >
-                  <InputLabel id="client-label">Select Client *</InputLabel>
-                  <Select
-                    labelId="client-label"
+                  {/* Searchable client picker. Stores `client._id` in
+                      Formik's `client` field — same value the old Select
+                      wrote, so validation + submit stay untouched. */}
+                  <Autocomplete
                     id="client"
-                    name="client"
-                    value={formik.values.client}
-                    label="Select Client *"
-                    onChange={formik.handleChange}
-                    onBlur={formik.handleBlur}
-                  >
-                    {clientsLoading ? (
-                      <MenuItem disabled>Loading clients from Main API...</MenuItem>
-                    ) : mainApiClients.length === 0 ? (
-                      <MenuItem disabled>No clients found</MenuItem>
-                    ) : (
-                      mainApiClients.map((client) => (
-                        <MenuItem key={client._id} value={client._id}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {client.name} {client.company ? `(${client.company})` : ''}
-                            <Chip label="Main API" size="small" sx={{ bgcolor: `${primaryColor}15`, color: primaryColor, fontSize: '0.65rem', height: 18 }} />
-                          </Box>
-                        </MenuItem>
-                      ))
+                    fullWidth
+                    value={mainApiClients.find((c) => c._id === formik.values.client) || null}
+                    onChange={(_, opt) => {
+                      formik.setFieldValue('client', opt?._id || '');
+                    }}
+                    onBlur={() => formik.setFieldTouched('client', true)}
+                    options={mainApiClients}
+                    getOptionLabel={(opt) =>
+                      opt?.name
+                        ? `${opt.name}${opt.company ? ` (${opt.company})` : ''}`
+                        : ''
+                    }
+                    isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                    loading={clientsLoading}
+                    loadingText="Loading clients from Main API…"
+                    noOptionsText="No clients found"
+                    renderOption={(props, option) => (
+                      <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {option.name}{option.company ? ` (${option.company})` : ''}
+                        <Chip label="Main API" size="small" sx={{ bgcolor: `${primaryColor}15`, color: primaryColor, fontSize: '0.65rem', height: 18 }} />
+                      </Box>
                     )}
-                  </Select>
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Select Client *"
+                        placeholder="Type to search…"
+                        error={formik.touched.client && Boolean(formik.errors.client)}
+                      />
+                    )}
+                  />
                   {formik.touched.client && formik.errors.client && (
                     <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 2 }}>
                       {formik.errors.client}

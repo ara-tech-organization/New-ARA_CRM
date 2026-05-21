@@ -28,6 +28,7 @@ import {
   Tab,
   ToggleButton,
   ToggleButtonGroup,
+  Autocomplete,
 } from '@mui/material';
 import {
   CalendarToday as CalendarIcon,
@@ -329,34 +330,51 @@ const DailyLeadData = () => {
         <CardContent>
           <Grid container spacing={1.5} alignItems="center">
             <Grid size={{xs: 12, sm: 6, md: 3}}>
-              <FormControl fullWidth>
-                <InputLabel id="client-filter-label">Select Client</InputLabel>
-                <Select
-                  labelId="client-filter-label"
-                  id="client-filter"
-                  value={selectedClient}
-                  label="Select Client"
-                  onChange={handleClientChange}
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <BusinessIcon sx={{ color: primaryColor }} />
-                    </InputAdornment>
-                  }
-                >
-                  <MenuItem value="all">All Clients</MenuItem>
-                  {clientsLoading && clients.length === 0 ? (
-                    <MenuItem disabled>Loading...</MenuItem>
-                  ) : clients.length === 0 ? (
-                    <MenuItem disabled>No clients found</MenuItem>
-                  ) : (
-                    clients.map((client) => (
-                      <MenuItem key={client._id} value={client._id}>
-                        {client.clientName}{client.place ? ` — ${client.place}` : ''}
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-              </FormControl>
+              {/* Searchable client picker — Autocomplete beats Select
+                  once the client list goes past ~10 entries. "All
+                  Clients" sits at the top of the option list as a
+                  sentinel _id of 'all' so the existing handler / URL
+                  param logic doesn't need to change. */}
+              <Autocomplete
+                fullWidth
+                size="medium"
+                disablePortal={false}
+                value={
+                  selectedClient === 'all'
+                    ? { _id: 'all', clientName: 'All Clients', place: '' }
+                    : (clients.find((c) => c._id === selectedClient) || null)
+                }
+                onChange={(_, opt) => {
+                  handleClientChange({ target: { value: opt ? opt._id : 'all' } });
+                }}
+                options={[{ _id: 'all', clientName: 'All Clients', place: '' }, ...clients]}
+                getOptionLabel={(opt) => opt?.clientName
+                  ? `${opt.clientName}${opt.place ? ` — ${opt.place}` : ''}`
+                  : ''}
+                isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                loading={clientsLoading && clients.length === 0}
+                noOptionsText={clientsLoading ? 'Loading…' : 'No clients found'}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Select Client"
+                    placeholder="Type to search…"
+                    slotProps={{
+                      input: {
+                        ...params.InputProps,
+                        startAdornment: (
+                          <>
+                            <InputAdornment position="start" sx={{ ml: 0.5 }}>
+                              <BusinessIcon sx={{ color: primaryColor, fontSize: 20 }} />
+                            </InputAdornment>
+                            {params.InputProps.startAdornment}
+                          </>
+                        ),
+                      },
+                    }}
+                  />
+                )}
+              />
             </Grid>
             <Grid size={{xs: 12, sm: 6, md: 2.5}}>
               <TextField

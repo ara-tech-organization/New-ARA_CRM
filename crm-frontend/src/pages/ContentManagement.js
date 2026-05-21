@@ -32,6 +32,7 @@ import {
   ListItemText,
   ListItemIcon,
   Divider,
+  Autocomplete,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -1128,12 +1129,22 @@ const ContentManagement = () => {
                               <TextField type="date" name="date" size="small" value={inlineFormData.date} onChange={handleInlineFormChange} onKeyDown={handleInlineKeyDown} sx={{ ...inlineCellSx, minWidth: 120 }} InputLabelProps={{ shrink: true }} />
                             </TableCell>
                             <TableCell>
-                              <TextField select name="clientName" size="small" value={inlineFormData.clientName} onChange={handleInlineFormChange} onKeyDown={handleInlineKeyDown} sx={{ ...inlineCellSx, minWidth: 120 }} SelectProps={{ displayEmpty: true }}>
-                                <MenuItem value="" disabled><em>Client...</em></MenuItem>
-                                {clients.map((c) => (
-                                  <MenuItem key={c._id} value={c.clientName}>{c.clientName}</MenuItem>
-                                ))}
-                              </TextField>
+                              {/* Searchable inline client picker. The
+                                  underlying inlineFormData.clientName
+                                  string state is unchanged so the row's
+                                  save handler keeps working. */}
+                              <Autocomplete
+                                size="small"
+                                value={clients.find((c) => c.clientName === inlineFormData.clientName) || null}
+                                onChange={(_, opt) => handleInlineFormChange({ target: { name: 'clientName', value: opt?.clientName || '' } })}
+                                options={clients}
+                                getOptionLabel={(opt) => opt?.clientName || ''}
+                                isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                                sx={{ ...inlineCellSx, minWidth: 140 }}
+                                renderInput={(params) => (
+                                  <TextField {...params} placeholder="Client..." onKeyDown={handleInlineKeyDown} />
+                                )}
+                              />
                             </TableCell>
                             <TableCell>
                               <TextField select name="contentType" size="small" value={inlineFormData.contentType} onChange={handleInlineFormChange} onKeyDown={handleInlineKeyDown} sx={{ ...inlineCellSx, minWidth: 90 }} SelectProps={{ displayEmpty: true }}>
@@ -1330,12 +1341,20 @@ const ContentManagement = () => {
                             <TextField type="date" name="date" size="small" value={inlineFormData.date} onChange={handleInlineFormChange} onKeyDown={handleInlineKeyDown} sx={{ ...inlineCellSx, minWidth: 120 }} InputLabelProps={{ shrink: true }} />
                           </TableCell>
                           <TableCell>
-                            <TextField select name="clientName" size="small" value={inlineFormData.clientName} onChange={handleInlineFormChange} onKeyDown={handleInlineKeyDown} sx={{ ...inlineCellSx, minWidth: 120 }} SelectProps={{ displayEmpty: true }} InputProps={{ placeholder: 'Client' }}>
-                              <MenuItem value="" disabled><em>Client...</em></MenuItem>
-                              {clients.map((c) => (
-                                <MenuItem key={c._id} value={c.clientName}>{c.clientName}</MenuItem>
-                              ))}
-                            </TextField>
+                            {/* Searchable client picker for the second
+                                inline editor (mirrors the first one). */}
+                            <Autocomplete
+                              size="small"
+                              value={clients.find((c) => c.clientName === inlineFormData.clientName) || null}
+                              onChange={(_, opt) => handleInlineFormChange({ target: { name: 'clientName', value: opt?.clientName || '' } })}
+                              options={clients}
+                              getOptionLabel={(opt) => opt?.clientName || ''}
+                              isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                              sx={{ ...inlineCellSx, minWidth: 140 }}
+                              renderInput={(params) => (
+                                <TextField {...params} placeholder="Client..." onKeyDown={handleInlineKeyDown} />
+                              )}
+                            />
                           </TableCell>
                           <TableCell>
                             <TextField select name="contentType" size="small" value={inlineFormData.contentType} onChange={handleInlineFormChange} onKeyDown={handleInlineKeyDown} sx={{ ...inlineCellSx, minWidth: 90 }} SelectProps={{ displayEmpty: true }}>
@@ -1454,18 +1473,25 @@ const ContentManagement = () => {
                 </IconButton>
               </Box>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <TextField
-                  select
+                {/* Searchable calendar client picker — keeps both
+                    calendarClient and filterClient in sync the same
+                    way the old onChange did. */}
+                <Autocomplete
                   size="small"
-                  value={calendarClient}
-                  onChange={(e) => { setCalendarClient(e.target.value); setFilterClient(e.target.value); }}
-                  sx={{ minWidth: 180, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem' } }}
-                  SelectProps={{ displayEmpty: true }}
-                >
-                  {teamClients.map((c) => (
-                    <MenuItem key={c._id} value={c.clientName}>{c.clientName}</MenuItem>
-                  ))}
-                </TextField>
+                  value={teamClients.find((c) => c.clientName === calendarClient) || null}
+                  onChange={(_, opt) => {
+                    const v = opt?.clientName || '';
+                    setCalendarClient(v);
+                    setFilterClient(v);
+                  }}
+                  options={teamClients}
+                  getOptionLabel={(opt) => opt?.clientName || ''}
+                  isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                  sx={{ minWidth: 200, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem' } }}
+                  renderInput={(params) => (
+                    <TextField {...params} placeholder="Search client…" />
+                  )}
+                />
                 <Button
                   variant="outlined"
                   size="small"
@@ -1673,21 +1699,20 @@ const ContentManagement = () => {
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
+              {/* Searchable client picker for the Add/Edit dialog.
+                  Pushes the picked name back into formData.clientName
+                  via the same handleFormChange shape Select used. */}
+              <Autocomplete
                 fullWidth
-                select
-                label="Client Name"
-                name="clientName"
-                value={formData.clientName}
-                onChange={handleFormChange}
-                required
-              >
-                {clients.map((c) => (
-                  <MenuItem key={c._id} value={c.clientName}>
-                    {c.clientName}
-                  </MenuItem>
-                ))}
-              </TextField>
+                value={clients.find((c) => c.clientName === formData.clientName) || null}
+                onChange={(_, opt) => handleFormChange({ target: { name: 'clientName', value: opt?.clientName || '' } })}
+                options={clients}
+                getOptionLabel={(opt) => opt?.clientName || ''}
+                isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                renderInput={(params) => (
+                  <TextField {...params} label="Client Name" placeholder="Type to search…" required />
+                )}
+              />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField

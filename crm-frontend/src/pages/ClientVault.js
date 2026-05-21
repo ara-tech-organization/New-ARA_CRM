@@ -27,6 +27,7 @@ import {
   Paper,
   CircularProgress,
   Snackbar,
+  Autocomplete,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -395,20 +396,26 @@ const ClientVault = () => {
               />
             </Grid>
             <Grid size={{xs: 12, sm: 6, md: 4}}>
-              <TextField
+              {/* Searchable client filter — selectedClient stores the
+                  client's NAME ('All' or client.name) to preserve the
+                  existing filter predicate. */}
+              <Autocomplete
                 fullWidth
-                select
-                label="Filter by Client"
-                value={selectedClient}
-                onChange={(e) => setSelectedClient(e.target.value)}
-              >
-                <MenuItem value="All">All Clients</MenuItem>
-                {clients.map((client) => (
-                  <MenuItem key={client._id} value={client.name}>
-                    {client.name}
-                  </MenuItem>
-                ))}
-              </TextField>
+                value={
+                  selectedClient === 'All'
+                    ? { _id: 'all', name: 'All Clients' }
+                    : (clients.find((c) => c.name === selectedClient) || null)
+                }
+                onChange={(_, opt) => {
+                  setSelectedClient(opt?._id === 'all' || !opt ? 'All' : opt.name);
+                }}
+                options={[{ _id: 'all', name: 'All Clients' }, ...clients]}
+                getOptionLabel={(opt) => opt?.name || ''}
+                isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                renderInput={(params) => (
+                  <TextField {...params} label="Filter by Client" placeholder="Type to search…" />
+                )}
+              />
             </Grid>
             <Grid size={{xs: 12, sm: 12, md: 3}}>
               <Stack direction="row" spacing={1}>
@@ -683,13 +690,22 @@ const ClientVault = () => {
                   value={formData.clientId}
                   onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
                   required
-                >
-                  {clients.map((client) => (
-                    <MenuItem key={client._id} value={client._id}>
-                      {client.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                  sx={{ display: 'none' }}
+                />
+                {/* Searchable client picker for the Add/Edit form.
+                    Wraps the existing formData.clientId state — same
+                    string id, same submit shape. */}
+                <Autocomplete
+                  fullWidth
+                  value={clients.find((c) => c._id === formData.clientId) || null}
+                  onChange={(_, opt) => setFormData({ ...formData, clientId: opt?._id || '' })}
+                  options={clients}
+                  getOptionLabel={(opt) => opt?.name || ''}
+                  isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Client" placeholder="Type to search…" required />
+                  )}
+                />
               </Grid>
 
               <Grid size={{xs: 12}}>

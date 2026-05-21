@@ -665,7 +665,7 @@ const MainLayout = () => {
                 hidden from everyone else to keep the bar uncluttered. */}
             {(isAdmin || isSuperAdmin) && (
               <>
-                <Tooltip title="ARA Apps">
+                <Tooltip title="ARA SaaS">
                   <IconButton
                     onClick={(e) => setAppsAnchorEl(e.currentTarget)}
                     sx={{
