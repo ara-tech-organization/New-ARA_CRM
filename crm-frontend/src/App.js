@@ -1,7 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { loadUserFromStorage } from './store/slices/authSlice';
+import LeadMatrixLoader from './components/LeadMatrixLoader';
+import OfflineScreen from './components/OfflineScreen';
 import ProtectedRoute from './utils/ProtectedRoute';
 import MainLayout from './layouts/MainLayout';
 import Login from './pages/Login';
@@ -33,9 +35,35 @@ import { DataCacheProvider } from './contexts/DataCacheContext';
 function App() {
   const dispatch = useDispatch();
 
+  // Show the brand loader for ~700ms on first paint. Long enough for
+  // the bundle + session hydration to settle so the first frame the
+  // user sees isn't a half-rendered shell, short enough that it never
+  // feels gratuitous. Tune by editing the timeout below.
+  const [booting, setBooting] = useState(true);
+  // Track browser online/offline state. We trust navigator.onLine for
+  // the initial value and listen for the two window events to flip.
+  const [online, setOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+
   useEffect(() => {
     dispatch(loadUserFromStorage());
+    const t = setTimeout(() => setBooting(false), 700);
+    return () => clearTimeout(t);
   }, [dispatch]);
+
+  useEffect(() => {
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  if (booting) return <LeadMatrixLoader />;
 
   return (
     <Router>
@@ -83,6 +111,10 @@ function App() {
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+      {/* Network curtain — sits above every route so it covers both
+          agency and client portal surfaces when the browser drops
+          its connection. Auto-dismisses when `online` flips back. */}
+      {!online && <OfflineScreen />}
     </Router>
   );
 }

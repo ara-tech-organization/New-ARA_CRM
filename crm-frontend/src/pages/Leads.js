@@ -221,7 +221,7 @@ const Leads = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
             <LeaderboardIcon sx={{ fontSize: 22, color: primaryColor }} />
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Total Leads
+              Total Leads <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>(Meta)</Box>
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary">

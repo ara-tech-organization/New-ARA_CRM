@@ -7,7 +7,6 @@ import {
 } from '@mui/material';
 import {
   Facebook, Google, People, Refresh as RefreshIcon,
-  TrendingUp as TrendingUpIcon, Circle as CircleIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
 import api from '../api/axios';
@@ -15,33 +14,10 @@ import { PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useDataCache } from '../contexts/DataCacheContext';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell,
+  Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
 const CLIENT_COLORS = ['#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723'];
-
-// --- Custom Tooltip (shows full client name from payload) ---
-const GlassTooltip = ({ active, payload }) => {
-  if (!active || !payload?.length) return null;
-  // Get the full client name from the data payload
-  const fullName = payload[0]?.payload?.name || '';
-  return (
-    <Box sx={{ bgcolor: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(16px)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 2, px: 1.5, py: 1, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 160 }}>
-      <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, mb: 0.5, color: 'text.primary' }}>{fullName}</Typography>
-      {payload.map((entry, i) => (
-        <Box key={i} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 0.3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <CircleIcon sx={{ fontSize: 8, color: entry.color }} />
-            <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{entry.name}</Typography>
-          </Box>
-          <Typography sx={{ fontSize: '0.82rem', fontWeight: 700 }}>
-            {typeof entry.value === 'number' && entry.name?.includes('Fund') ? `₹${entry.value.toLocaleString()}` : entry.value}
-          </Typography>
-        </Box>
-      ))}
-    </Box>
-  );
-};
 
 // --- Client Performance Card — clickable, navigates to client ads detail page ---
 const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, adsLoading, metaLoading }) => {
@@ -314,35 +290,67 @@ const Dashboard = () => {
 
   const emptyData = { metaForm: 0, metaWhatsapp: 0, metaFund: 0, metaCPL: 0, googleCall: 0, googleWebsite: 0, googleFund: 0, googleCPL: 0 };
 
-  // Aggregated totals
-  const totals = useMemo(() => {
-    const t = { metaForm: 0, metaWhatsapp: 0, metaFund: 0, googleCall: 0, googleWebsite: 0, googleFund: 0 };
-    dateLeads.forEach(l => {
-      t.metaForm += l.metaFormLead || 0;
-      t.metaWhatsapp += l.metaWhatsappLead || 0;
-      t.metaFund += l.metaFund || 0;
-      t.googleCall += l.googleCallLead || 0;
-      t.googleWebsite += l.googleWebsiteLead || 0;
-      t.googleFund += l.googleFund || 0;
-    });
-    t.metaLeads = t.metaForm + t.metaWhatsapp;
-    t.googleLeads = t.googleCall + t.googleWebsite;
-    t.totalLeads = t.metaLeads + t.googleLeads;
-    t.totalSpend = t.metaFund + t.googleFund;
-    return t;
-  }, [dateLeads]);
+  // Aggregated totals removed — used to drive the per-platform KPI
+  // strip. The two per-client pie charts below carry that breakdown
+  // now, so the rollup is unnecessary.
 
-  // Bar chart — clients with data
-  const clientBarData = useMemo(() => {
-    return clients.map(c => {
+  // Client mix — used to fill the Total/Active KPI cards with the
+  // breakdown of who is connected to which platform.
+  const clientMix = useMemo(() => {
+    const metaCount = clients.filter(c => c.metaEnabled).length;
+    const googleCount = clients.filter(c => c.googleAdsEnabled).length;
+    const bothCount = clients.filter(c => c.metaEnabled && c.googleAdsEnabled).length;
+    return { metaCount, googleCount, bothCount };
+  }, [clients]);
+
+  // Per-platform pie data — one slice per client whose platform-specific
+  // lead count is > 0. Sorted descending so the largest slice anchors
+  // the top-right and the labels read nicely. We use a copper-brown
+  // alternating palette so the slices feel on-brand rather than
+  // generic Recharts default colours.
+  const PIE_COLORS = ['#C08552', '#8B1F2F', '#3E2723', '#A0522D', '#D2691E', '#7B3F00', '#B87333', '#5D4037', '#6F4E37', '#996633'];
+
+  // Same fallback chain ClientCard uses: prefer live API counts, then
+  // fall back to the DailyEntry tracking docs in dateByClient. Without
+  // this the pies would always show 0 on days no one filled in a
+  // DailyEntry, even though Meta itself returned leads.
+  const metaPieData = useMemo(() => {
+    return clients.map((c) => {
+      const api = metaDataMap[c._id];
       const d = dateByClient[c._id] || emptyData;
-      const meta = (d.metaForm || 0) + (d.metaWhatsapp || 0);
-      const google = (d.googleCall || 0) + (d.googleWebsite || 0);
-      // Short label for X-axis, full name for tooltip
-      const short = c.name?.length > 12 ? c.name.substring(0, 12) + '…' : c.name;
-      return { name: c.name, short, meta, google, total: meta + google };
-    }).filter(d => d.total > 0).sort((a, b) => b.total - a.total);
-  }, [clients, dateByClient]);
+      const value = api?.total_leads != null
+        ? Number(api.total_leads) || 0
+        : (api?.form_leads != null || api?.whatsapp_leads != null)
+          ? (Number(api?.form_leads) || 0) + (Number(api?.whatsapp_leads) || 0)
+          : (d.metaForm || 0) + (d.metaWhatsapp || 0);
+      return { name: c.name, value };
+    }).filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients, dateByClient, metaDataMap]);
+
+  const googlePieData = useMemo(() => {
+    return clients.map((c) => {
+      const ads = adsDataMap[c._id];
+      const d = dateByClient[c._id] || emptyData;
+      // /analytics/clients returns totalClicks/totalImpressions/totalCost
+      // but NOT a "leads" field for Google — conversions are exposed
+      // as totalConversions when tracking is set up. Fall through the
+      // chain: explicit totalConversions → conversions → total_leads
+      // → DailyEntry tracking (call + website lead counts).
+      const apiVal = ads?.totalConversions != null
+        ? Number(ads.totalConversions) || 0
+        : ads?.conversions != null
+          ? Number(ads.conversions) || 0
+          : ads?.total_leads != null
+            ? Number(ads.total_leads) || 0
+            : null;
+      const value = apiVal != null
+        ? apiVal
+        : (d.googleCall || 0) + (d.googleWebsite || 0);
+      return { name: c.name, value };
+    }).filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients, dateByClient, adsDataMap]);
 
   // Top clients for table
   const topClients = useMemo(() => {
@@ -394,56 +402,201 @@ const Dashboard = () => {
         </Box>
       </Box>
 
-      {/* ── Row 1: Summary Stats ── */}
+      {/* ── Row 1: Headline KPIs (big cards) — Total Clients, Active
+          Clients, Total Leads. Per-platform totals and spend used to
+          live here as small cards but were dropped; the charts below
+          already show the Meta vs Google split per client, so a flat
+          "Meta Leads: N / Google Leads: N / Spend ₹" row was just
+          repeating the same info less usefully. */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {[
-          { label: 'Total Clients', value: clients.length, color: tealAccent, icon: <People /> },
-          { label: 'Active Clients', value: activeClients, color: '#10b981', icon: <People /> },
-          { label: 'Total Leads', value: totals.totalLeads, color: tealAccent, icon: <TrendingUpIcon /> },
-          { label: 'Meta Leads', value: totals.metaLeads, color: '#C08552', icon: <Facebook /> },
-          { label: 'Google Leads', value: totals.googleLeads, color: '#3E2723', icon: <Google /> },
-          { label: 'Total Spend', value: `₹${totals.totalSpend.toLocaleString()}`, color: '#C08552', icon: <TrendingUpIcon /> },
-        ].map((s, i) => (
-          <Grid key={i} size={{ xs: 6, sm: 4, md: 2 }}>
-            <Card variant="outlined" sx={{ height: '100%', borderLeft: `3px solid ${s.color}` }}>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {React.cloneElement(s.icon, { sx: { color: s.color, fontSize: 20 } })}
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <Card variant="outlined" sx={{ borderLeft: `4px solid ${tealAccent}`, height: '100%' }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+              <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: `${tealAccent}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <People sx={{ color: tealAccent, fontSize: 30 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Total Clients
+                </Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', color: tealAccent, lineHeight: 1.1 }}>
+                  {clients.length}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1.2, mt: 0.5, flexWrap: 'wrap' }}>
+                  <Chip size="small" icon={<Facebook sx={{ fontSize: 13, color: '#C08552 !important' }} />} label={`Meta: ${clientMix.metaCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#C0855215', color: '#C08552', fontWeight: 600 }} />
+                  <Chip size="small" icon={<Google sx={{ fontSize: 13, color: '#3E2723 !important' }} />} label={`Google: ${clientMix.googleCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600 }} />
+                  <Chip size="small" label={`Both: ${clientMix.bothCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: `${tealAccent}15`, color: tealAccent, fontWeight: 600 }} />
                 </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
-                  <Typography sx={{ fontWeight: 700, fontSize: '1.3rem', color: s.color, lineHeight: 1.2 }}>{s.value}</Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <Card variant="outlined" sx={{ borderLeft: `4px solid #10b981`, height: '100%' }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+              <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: '#10b98115', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <People sx={{ color: '#10b981', fontSize: 30 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Active Clients
+                </Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', color: '#10b981', lineHeight: 1.1 }}>
+                  {activeClients}
+                </Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.5 }}>
+                  {clients.length > 0 ? `${Math.round((activeClients / clients.length) * 100)}% of total · ${clients.length - activeClients} inactive` : 'No clients yet'}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
-      {/* ── Row 2: Client Leads Bar Chart (full width) ── */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography sx={{ fontWeight: 600, fontSize: '0.92rem', mb: 0.5 }}>Client Leads — Meta vs Google</Typography>
-          <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mb: 1 }}>Today's performance by client</Typography>
-          {clientBarData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={clientBarData} barGap={4} barSize={22} margin={{ left: 0, right: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
-                <XAxis dataKey="short" tick={{ fontSize: 10.5 }} tickLine={false} axisLine={false} angle={-40} textAnchor="end" height={80} interval={0} />
-                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
-                <RechartsTooltip content={<GlassTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
-                <Legend wrapperStyle={{ fontSize: '0.85rem', paddingTop: 4 }} />
-                <Bar dataKey="meta" name="Meta Leads" fill="#C08552" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="google" name="Google Leads" fill="#3E2723" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <Box sx={{ py: 6, textAlign: 'center' }}>
-              <Typography sx={{ color: 'text.secondary' }}>No leads data today</Typography>
-            </Box>
-          )}
-        </CardContent>
-      </Card>
+      {/* ── Row 2: Per-platform donuts — Meta + Google, one slice per
+          client. Layout: clean donut on the left with the total in the
+          centre, ranked client list on the right (color dot, name,
+          count, percentage). Old on-pie labels were unreadable with
+          15+ clients; this layout scales cleanly. */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {[
+          {
+            key: 'meta',
+            title: 'Meta Leads by Client',
+            sub: "Today's Meta leads split per client",
+            data: metaPieData,
+            icon: <Facebook sx={{ fontSize: 16, color: '#C08552' }} />,
+            empty: 'No Meta leads today',
+          },
+          {
+            key: 'google',
+            title: 'Google Leads by Client',
+            sub: "Today's Google leads split per client",
+            data: googlePieData,
+            icon: <Google sx={{ fontSize: 16, color: '#3E2723' }} />,
+            // Google leads aren't pulled live the way Meta forms are —
+            // they come from either the Google Ads `totalConversions`
+            // field (needs conversion tracking) or the Daily Entry
+            // form (Google Call + Google Website). When both are
+            // empty the pie has nothing to draw, so be explicit about
+            // where the user would add data.
+            empty: 'No Google leads tracked today — add via Daily Entry or set up Google Ads conversion tracking',
+          },
+        ].map((p) => {
+          const total = p.data.reduce((s, x) => s + x.value, 0);
+          return (
+            <Grid key={p.key} size={{ xs: 12, lg: 6 }}>
+              <Card sx={{ height: '100%' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3 }}>
+                    {p.icon}
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.92rem' }}>{p.title}</Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mb: 1.5 }}>
+                    {p.sub} · <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{total} total</Box>
+                  </Typography>
+                  {p.data.length > 0 ? (
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+                      {/* Donut — fixed-width column so the right-side
+                          list always has room to breathe. */}
+                      <Box sx={{ position: 'relative', width: 220, height: 220, flexShrink: 0, mx: { xs: 'auto', sm: 0 } }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={p.data}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={62}
+                              outerRadius={100}
+                              paddingAngle={2}
+                              stroke="none"
+                            >
+                              {p.data.map((_, i) => (
+                                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip
+                              formatter={(v, n) => [`${v} lead${v === 1 ? '' : 's'}`, n]}
+                              contentStyle={{ borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 6px 18px rgba(0,0,0,0.12)', fontSize: '0.82rem' }}
+                              // wrapperStyle lifts the tooltip above the absolutely-
+                              // positioned center label below; without it the donut
+                              // total ("58 LEADS") sits on top of the tooltip.
+                              wrapperStyle={{ zIndex: 20 }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        {/* Centre label — total leads, big and bold.
+                            z-index: 1 sits above the SVG fill but below
+                            the tooltip (wrapperStyle z-index 20). */}
+                        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 1 }}>
+                          <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', lineHeight: 1, color: 'text.primary' }}>
+                            {total}
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5, mt: 0.3 }}>
+                            leads
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      {/* Ranked client list — color dot, name (truncated),
+                          count, % of total. Scrolls vertically when there
+                          are more than ~8 clients so the card height stays
+                          fixed. */}
+                      <Box sx={{ flex: 1, minWidth: 0, maxHeight: 220, overflowY: 'auto', pr: 0.5 }}>
+                        {p.data.map((row, i) => {
+                          const pct = total > 0 ? (row.value / total) * 100 : 0;
+                          const color = PIE_COLORS[i % PIE_COLORS.length];
+                          return (
+                            <Box
+                              key={row.name}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1.2,
+                                py: 0.6,
+                                borderBottom: i === p.data.length - 1 ? 'none' : '1px solid',
+                                borderColor: 'divider',
+                              }}
+                            >
+                              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+                              <Typography
+                                sx={{
+                                  flex: 1, minWidth: 0,
+                                  fontSize: '0.78rem',
+                                  fontWeight: 500,
+                                  color: 'text.primary',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                                title={row.name}
+                              >
+                                {row.name}
+                              </Typography>
+                              <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: 'text.primary', minWidth: 28, textAlign: 'right' }}>
+                                {row.value}
+                              </Typography>
+                              <Typography sx={{ fontWeight: 600, fontSize: '0.7rem', color: 'text.secondary', minWidth: 42, textAlign: 'right' }}>
+                                {pct.toFixed(1)}%
+                              </Typography>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  ) : (
+                    <Box sx={{ py: 6, textAlign: 'center' }}>
+                      <Typography sx={{ color: 'text.secondary' }}>{p.empty}</Typography>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          );
+        })}
+      </Grid>
 
       {/* ── Row 3: Client Performance Cards ── */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>

@@ -290,7 +290,7 @@ const DailyLeadData = () => {
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Daily Lead Data
+              Daily Lead Data <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>(Meta)</Box>
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary">

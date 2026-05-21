@@ -56,7 +56,27 @@ import {
   Lock as LockIcon,
   Article as ArticleIcon,
   ManageAccounts as ManageAccountsIcon,
+  Apps as AppsIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
+
+// Sibling ARA apps the agency uses alongside this CRM. The "Apps"
+// launcher in the top bar opens these in a new tab — keeps the CRM
+// session intact so users can flip between tools. Admin only.
+const ARA_APPS = [
+  {
+    key: 'social',
+    label: 'ARA Social',
+    description: 'Social media planner and scheduler',
+    url: 'https://arasocial.discovertechnologies.co/',
+  },
+  {
+    key: 'projects',
+    label: 'ARA Projects',
+    description: 'Internal project tracker',
+    url: 'https://araprojects.discovertechnologies.co/',
+  },
+];
 
 // Map routes to permission IDs for access control
 const routePermissions = {
@@ -88,6 +108,7 @@ const MainLayout = () => {
   const { user } = useSelector((state) => state.auth);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [appsAnchorEl, setAppsAnchorEl] = useState(null);     // ARA Apps launcher
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -639,6 +660,71 @@ const MainLayout = () => {
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* ARA Apps launcher — opens sibling apps in a new tab so
+                the CRM session is preserved. Admins + superadmins only;
+                hidden from everyone else to keep the bar uncluttered. */}
+            {(isAdmin || isSuperAdmin) && (
+              <>
+                <Tooltip title="ARA Apps">
+                  <IconButton
+                    onClick={(e) => setAppsAnchorEl(e.currentTarget)}
+                    sx={{
+                      color: 'text.primary',
+                      bgcolor: isDarkMode ? `${primaryColor}20` : `${primaryColor}12`,
+                      '&:hover': {
+                        bgcolor: isDarkMode ? `${primaryColor}35` : `${primaryColor}20`,
+                      },
+                    }}
+                  >
+                    <AppsIcon />
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  anchorEl={appsAnchorEl}
+                  open={Boolean(appsAnchorEl)}
+                  onClose={() => setAppsAnchorEl(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  PaperProps={{ sx: { mt: 1, minWidth: 240 } }}
+                >
+                  <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      ARA Apps
+                    </Typography>
+                  </Box>
+                  {ARA_APPS.map((app) => (
+                    <MenuItem
+                      key={app.key}
+                      component="a"
+                      href={app.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setAppsAnchorEl(null)}
+                      sx={{ py: 1.2, display: 'flex', alignItems: 'center', gap: 1.5 }}
+                    >
+                      <Box sx={{
+                        width: 32, height: 32, borderRadius: 1,
+                        bgcolor: `${primaryColor}15`, color: primaryColor,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 800, fontSize: '0.78rem', flexShrink: 0,
+                      }}>
+                        {app.label.split(' ').map((s) => s[0]).join('').slice(0, 2)}
+                      </Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.86rem', lineHeight: 1.1 }}>
+                          {app.label}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                          {app.description}
+                        </Typography>
+                      </Box>
+                      <OpenInNewIcon sx={{ fontSize: 14, color: 'text.secondary', flexShrink: 0 }} />
+                    </MenuItem>
+                  ))}
+                </Menu>
+              </>
+            )}
+
             <Tooltip title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
               <IconButton
                 onClick={toggleTheme}

@@ -512,7 +512,15 @@ const ClientAdDetails = () => {
           <Tabs value={tab} onChange={(e, v) => setTab(v)}
             sx={{ px: 2, '& .MuiTabs-indicator': { bgcolor: currentColor, height: 3 }, '& .Mui-selected': { color: `${currentColor} !important` } }}>
             <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
-            <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+            {/* Label = the connected Facebook Page name when we have it,
+                falling back to "Meta Ads" before sync / when no page is
+                linked. Icon stays so the platform is still recognisable. */}
+            <Tab
+              icon={<FacebookIcon sx={{ fontSize: 18 }} />}
+              iconPosition="start"
+              label={client?.meta_pages?.[0]?.page_name || 'Meta Ads'}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            />
             <Tab label="EOD Report" sx={{ textTransform: 'none', fontWeight: 600 }} />
             <Tab label="Lead Check" sx={{ textTransform: 'none', fontWeight: 600 }} />
           </Tabs>
