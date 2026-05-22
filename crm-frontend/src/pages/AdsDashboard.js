@@ -19,6 +19,11 @@ import {
   BarChart, Bar, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   Legend, ResponsiveContainer, PieChart, Pie, Cell, RadialBarChart, RadialBar,
 } from 'recharts';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { enGB } from 'date-fns/locale';
+import { format as fmtDateFn, parseISO, isValid as isValidDate } from 'date-fns';
 
 const COPPER = '#C08552';
 const BROWN = '#3E2723';
@@ -219,6 +224,7 @@ const AdsDashboard = () => {
   const currentIcon = tab === 0 ? <GoogleIcon sx={{ fontSize: 28, color: GOOGLE_GREEN }} /> : <FacebookIcon sx={{ fontSize: 28, color: META_BLUE }} />;
 
   return (
+    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enGB}>
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
@@ -265,8 +271,20 @@ const AdsDashboard = () => {
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
           <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.secondary' }}>Date Range:</Typography>
-          <TextField type="date" size="small" label="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} />
-          <TextField type="date" size="small" label="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} />
+          <DatePicker
+            label="From"
+            value={dateFrom ? parseISO(dateFrom) : null}
+            onChange={(d) => { if (d && isValidDate(d)) setDateFrom(fmtDateFn(d, 'yyyy-MM-dd')); }}
+            format="dd/MM/yyyy"
+            slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
+          />
+          <DatePicker
+            label="To"
+            value={dateTo ? parseISO(dateTo) : null}
+            onChange={(d) => { if (d && isValidDate(d)) setDateTo(fmtDateFn(d, 'yyyy-MM-dd')); }}
+            format="dd/MM/yyyy"
+            slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
+          />
           <Box sx={{ display: 'flex', gap: 0.8 }}>
             <Button size="small" variant="outlined" onClick={() => { const d = new Date().toISOString().split('T')[0]; setDateFrom(d); setDateTo(d); }}>Today</Button>
             <Button size="small" variant="outlined" onClick={() => { const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 6); setDateFrom(from.toISOString().split('T')[0]); setDateTo(to.toISOString().split('T')[0]); }}>Last 7 Days</Button>
@@ -444,8 +462,20 @@ const AdsDashboard = () => {
           <Card variant="outlined" sx={{ mb: 2 }}>
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
               <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.secondary' }}>Date Range:</Typography>
-              <TextField type="date" size="small" label="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} />
-              <TextField type="date" size="small" label="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} sx={{ minWidth: 160 }} />
+              <DatePicker
+                label="From"
+                value={dateFrom ? parseISO(dateFrom) : null}
+                onChange={(d) => { if (d && isValidDate(d)) setDateFrom(fmtDateFn(d, 'yyyy-MM-dd')); }}
+                format="dd/MM/yyyy"
+                slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
+              />
+              <DatePicker
+                label="To"
+                value={dateTo ? parseISO(dateTo) : null}
+                onChange={(d) => { if (d && isValidDate(d)) setDateTo(fmtDateFn(d, 'yyyy-MM-dd')); }}
+                format="dd/MM/yyyy"
+                slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
+              />
               <Box sx={{ display: 'flex', gap: 0.8 }}>
                 <Button size="small" variant="outlined" onClick={() => { const d = new Date().toISOString().split('T')[0]; setDateFrom(d); setDateTo(d); }}>Today</Button>
                 <Button size="small" variant="outlined" onClick={() => { const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 6); setDateFrom(from.toISOString().split('T')[0]); setDateTo(to.toISOString().split('T')[0]); }}>Last 7 Days</Button>
@@ -577,6 +607,7 @@ const AdsDashboard = () => {
         </>
       )}
     </Box>
+    </LocalizationProvider>
   );
 };
 

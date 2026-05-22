@@ -216,6 +216,80 @@ export const deleteClient = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Drop (soft-delete) a client — keeps the row + every related
+ *          record so re-onboarding restores the full history.
+ * @route   PATCH /api/clients/:id/drop
+ * @access  Private
+ *
+ * Body: { reason: string }   (required)
+ */
+export const dropClient = asyncHandler(async (req, res) => {
+  const reason = (req.body?.reason || '').trim();
+  if (!reason) {
+    return res.status(400).json({ success: false, message: 'A reason is required to drop a client' });
+  }
+  const client = await Client.findById(req.params.id);
+  if (!client) {
+    return res.status(404).json({ success: false, message: 'Client not found' });
+  }
+  if (client.status === 'dropped') {
+    return res.status(400).json({ success: false, message: 'Client is already dropped' });
+  }
+
+  const at = new Date();
+  const by = req.user?.name || req.user?.email || '';
+  client.status = 'dropped';
+  client.drop_reason = reason;
+  client.dropped_at = at;
+  client.dropped_by = by;
+  // Reset reonboarded_at — it'll be set fresh on the next reactivate.
+  client.reonboarded_at = null;
+  if (!Array.isArray(client.drop_history)) client.drop_history = [];
+  client.drop_history.push({ action: 'dropped', reason, at, by });
+  await client.save();
+
+  res.json({
+    success: true,
+    message: `${client.clientName} dropped successfully`,
+    data: client,
+  });
+});
+
+/**
+ * @desc    Re-onboard a previously dropped client. Flips status back
+ *          to 'active' and appends a reonboard event to the history.
+ *          All related records (leads, daily entries, funds, content,
+ *          vault) are untouched because drop never deleted them.
+ * @route   PATCH /api/clients/:id/reonboard
+ * @access  Private
+ */
+export const reonboardClient = asyncHandler(async (req, res) => {
+  const client = await Client.findById(req.params.id);
+  if (!client) {
+    return res.status(404).json({ success: false, message: 'Client not found' });
+  }
+  if (client.status !== 'dropped') {
+    return res.status(400).json({ success: false, message: 'Client is not currently dropped' });
+  }
+
+  const at = new Date();
+  const by = req.user?.name || req.user?.email || '';
+  client.status = 'active';
+  client.reonboarded_at = at;
+  // Keep drop_reason / dropped_at so the past event is still queryable;
+  // the history array holds the full timeline.
+  if (!Array.isArray(client.drop_history)) client.drop_history = [];
+  client.drop_history.push({ action: 'reonboarded', reason: '', at, by });
+  await client.save();
+
+  res.json({
+    success: true,
+    message: `${client.clientName} re-onboarded successfully`,
+    data: client,
+  });
+});
+
+/**
  * @desc    Update client status
  * @route   PATCH /api/clients/:id/status
  * @access  Private

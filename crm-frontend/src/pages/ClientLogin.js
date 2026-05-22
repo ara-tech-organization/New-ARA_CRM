@@ -106,7 +106,7 @@ const ClientLogin = () => {
             />
           </Box>
 
-          <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '1.8rem', mb: 0.5 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '1.8rem', mb: 0.5 }}>
             Welcome
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>

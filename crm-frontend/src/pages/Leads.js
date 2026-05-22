@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ThemeContext } from '../contexts/ThemeContext';
 import {
@@ -19,6 +19,9 @@ import {
   Paper,
   Tabs,
   Tab,
+  TextField,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
 import {
   PictureAsPdf as PdfIcon,
@@ -26,6 +29,8 @@ import {
   Refresh as RefreshIcon,
   Leaderboard as LeaderboardIcon,
   CalendarMonth as CalendarMonthIcon,
+  Search as SearchIcon,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
 import { PageLoader } from '../components/Loading';
 import api from '../api/axios';
@@ -37,22 +42,35 @@ const Leads = () => {
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [selectedMonth, setSelectedMonth] = useState(null);
+  // Free-text client filter — narrows visible rows by clientName.
+  // Case-insensitive substring match.
+  const [clientSearch, setClientSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [months, setMonths] = useState([]);
   const [clients, setClients] = useState([]);
   const [dates, setDates] = useState([]);
   const [pivotData, setPivotData] = useState({});
 
-  // URL is the source of truth for the selected month. /leads → latest;
-  // /leads?month=2026-02 → February; tab clicks update the URL.
+  // URL is the source of truth for the selected month. /leads → current
+  // month; /leads?month=2026-02 → February; tab clicks update the URL.
   const [searchParams, setSearchParams] = useSearchParams();
   const rawUrlMonth = searchParams.get('month');
   const monthFromUrl = rawUrlMonth && /^\d{4}-\d{2}$/.test(rawUrlMonth) ? rawUrlMonth : null;
 
+  // The "active" month — today's YYYY-MM. When the user lands on
+  // /leads with no `?month=` param, we default to this so the tab
+  // for the current month is selected immediately instead of
+  // whatever the backend's "latest" picks.
+  const currentMonth = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
   // displayMonth reflects the user's intent immediately (from URL) — used for
   // the active tab + loader label so the UI feels responsive while data loads.
-  // selectedMonth tracks the month whose data is actually rendered.
-  const displayMonth = monthFromUrl || selectedMonth;
+  // Falls back to currentMonth so the highlighted tab matches before any
+  // fetch resolves.
+  const displayMonth = monthFromUrl || selectedMonth || currentMonth;
 
   const loadMonth = useCallback(async (month, force = false) => {
     setLoading(true);
@@ -80,23 +98,63 @@ const Leads = () => {
     }
   }, []);
 
-  // URL → state: load whatever month the URL says (or latest if empty).
-  // Skips redundant fetch when the URL already matches the rendered month.
+  // URL → state: load whatever month the URL says, defaulting to
+  // the current month when the URL is empty. Skips redundant fetch
+  // when the URL already matches the rendered month.
   useEffect(() => {
-    if (monthFromUrl && monthFromUrl === selectedMonth) return;
-    loadMonth(monthFromUrl);
-  }, [monthFromUrl, selectedMonth, loadMonth]);
+    const target = monthFromUrl || currentMonth;
+    if (target === selectedMonth) return;
+    loadMonth(target);
+  }, [monthFromUrl, currentMonth, selectedMonth, loadMonth]);
 
-  // State → URL: only populate the URL when it's empty (first visit to /leads).
-  // Never overwrite an existing value — that would fight with the user's tab clicks
-  // and cause an effect-loop while the load is mid-flight.
+  // State → URL: when the URL is empty on first visit, pin it to the
+  // current month so refresh/share carries the user's actual view.
   useEffect(() => {
-    if (selectedMonth && !rawUrlMonth) {
-      setSearchParams({ month: selectedMonth }, { replace: true });
+    if (!rawUrlMonth) {
+      setSearchParams({ month: currentMonth }, { replace: true });
     }
-  }, [selectedMonth, rawUrlMonth, setSearchParams]);
+  }, [rawUrlMonth, currentMonth, setSearchParams]);
 
   const fetchLeads = () => loadMonth(selectedMonth, true);
+
+  // Narrow the rendered client rows by the search box. Empty search
+  // returns the full list. We don't refetch — just slice client-side
+  // so typing feels instant.
+  const visibleClients = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter((c) => String(c.name || '').toLowerCase().includes(q));
+  }, [clients, clientSearch]);
+
+  // Auto-scroll the month-tab strip so the active month is visible.
+  // MUI's `variant="scrollable"` only enables scrolling — it doesn't
+  // recenter the active tab. Without this, opening /leads with the
+  // current month pinned could leave the highlighted tab off-screen
+  // because new months render past the visible width.
+  const monthTabsRef = useRef(null);
+  useEffect(() => {
+    if (!displayMonth) return;
+    const root = monthTabsRef.current;
+    if (!root) return;
+    // Two-tick wait: first the tab strip has to paint with the new
+    // month list, then the active tab DOM node has to exist for us
+    // to centre it. requestAnimationFrame x2 is the cheapest safe wait.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        const active = root.querySelector('button[aria-selected="true"]');
+        if (active && typeof active.scrollIntoView === 'function') {
+          // `inline: 'center'` keeps the active tab in the middle of
+          // the visible strip — `'end'` pushed it under MUI's right
+          // scroll-arrow button and clipped the label. Centre gives
+          // breathing room on both sides and the underline indicator
+          // is always fully visible.
+          active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      });
+    });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, [displayMonth, months]);
 
   // Tab click: just push the new month into the URL. The URL→state effect
   // above handles the actual load, and pushes a history entry so back/forward
@@ -142,7 +200,7 @@ const Leads = () => {
     const printHTML = `
       ${printStyles}
       <div class="header">
-        <h1>Total Leads Report - ${formatMonth(selectedMonth)}</h1>
+        <h1>Total Leads (Meta) - ${formatMonth(selectedMonth)}</h1>
         <p>Generated on: ${new Date().toLocaleString()}</p>
       </div>
       <table>
@@ -171,7 +229,7 @@ const Leads = () => {
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
-        <head><title>Total Leads Report - ${formatMonth(selectedMonth)}</title></head>
+        <head><title>Total Leads (Meta) - ${formatMonth(selectedMonth)}</title></head>
         <body>${printHTML}</body>
       </html>
     `);
@@ -190,7 +248,7 @@ const Leads = () => {
     });
 
     const csvContent = [
-      `Total Leads Report - ${formatMonth(selectedMonth)}`,
+      `Total Leads (Meta) - ${formatMonth(selectedMonth)}`,
       `Generated on: ${new Date().toLocaleString()}`,
       '',
       headers.join(','),
@@ -228,7 +286,32 @@ const Leads = () => {
             View all clients total leads across all dates
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Search clients — narrows the table rows by client name.
+              Clears in one click via the trailing X icon. */}
+          <TextField
+            size="small"
+            placeholder="Search clients…"
+            value={clientSearch}
+            onChange={(e) => setClientSearch(e.target.value)}
+            sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem', bgcolor: 'background.paper' } }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  </InputAdornment>
+                ),
+                endAdornment: clientSearch ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setClientSearch('')} edge="end">
+                      <ClearIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
+          />
           <Button
             variant="outlined"
             startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
@@ -275,6 +358,7 @@ const Leads = () => {
         {/* Month Tabs - Excel Style at Bottom */}
         {months.length > 0 && (
           <Box
+            ref={monthTabsRef}
             sx={{
               borderBottom: '1px solid',
               borderColor: 'divider',
@@ -291,6 +375,21 @@ const Leads = () => {
                 '& .MuiTabs-indicator': {
                   bgcolor: primaryColor,
                   height: 3,
+                },
+                // Hide a scroll arrow entirely when it can't scroll
+                // any further. MUI tags the disabled scroll button
+                // with both `Mui-disabled` and an `aria-disabled`
+                // attribute — we target both with `!important` so the
+                // arrow truly vanishes (the previous rule was being
+                // overridden by MUI's own disabled-state styling on
+                // this version, leaving a faint greyed-out arrow).
+                '& .MuiTabScrollButton-root.Mui-disabled, & .MuiTabs-scrollButtons.Mui-disabled, & .MuiTabScrollButton-root[aria-disabled="true"], & .MuiTabs-scrollButtons[aria-disabled="true"]': {
+                  display: 'none !important',
+                  width: '0 !important',
+                  minWidth: '0 !important',
+                  opacity: '0 !important',
+                  visibility: 'hidden !important',
+                  pointerEvents: 'none !important',
                 },
                 '& .MuiTab-root': {
                   minHeight: 40,
@@ -375,7 +474,35 @@ const Leads = () => {
               </Typography>
             </Box>
           ) : (
-            <TableContainer component={Paper} elevation={0} sx={{ maxHeight: 'calc(100vh - 220px)', overflowX: 'auto', opacity: loading ? 0.5 : 1, transition: 'opacity 150ms ease' }}>
+            <TableContainer
+              component={Paper}
+              elevation={0}
+              sx={{
+                maxHeight: 'calc(100vh - 220px)',
+                overflowX: 'auto',
+                opacity: loading ? 0.5 : 1,
+                transition: 'opacity 150ms ease',
+                // Always-visible thin grey scrollbar — the table runs
+                // wider than the viewport when many dates are loaded,
+                // and the default macOS/some Windows scrollbars are
+                // invisible until you start scrolling, so users miss
+                // that there's more data off-screen.
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#cbd5e1 transparent',
+                '&::-webkit-scrollbar': { height: 10, width: 10 },
+                '&::-webkit-scrollbar-track': {
+                  bgcolor: '#f1f5f9',
+                  borderRadius: 5,
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: '#cbd5e1',
+                  borderRadius: 5,
+                  border: '2px solid #f1f5f9',
+                  '&:hover': { bgcolor: '#94a3b8' },
+                },
+                '&::-webkit-scrollbar-corner': { bgcolor: 'transparent' },
+              }}
+            >
               <Table stickyHeader size="small" sx={{ minWidth: filteredDates.length * 70 + 270 }}>
                 <TableHead>
                   <TableRow>
@@ -429,7 +556,14 @@ const Leads = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {clients.map((client, rowIndex) => (
+                  {visibleClients.length === 0 && clients.length > 0 && (
+                    <TableRow>
+                      <TableCell colSpan={filteredDates.length + 2} sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
+                        No clients match "<strong>{clientSearch}</strong>"
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {visibleClients.map((client, rowIndex) => (
                     <TableRow
                       key={client.id}
                       sx={{

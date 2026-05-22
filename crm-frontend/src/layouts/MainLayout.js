@@ -725,25 +725,6 @@ const MainLayout = () => {
               </>
             )}
 
-            <Tooltip title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
-              <IconButton
-                onClick={toggleTheme}
-                sx={{
-                  color: 'text.primary',
-                  bgcolor: isDarkMode
-                    ? `${primaryColor}20`
-                    : `${primaryColor}12`,
-                  '&:hover': {
-                    bgcolor: isDarkMode
-                      ? `${primaryColor}35`
-                      : `${primaryColor}20`,
-                  },
-                }}
-              >
-                {isDarkMode ? <LightMode /> : <DarkMode />}
-              </IconButton>
-            </Tooltip>
-
             <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 2, ml: 1 }}>
               <Box sx={{ textAlign: 'right' }}>
                 <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>

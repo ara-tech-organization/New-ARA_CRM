@@ -7,6 +7,8 @@ import {
   deleteClient,
   updateClientStatus,
   getClientStats,
+  dropClient,
+  reonboardClient,
 } from '../controllers/clientController.js';
 import { protect } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -44,5 +46,11 @@ router.route('/:id')
   .delete(idValidation, validate, checkPermission(PERMISSIONS.CLIENT_DELETE), deleteClient);
 
 router.patch('/:id/status', idValidation, validate, checkPermission(PERMISSIONS.CLIENT_UPDATE), updateClientStatus);
+
+// Soft-delete + re-onboard flow. Drop requires CLIENT_DELETE (it's
+// the destructive action people are used to), reonboard requires
+// CLIENT_UPDATE since it's a status change.
+router.patch('/:id/drop', idValidation, validate, checkPermission(PERMISSIONS.CLIENT_DELETE), dropClient);
+router.patch('/:id/reonboard', idValidation, validate, checkPermission(PERMISSIONS.CLIENT_UPDATE), reonboardClient);
 
 export default router;

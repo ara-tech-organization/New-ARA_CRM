@@ -46,6 +46,8 @@ import {
   CheckCircle as CheckCircleIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
+  PersonOff as PersonOffIcon,
+  Restore as RestoreIcon,
 } from '@mui/icons-material';
 import { MenuItem, Select, InputLabel, FormControl, Radio, RadioGroup, FormControlLabel, FormLabel, Stepper, Step, StepLabel, InputAdornment } from '@mui/material';
 import { TableLoader, PageLoader } from '../components/Loading';
@@ -98,10 +100,18 @@ const Clients = () => {
   const [editClientOpen, setEditClientOpen] = useState(false);
   const [editClient, setEditClient] = useState(null);
 
-  // Delete Confirmation Dialog state
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  // Drop Confirmation Dialog state — soft-deletes the client by
+  // flipping status to 'dropped'. Captures the reason + timestamp;
+  // re-onboarding restores the client without losing history.
+  const [dropDialogOpen, setDropDialogOpen] = useState(false);
+  const [clientToDrop, setClientToDrop] = useState(null);
+  const [dropReason, setDropReason] = useState('');
+  const [dropping, setDropping] = useState(false);
+  const [dropError, setDropError] = useState('');
+  // Re-onboard confirmation
+  const [reonboardDialogOpen, setReonboardDialogOpen] = useState(false);
+  const [clientToReonboard, setClientToReonboard] = useState(null);
+  const [reonboarding, setReonboarding] = useState(false);
 
   // Meta Setup Dialog state
   const [metaSetupOpen, setMetaSetupOpen] = useState(false);
@@ -332,10 +342,18 @@ const Clients = () => {
     }
   };
 
-  // Open delete confirmation dialog
-  const handleOpenDelete = (client) => {
-    setClientToDelete(client);
-    setDeleteDialogOpen(true);
+  // Open the Drop dialog — soft-delete prompt that requires a reason.
+  const handleOpenDrop = (client) => {
+    setClientToDrop(client);
+    setDropReason('');
+    setDropError('');
+    setDropDialogOpen(true);
+  };
+
+  // Open the Re-onboard confirmation — restores a dropped client.
+  const handleOpenReonboard = (client) => {
+    setClientToReonboard(client);
+    setReonboardDialogOpen(true);
   };
 
   // ── Meta (Facebook) Setup ──
@@ -525,23 +543,61 @@ const Clients = () => {
     }
   };
 
-  // Handle delete client
-  const handleDeleteClient = async () => {
-    if (!clientToDelete) return;
-
-    setDeleting(true);
+  // Soft-delete (drop) the client. Backend keeps the row + every
+  // related record so reonboarding restores the full history.
+  const handleDropClient = async () => {
+    if (!clientToDrop) return;
+    const reason = dropReason.trim();
+    if (!reason) {
+      setDropError('A reason is required to drop a client.');
+      return;
+    }
+    setDropping(true);
+    setDropError('');
     try {
-      await api.delete(`/clients/${clientToDelete._id}`);
-
-      setSnackbar({ open: true, message: 'Client deleted successfully!', severity: 'success' });
-      setDeleteDialogOpen(false);
-      setClientToDelete(null);
+      await api.patch(`/clients/${clientToDrop._id}/drop`, { reason });
+      setSnackbar({
+        open: true,
+        message: `${clientToDrop.clientName} dropped — record kept for re-onboarding.`,
+        severity: 'success',
+      });
+      setDropDialogOpen(false);
+      setClientToDrop(null);
+      setDropReason('');
       fetchClients();
     } catch (error) {
-      console.error('Error deleting client:', error);
-      setSnackbar({ open: true, message: error.message || 'Failed to delete client', severity: 'error' });
+      console.error('Error dropping client:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Failed to drop client';
+      setDropError(msg);
     } finally {
-      setDeleting(false);
+      setDropping(false);
+    }
+  };
+
+  // Re-onboard a dropped client — flips status back to active.
+  // No data was deleted on drop so leads/entries/funds resurface as-is.
+  const handleReonboardClient = async () => {
+    if (!clientToReonboard) return;
+    setReonboarding(true);
+    try {
+      await api.patch(`/clients/${clientToReonboard._id}/reonboard`);
+      setSnackbar({
+        open: true,
+        message: `${clientToReonboard.clientName} re-onboarded — back on the active list.`,
+        severity: 'success',
+      });
+      setReonboardDialogOpen(false);
+      setClientToReonboard(null);
+      fetchClients();
+    } catch (error) {
+      console.error('Error re-onboarding client:', error);
+      setSnackbar({
+        open: true,
+        message: error?.response?.data?.message || error?.message || 'Failed to re-onboard client',
+        severity: 'error',
+      });
+    } finally {
+      setReonboarding(false);
     }
   };
 
@@ -643,8 +699,20 @@ const Clients = () => {
       case 'inactive': return 'default';
       case 'pending': return 'warning';
       case 'suspended': return 'error';
+      case 'dropped': return 'error';
       default: return 'default';
     }
+  };
+
+  // Pretty-print a Date or ISO string for tooltips/dialogs.
+  const fmtDateTime = (d) => {
+    if (!d) return '';
+    try {
+      return new Date(d).toLocaleString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch { return String(d); }
   };
 
   // Filter clients by search query across common fields
@@ -680,7 +748,19 @@ const Clients = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setAddClientOpen(true)}
-            sx={{ bgcolor: primaryColor, '&:hover': { bgcolor: secondaryColor } }}
+            sx={{
+              // Lock the base + hover bg to primaryColor and just
+              // darken via filter — using secondaryColor for hover
+              // was painting white text onto a light theme colour
+              // and making the label invisible.
+              bgcolor: primaryColor,
+              color: '#fff',
+              '&:hover': {
+                bgcolor: primaryColor,
+                color: '#fff',
+                filter: 'brightness(0.92)',
+              },
+            }}
           >
             Add Client
           </Button>
@@ -881,15 +961,32 @@ const Clients = () => {
                               <FacebookIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Delete Client">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleOpenDelete(client)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                          {/* Drop replaces Delete — keeps history,
+                              requires a reason, and shows when. If
+                              the client is already dropped, we swap
+                              in a Re-onboard action instead so the
+                              admin can bring them back. */}
+                          {client.status === 'dropped' ? (
+                            <Tooltip title={client.drop_reason ? `Dropped: ${client.drop_reason}` : 'Re-onboard Client'}>
+                              <IconButton
+                                size="small"
+                                sx={{ color: '#10b981' }}
+                                onClick={() => handleOpenReonboard(client)}
+                              >
+                                <RestoreIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="Drop Client">
+                              <IconButton
+                                size="small"
+                                sx={{ color: '#ef4444' }}
+                                onClick={() => handleOpenDrop(client)}
+                              >
+                                <PersonOffIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -1171,54 +1268,6 @@ const Clients = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 12 }}>
-              <Divider sx={{ my: 1 }} />
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Commitments & Notes
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                fullWidth
-                label="Creative Commitment"
-                name="creativeCommitment"
-                value={newClient.creativeCommitment}
-                onChange={handleInputChange}
-                placeholder="e.g., 10 per month"
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                fullWidth
-                label="Static Commitment"
-                name="staticCommitment"
-                value={newClient.staticCommitment}
-                onChange={handleInputChange}
-                placeholder="e.g., 5 per month"
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                fullWidth
-                label="Motion Creative"
-                name="motionCreative"
-                value={newClient.motionCreative}
-                onChange={handleInputChange}
-                placeholder="e.g., 3 per month"
-              />
-            </Grid>
-            <Grid size={{ xs: 12 }}>
-              <TextField
-                fullWidth
-                label="Notes"
-                name="notes"
-                value={newClient.notes}
-                onChange={handleInputChange}
-                placeholder="Additional notes..."
-                multiline
-                rows={2}
-              />
-            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -1230,7 +1279,11 @@ const Clients = () => {
             onClick={handleAddClient}
             disabled={saving || !newClient.clientName.trim()}
             startIcon={saving ? <CircularProgress size={16} /> : <AddIcon />}
-            sx={{ bgcolor: primaryColor, '&:hover': { bgcolor: secondaryColor } }}
+            sx={{
+              bgcolor: primaryColor,
+              color: '#fff',
+              '&:hover': { bgcolor: primaryColor, color: '#fff', filter: 'brightness(0.92)' },
+            }}
           >
             {saving ? 'Adding...' : 'Add Client'}
           </Button>
@@ -1462,35 +1515,118 @@ const Clients = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth fullScreen={false}>
-        <DialogTitle sx={{ fontWeight: 600, bgcolor: 'error.50', color: 'error.main' }}>
+      {/* Drop Client Dialog — soft-delete with reason capture.
+          Backend keeps the client + all related data so reonboarding
+          restores the full history. */}
+      <Dialog open={dropDialogOpen} onClose={() => !dropping && setDropDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600, bgcolor: '#fef2f2', color: '#b91c1c' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <DeleteIcon />
-            Confirm Delete
+            <PersonOffIcon />
+            Drop {clientToDrop?.clientName || clientToDrop?.name}
           </Box>
         </DialogTitle>
         <Divider />
         <DialogContent sx={{ pt: 3 }}>
-          <Typography>
-            Are you sure you want to delete client <strong>{clientToDelete?.name}</strong>?
+          <Typography sx={{ mb: 1 }}>
+            This client will be marked as <strong>dropped</strong> and hidden from the active list.
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            This action cannot be undone.
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            All leads, daily entries, funds, vault credentials, and content are preserved. If they
+            come back, just click <em>Re-onboard</em> on their row and the history is restored.
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            rows={3}
+            required
+            label="Reason for dropping"
+            placeholder="e.g. Contract ended, paused campaigns, switched agency…"
+            value={dropReason}
+            onChange={(e) => setDropReason(e.target.value)}
+            error={!!dropError && !dropReason.trim()}
+            helperText={dropError || 'Required — saved on the client record for audit.'}
+            disabled={dropping}
+          />
+          <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary' }}>
+            Drop timestamp will be recorded as <strong>{fmtDateTime(new Date())}</strong>.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => { setDeleteDialogOpen(false); setClientToDelete(null); }}>
+          <Button onClick={() => { setDropDialogOpen(false); setClientToDrop(null); }} disabled={dropping}>
             Cancel
           </Button>
           <Button
             variant="contained"
-            color="error"
-            onClick={handleDeleteClient}
-            disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+            onClick={handleDropClient}
+            disabled={dropping || !dropReason.trim()}
+            startIcon={dropping ? <CircularProgress size={16} /> : <PersonOffIcon />}
+            sx={{
+              bgcolor: '#ef4444',
+              color: '#fff',
+              '&:hover': { bgcolor: '#ef4444', color: '#fff', filter: 'brightness(0.92)' },
+            }}
           >
-            {deleting ? 'Deleting...' : 'Delete'}
+            {dropping ? 'Dropping…' : 'Drop Client'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Re-onboard Confirmation — for a previously dropped client.
+          Shows the original drop reason + date so the admin knows
+          what they're restoring. */}
+      <Dialog open={reonboardDialogOpen} onClose={() => !reonboarding && setReonboardDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600, bgcolor: '#f0fdf4', color: '#0e7c4a' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <RestoreIcon />
+            Re-onboard {clientToReonboard?.clientName || clientToReonboard?.name}
+          </Box>
+        </DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: 3 }}>
+          <Typography sx={{ mb: 1 }}>
+            Bring this client back into the active list?
+          </Typography>
+          {clientToReonboard?.dropped_at && (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: '#fef2f2', borderRadius: 1, border: '1px solid #fee2e2' }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                Previously dropped
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.3 }}>
+                <strong>On:</strong> {fmtDateTime(clientToReonboard.dropped_at)}
+              </Typography>
+              {clientToReonboard?.drop_reason && (
+                <Typography variant="body2">
+                  <strong>Reason:</strong> {clientToReonboard.drop_reason}
+                </Typography>
+              )}
+              {clientToReonboard?.dropped_by && (
+                <Typography variant="body2">
+                  <strong>By:</strong> {clientToReonboard.dropped_by}
+                </Typography>
+              )}
+            </Box>
+          )}
+          <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'text.secondary' }}>
+            All previously stored data (leads, entries, funds, vault, content) will be available immediately.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { setReonboardDialogOpen(false); setClientToReonboard(null); }} disabled={reonboarding}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleReonboardClient}
+            disabled={reonboarding}
+            startIcon={reonboarding ? <CircularProgress size={16} /> : <RestoreIcon />}
+            sx={{
+              bgcolor: '#10b981',
+              color: '#fff',
+              '&:hover': { bgcolor: '#10b981', color: '#fff', filter: 'brightness(0.92)' },
+            }}
+          >
+            {reonboarding ? 'Re-onboarding…' : 'Re-onboard'}
           </Button>
         </DialogActions>
       </Dialog>

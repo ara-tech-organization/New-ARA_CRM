@@ -470,7 +470,7 @@ const ClientPortalDashboard = () => {
           </Avatar>
           {sidebarOpen && (
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '0.98rem', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.98rem', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {displayName}
               </Typography>
               <Typography sx={{ fontSize: '0.66rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: 0.5 }}>

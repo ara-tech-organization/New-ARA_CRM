@@ -214,7 +214,7 @@ const ClientPortalLeads = () => {
             {displayName?.charAt(0)}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '1rem', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '1rem', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {displayName}
             </Typography>
             <Typography sx={{ fontSize: '0.66rem', opacity: 0.7, whiteSpace: 'nowrap' }}>Leads Dashboard</Typography>

@@ -40,6 +40,11 @@ import { PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useDataCache } from '../contexts/DataCacheContext';
 import api from '../api/axios';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { enGB } from 'date-fns/locale';
+import { format as fmtDateFn, parseISO, isValid as isValidDate } from 'date-fns';
 
 const DailyLeadData = () => {
   const { accentColor } = useContext(ThemeContext);
@@ -215,7 +220,7 @@ const DailyLeadData = () => {
     const printHTML = `
       ${printStyles}
       <div class="header">
-        <h1>Daily Lead Data Report</h1>
+        <h1>Daily Lead Data (Meta)</h1>
         <p>Client: ${selectedClientName}</p>
         <p>Date Range: ${dateRangeText}</p>
         <p>Generated on: ${new Date().toLocaleString()}</p>
@@ -229,8 +234,6 @@ const DailyLeadData = () => {
             <th class="meta-col">Meta WhatsApp</th>
             <th class="meta-col">Meta Total</th>
             <th class="meta-col">Meta Fund (₹)</th>
-            <th>Total Leads</th>
-            <th>Total Spend (₹)</th>
           </tr>
         </thead>
         <tbody>
@@ -242,8 +245,6 @@ const DailyLeadData = () => {
               <td class="meta-col">${entry.metaWhatsapp || 0}</td>
               <td class="meta-col">${entry.metaTotalLeads || 0}</td>
               <td class="meta-col">₹${(entry.metaFund || 0).toLocaleString('en-IN')}</td>
-              <td><strong>${entry.totalLeads || 0}</strong></td>
-              <td><strong>₹${(entry.totalSpend || 0).toLocaleString('en-IN')}</strong></td>
             </tr>
           `).join('')}
           <tr class="totals-row">
@@ -253,8 +254,6 @@ const DailyLeadData = () => {
             <td class="meta-col"><strong>${dailyTotals.metaWhatsapp}</strong></td>
             <td class="meta-col"><strong>${dailyTotals.metaTotalLeads}</strong></td>
             <td class="meta-col"><strong>₹${dailyTotals.metaFund.toLocaleString('en-IN')}</strong></td>
-            <td><strong>${dailyTotals.totalLeads}</strong></td>
-            <td><strong>₹${dailyTotals.totalSpend.toLocaleString('en-IN')}</strong></td>
           </tr>
         </tbody>
       </table>
@@ -265,7 +264,7 @@ const DailyLeadData = () => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Daily Lead Data - ${dateRangeText}</title>
+          <title>Daily Lead Data (Meta) - ${dateRangeText}</title>
         </head>
         <body>
           ${printHTML}
@@ -285,6 +284,7 @@ const DailyLeadData = () => {
   }
 
   return (
+    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enGB}>
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
@@ -377,40 +377,32 @@ const DailyLeadData = () => {
               />
             </Grid>
             <Grid size={{xs: 12, sm: 6, md: 2.5}}>
-              <TextField
-                fullWidth
+              {/* DD/MM/YYYY DatePicker — wraps the existing string
+                  handlers so URL params (ISO YYYY-MM-DD) stay unchanged. */}
+              <DatePicker
                 label="From Date"
-                type="date"
-                value={dateFrom}
-                onChange={handleFromChange}
+                value={dateFrom ? parseISO(dateFrom) : null}
+                onChange={(d) => {
+                  if (!d || !isValidDate(d)) return;
+                  handleFromChange({ target: { value: fmtDateFn(d, 'yyyy-MM-dd') } });
+                }}
+                format="dd/MM/yyyy"
                 slotProps={{
-                  inputLabel: { shrink: true },
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <CalendarIcon sx={{ color: primaryColor }} />
-                      </InputAdornment>
-                    ),
-                  },
+                  textField: { fullWidth: true, placeholder: 'DD/MM/YYYY' },
                 }}
               />
             </Grid>
             <Grid size={{xs: 12, sm: 6, md: 2.5}}>
-              <TextField
-                fullWidth
+              <DatePicker
                 label="To Date"
-                type="date"
-                value={dateTo}
-                onChange={handleToChange}
+                value={dateTo ? parseISO(dateTo) : null}
+                onChange={(d) => {
+                  if (!d || !isValidDate(d)) return;
+                  handleToChange({ target: { value: fmtDateFn(d, 'yyyy-MM-dd') } });
+                }}
+                format="dd/MM/yyyy"
                 slotProps={{
-                  inputLabel: { shrink: true },
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <CalendarIcon sx={{ color: primaryColor }} />
-                      </InputAdornment>
-                    ),
-                  },
+                  textField: { fullWidth: true, placeholder: 'DD/MM/YYYY' },
                 }}
               />
             </Grid>
@@ -426,11 +418,11 @@ const DailyLeadData = () => {
                   variant="outlined"
                 />
                 <Chip
-                  label={`Total Leads: ${dailyTotals.totalLeads}`}
+                  label={`Meta Leads: ${dailyTotals.metaTotalLeads}`}
                   sx={{ bgcolor: `${primaryColor}15`, color: primaryColor, fontWeight: 600 }}
                 />
                 <Chip
-                  label={`Total Spend: ₹${dailyTotals.totalSpend.toLocaleString('en-IN')}`}
+                  label={`Meta Spend: ₹${dailyTotals.metaFund.toLocaleString('en-IN')}`}
                   sx={{ bgcolor: '#10b98115', color: '#10b981', fontWeight: 600 }}
                 />
               </Box>
@@ -494,11 +486,11 @@ const DailyLeadData = () => {
                   sx={{ fontWeight: 600 }}
                 />
                 <Chip
-                  label={`Total: ${dailyTotals.totalLeads} leads`}
+                  label={`Meta Leads: ${dailyTotals.metaTotalLeads}`}
                   sx={{ bgcolor: `${primaryColor}15`, color: primaryColor, fontWeight: 700 }}
                 />
                 <Chip
-                  label={`Spend: ₹${dailyTotals.totalSpend.toLocaleString('en-IN')}`}
+                  label={`Meta Spend: ₹${dailyTotals.metaFund.toLocaleString('en-IN')}`}
                   sx={{ bgcolor: '#10b98115', color: '#10b981', fontWeight: 700 }}
                 />
               </Box>
@@ -533,8 +525,6 @@ const DailyLeadData = () => {
                         <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta WhatsApp</TableCell>
                         <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Total</TableCell>
                         <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Meta Fund</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }} align="center">Total Leads</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }} align="right">Total Spend</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -562,16 +552,8 @@ const DailyLeadData = () => {
                             </Typography>
                           </TableCell>
                           <TableCell align="right" sx={{ bgcolor: '#C0855205' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              ₹{row.metaFund.toLocaleString('en-IN')}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="center">
-                            <Chip label={row.totalLeads} size="small" color="primary" sx={{ fontWeight: 700, minWidth: 50 }} />
-                          </TableCell>
-                          <TableCell align="right">
                             <Typography variant="body2" sx={{ fontWeight: 700, color: '#10b981' }}>
-                              ₹{row.totalSpend.toLocaleString('en-IN')}
+                              ₹{row.metaFund.toLocaleString('en-IN')}
                             </Typography>
                           </TableCell>
                         </TableRow>
@@ -591,17 +573,9 @@ const DailyLeadData = () => {
                             {dailyTotals.metaTotalLeads}
                           </Typography>
                         </TableCell>
-                        <TableCell align="right" sx={{ bgcolor: '#C0855210', fontWeight: 700 }}>
-                          ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
-                        </TableCell>
-                        <TableCell align="center">
-                          <Typography variant="h6" sx={{ fontWeight: 700, color: primaryColor }}>
-                            {dailyTotals.totalLeads}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
+                        <TableCell align="right" sx={{ bgcolor: '#C0855210' }}>
                           <Typography variant="h6" sx={{ fontWeight: 700, color: '#10b981' }}>
-                            ₹{dailyTotals.totalSpend.toLocaleString('en-IN')}
+                            ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
                           </Typography>
                         </TableCell>
                       </TableRow>
@@ -675,8 +649,6 @@ const DailyLeadData = () => {
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta WhatsApp</TableCell>
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Total</TableCell>
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Meta Fund</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }} align="center">Total Leads</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }} align="right">Total Spend</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -712,21 +684,8 @@ const DailyLeadData = () => {
                         </Typography>
                       </TableCell>
                       <TableCell align="right" sx={{ bgcolor: '#C0855205' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          ₹{(entry.metaFund || 0).toLocaleString('en-IN')}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          label={entry.totalLeads || 0}
-                          size="small"
-                          color="primary"
-                          sx={{ fontWeight: 700, minWidth: 50 }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
                         <Typography variant="body2" sx={{ fontWeight: 700, color: '#10b981' }}>
-                          ₹{(entry.totalSpend || 0).toLocaleString('en-IN')}
+                          ₹{(entry.metaFund || 0).toLocaleString('en-IN')}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -751,18 +710,8 @@ const DailyLeadData = () => {
                       </Typography>
                     </TableCell>
                     <TableCell align="right" sx={{ bgcolor: '#C0855210' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Typography variant="h6" sx={{ fontWeight: 700, color: primaryColor }}>
-                        {dailyTotals.totalLeads}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
                       <Typography variant="h6" sx={{ fontWeight: 700, color: '#10b981' }}>
-                        ₹{dailyTotals.totalSpend.toLocaleString('en-IN')}
+                        ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -790,6 +739,7 @@ const DailyLeadData = () => {
         </Alert>
       </Snackbar>
     </Box>
+    </LocalizationProvider>
   );
 };
 

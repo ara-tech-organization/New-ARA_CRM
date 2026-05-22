@@ -90,24 +90,6 @@ const Login = () => {
         bgcolor: mode === 'light' ? CREAM : 'grey.900',
       }}
     >
-      {/* Theme Toggle Button */}
-      <IconButton
-        onClick={toggleTheme}
-        sx={{
-          position: 'absolute',
-          top: 20,
-          right: 20,
-          zIndex: 10,
-          bgcolor: mode === 'light' ? 'white' : 'grey.800',
-          boxShadow: 2,
-          '&:hover': {
-            bgcolor: mode === 'light' ? 'grey.100' : 'grey.700',
-          },
-        }}
-      >
-        {mode === 'light' ? <DarkMode /> : <LightMode />}
-      </IconButton>
-
       {/* Left Side - Illustration & Branding */}
       <Box
         sx={{

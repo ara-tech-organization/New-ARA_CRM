@@ -104,14 +104,17 @@ const getDesignTokens = (mode, accentColor) => ({
         }),
   },
   typography: {
+    // Single-font theme — Poppins everywhere. h1-h6 inherit
+    // fontFamily from the base above; only size + weight overrides
+    // per heading level remain. (Removed Playfair Display.)
     fontFamily: '"Poppins", "Helvetica", "Arial", sans-serif',
     fontSize: 14,
-    h1: { fontFamily: '"Playfair Display", Georgia, serif', fontSize: '2rem', fontWeight: 700 },
-    h2: { fontFamily: '"Playfair Display", Georgia, serif', fontSize: '1.65rem', fontWeight: 700 },
-    h3: { fontFamily: '"Playfair Display", Georgia, serif', fontSize: '1.4rem', fontWeight: 600 },
-    h4: { fontFamily: '"Playfair Display", Georgia, serif', fontSize: '1.2rem', fontWeight: 600 },
-    h5: { fontFamily: '"Playfair Display", Georgia, serif', fontSize: '1.05rem', fontWeight: 600 },
-    h6: { fontFamily: '"Playfair Display", Georgia, serif', fontSize: '0.92rem', fontWeight: 600 },
+    h1: { fontSize: '2rem', fontWeight: 700 },
+    h2: { fontSize: '1.65rem', fontWeight: 700 },
+    h3: { fontSize: '1.4rem', fontWeight: 600 },
+    h4: { fontSize: '1.2rem', fontWeight: 600 },
+    h5: { fontSize: '1.05rem', fontWeight: 600 },
+    h6: { fontSize: '0.92rem', fontWeight: 600 },
     body1: { fontSize: '0.9rem' },
     body2: { fontSize: '0.84rem' },
     caption: { fontSize: '0.75rem' },
@@ -323,31 +326,30 @@ const getDesignTokens = (mode, accentColor) => ({
 });
 
 export const ThemeContextProvider = ({ children }) => {
-  const [mode, setMode] = useState(() => {
-    try {
-      const saved = localStorage.getItem('themeMode');
-      return saved === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
-
+  // Dark mode removed — the app is light-only now. We keep the
+  // `mode` field + `toggleTheme` no-op for back-compat so any
+  // surviving consumers (legacy isDarkMode checks) just see 'light'
+  // and don't break.
+  const mode = 'light';
   const accentColor = brandColor;
 
   useEffect(() => {
-    localStorage.setItem('themeMode', mode);
-    document.body.setAttribute('data-theme', mode);
-  }, [mode]);
+    // Wipe any previously persisted dark preference so a user who
+    // had dark mode saved doesn't see the half-stripped dark state
+    // on first load after this change.
+    try { localStorage.removeItem('themeMode'); } catch {}
+    document.body.setAttribute('data-theme', 'light');
+  }, []);
 
-  const toggleTheme = () => setMode(prev => prev === 'light' ? 'dark' : 'light');
+  const toggleTheme = () => {};
 
-  const theme = useMemo(() => createTheme(getDesignTokens(mode, accentColor)), [mode]);
+  const theme = useMemo(() => createTheme(getDesignTokens(mode, accentColor)), [accentColor]);
 
   const contextValue = useMemo(() => ({
     mode,
     toggleTheme,
     accentColor,
-  }), [mode]);
+  }), [accentColor]);
 
   return (
     <ThemeContext.Provider value={contextValue}>

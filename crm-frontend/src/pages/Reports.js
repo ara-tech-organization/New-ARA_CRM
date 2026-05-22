@@ -23,6 +23,7 @@ import {
   ToggleButtonGroup,
   Button,
   CircularProgress,
+  Autocomplete,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -47,6 +48,22 @@ import {
 import { PageLoader } from '../components/Loading';
 import { useDataCache } from '../contexts/DataCacheContext';
 import api from '../api/axios';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { enGB } from 'date-fns/locale';
+import { format as fmtDate, parseISO, isValid as isValidDate } from 'date-fns';
+
+// Reformat a YYYY-MM-DD string into DD/MM/YYYY for display. The
+// native <input type="date"> always returns ISO; the helper text
+// echoes the date in DD/MM/YYYY so the user sees an unambiguous
+// format regardless of their browser locale.
+const fmtDDMMYYYY = (iso) => {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).split('-');
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+};
 
 // Colors for different metrics
 const METRIC_CONFIG = {
@@ -478,6 +495,9 @@ const Reports = () => {
   };
 
   return (
+    // en-GB locale gives date-fns + the picker a DD/MM/YYYY default,
+    // so the calendar shows day-first formatting throughout.
+    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enGB}>
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
         <Box>
@@ -503,41 +523,47 @@ const Reports = () => {
         <CardContent>
           <Grid container spacing={2} alignItems="center">
             <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Select Client *</InputLabel>
-                <Select
-                  value={selectedClient}
-                  label="Select Client *"
-                  onChange={(e) => setSelectedClient(e.target.value)}
-                >
-                  {clients.map((client) => (
-                    <MenuItem key={client._id} value={client._id}>
-                      {client.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
+              {/* Searchable client picker — Autocomplete beats Select
+                  once the client list grows past ~10 entries. Stores
+                  the same client._id string the old Select wrote, so
+                  every downstream filter / fetch keeps working. */}
+              <Autocomplete
                 fullWidth
                 size="small"
-                type="date"
-                label="From Date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
+                value={clients.find((c) => c._id === selectedClient) || null}
+                onChange={(_, opt) => setSelectedClient(opt?._id || '')}
+                options={clients}
+                getOptionLabel={(opt) => opt?.name || ''}
+                isOptionEqualToValue={(a, b) => a?._id === b?._id}
+                renderInput={(params) => (
+                  <TextField {...params} label="Select Client *" placeholder="Type to search…" />
+                )}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <TextField
-                fullWidth
-                size="small"
-                type="date"
+              {/* MUI X DatePicker with en-GB locale + dd/MM/yyyy format
+                  — the typed input AND the calendar popover both show
+                  DD/MM/YYYY. State stays as ISO YYYY-MM-DD so downstream
+                  fetches don't need any change. */}
+              <DatePicker
+                label="From Date"
+                value={fromDate ? parseISO(fromDate) : null}
+                onChange={(d) => setFromDate(d && isValidDate(d) ? fmtDate(d, 'yyyy-MM-dd') : '')}
+                format="dd/MM/yyyy"
+                slotProps={{
+                  textField: { fullWidth: true, size: 'small', placeholder: 'DD/MM/YYYY' },
+                }}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <DatePicker
                 label="To Date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
+                value={toDate ? parseISO(toDate) : null}
+                onChange={(d) => setToDate(d && isValidDate(d) ? fmtDate(d, 'yyyy-MM-dd') : '')}
+                format="dd/MM/yyyy"
+                slotProps={{
+                  textField: { fullWidth: true, size: 'small', placeholder: 'DD/MM/YYYY' },
+                }}
               />
             </Grid>
           </Grid>
@@ -768,6 +794,7 @@ const Reports = () => {
         </>
       )}
     </Box>
+    </LocalizationProvider>
   );
 };
 

@@ -1,18 +1,30 @@
 import React, { useEffect, useMemo, useState, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
   Grid, Card, CardContent, Typography, Box, CircularProgress,
   Chip, Avatar, Button, Divider, TextField, InputAdornment,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Alert as MuiAlert,
 } from '@mui/material';
 import {
   Facebook, Google, People, Refresh as RefreshIcon,
   Search as SearchIcon,
+  Warning as WarningIcon,
+  ArrowForward as ArrowForwardIcon,
+  EmojiEvents as TrophyIcon,
+  Savings as SavingsIcon,
+  ReportProblem as ReportProblemIcon,
 } from '@mui/icons-material';
 import api from '../api/axios';
 import { PageLoader } from '../components/Loading';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useDataCache } from '../contexts/DataCacheContext';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { enGB } from 'date-fns/locale';
+import { format as fmtDate, parseISO, isValid as isValidDate } from 'date-fns';
 import {
   PieChart, Pie, Cell,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -66,7 +78,7 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, a
           <Avatar sx={{ width: 30, height: 30, bgcolor: 'rgba(255,255,255,0.25)', fontSize: '0.8rem', fontWeight: 700, color: 'white' }}>
             {client.name?.charAt(0)}
           </Avatar>
-          <Typography sx={{ fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, fontSize: '0.92rem', color: 'white' }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: 'white' }}>
             {client.name}
           </Typography>
         </Box>
@@ -163,6 +175,10 @@ const Dashboard = () => {
   const { accentColor } = useContext(ThemeContext);
   const tealAccent = accentColor?.secondary || '#C08552';
   const { todayLeads, clients: cachedClients, todayLeadsLoading: leadsLoading, clientsLoading, refreshAll, fetchTodayLeads, fetchClients } = useDataCache();
+  // Pull the logged-in user so the hero strip can address them by
+  // name; fall back to "there" so the banner never reads "Welcome, "
+  // with a blank trailer.
+  const { user } = useSelector((state) => state.auth || {});
 
   // Auto-refresh today's data + clients ONCE per Dashboard mount so the
   // Client-wise Performance cards show fresh today's numbers without the
@@ -374,33 +390,195 @@ const Dashboard = () => {
   const dateLong = selDateObj.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
   const isToday = selectedDate === today;
 
+  // ── Today's Spotlights ──────────────────────────────────────────
+  // Per-client analytical highlights — surface who's winning and
+  // who needs intervention without showing aggregate totals.
+  // Computed inline from the data we already fetch (metaDataMap +
+  // adsDataMap + DailyEntry tracking).
+  const clientStats = clients.map((c) => {
+    const meta = metaDataMap[c._id];
+    const ads = adsDataMap[c._id];
+    const tracking = dateByClient[c._id] || emptyData;
+    const metaLeads = meta?.total_leads != null
+      ? Number(meta.total_leads) || 0
+      : (meta?.form_leads != null || meta?.whatsapp_leads != null)
+        ? (Number(meta?.form_leads) || 0) + (Number(meta?.whatsapp_leads) || 0)
+        : (tracking.metaForm || 0) + (tracking.metaWhatsapp || 0);
+    const googleLeads = ads?.totalConversions != null
+      ? Number(ads.totalConversions) || 0
+      : (tracking.googleCall || 0) + (tracking.googleWebsite || 0);
+    const metaSpend = meta?.spend != null
+      ? Number(meta.spend) || 0
+      : Number(tracking.metaFund) || 0;
+    const googleSpend = ads?.totalCost != null
+      ? Number(ads.totalCost) || 0
+      : Number(tracking.googleFund) || 0;
+    const leads = metaLeads + googleLeads;
+    const spend = metaSpend + googleSpend;
+    const cpl = leads > 0 ? spend / leads : 0;
+    return { id: c._id, name: c.name, leads, spend, cpl };
+  });
+  // Standout calculations — only consider clients with real activity
+  // (leads or spend) so a quiet client doesn't accidentally win.
+  const activeStats = clientStats.filter((c) => c.leads > 0 || c.spend > 0);
+  const topPerformer = activeStats
+    .slice().sort((a, b) => b.leads - a.leads)[0];
+  const bestCpl = activeStats
+    .filter((c) => c.cpl > 0)
+    .slice().sort((a, b) => a.cpl - b.cpl)[0];
+  // Needs review: highest CPL among those who got leads, OR a client
+  // spending money with zero leads back (the worst case scenario).
+  const zeroLeadSpender = activeStats
+    .filter((c) => c.leads === 0 && c.spend > 0)
+    .slice().sort((a, b) => b.spend - a.spend)[0];
+  const worstCpl = activeStats
+    .filter((c) => c.cpl > 0)
+    .slice().sort((a, b) => b.cpl - a.cpl)[0];
+  const needsReview = zeroLeadSpender || worstCpl;
+
+  // ── Needs Attention list ─────────────────────────────────────────
+  // Generates a short flagged list — drives the Alerts panel below.
+  // Three rules right now: (a) a Meta-linked client with zero leads
+  // today, (b) any client with low Meta balance vs threshold,
+  // (c) any client with no calls + no leads tracked today.
+  const attentionItems = clients.flatMap((c) => {
+    const items = [];
+    const meta = metaDataMap[c._id];
+    const tracking = dateByClient[c._id] || emptyData;
+    const metaLeadsToday = meta?.total_leads != null
+      ? Number(meta.total_leads) || 0
+      : (tracking.metaForm || 0) + (tracking.metaWhatsapp || 0);
+    const metaSpendToday = meta?.spend != null
+      ? Number(meta.spend) || 0
+      : Number(tracking.metaFund) || 0;
+    if (c.metaEnabled && metaSpendToday > 0 && metaLeadsToday === 0) {
+      items.push({
+        clientId: c._id,
+        client: c.name,
+        severity: 'warning',
+        message: `${c.name} — Meta spend ₹${Math.round(metaSpendToday)} today but 0 leads`,
+      });
+    }
+    if (c.metaEnabled && !meta && !leadsLoading) {
+      // Meta-linked but the API didn't return — could be sync issue.
+      // Only flag when it's not just a still-loading state.
+    }
+    return items;
+  }).slice(0, 4);
+
+  // Greeting changes with the hour so it feels alive.
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const userName = user?.name || user?.email?.split('@')[0] || 'there';
+
   return (
+    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enGB}>
     <Box>
-      {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 3 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>Dashboard</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {isToday ? "Today's" : ''} Client Performance — {dateLong}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TextField
-            type="date"
-            size="small"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true }, input: { max: today } }}
-            sx={{ minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem' } }}
-          />
-          {!isToday && (
-            <Button size="small" variant="outlined" onClick={() => setSelectedDate(today)}>Today</Button>
-          )}
-          <Button variant="outlined" startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />} onClick={refreshAll} disabled={loading}>
-            Refresh
-          </Button>
-        </Box>
-      </Box>
+      {/* ── Welcome Hero Strip ─────────────────────────────────────
+          Sets the tone for the page: personalised greeting on the
+          left, controls on the right, and three inline mini-stats
+          underneath so the "did today happen" check takes 1 second. */}
+      <Card
+        variant="outlined"
+        sx={{
+          mb: 2,
+          background: `linear-gradient(135deg, ${tealAccent}10 0%, ${tealAccent}05 50%, transparent 100%)`,
+          borderLeft: `4px solid ${tealAccent}`,
+        }}
+      >
+        <CardContent sx={{ py: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, flexWrap: 'wrap', gap: 1.5 }}>
+            <Box>
+              <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
+                {greeting}, <Box component="span" sx={{ color: tealAccent }}>{userName}</Box>
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.3 }}>
+                {isToday ? "Here's what's happening today" : 'Showing performance for'} — {dateLong}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              {/* MUI X DatePicker in en-GB / dd-MM-yyyy. maxDate stops
+                  future selections; state still stores ISO YYYY-MM-DD
+                  so the rest of the page doesn't need to change. */}
+              <DatePicker
+                value={selectedDate ? parseISO(selectedDate) : null}
+                onChange={(d) => {
+                  if (!d || !isValidDate(d)) return;
+                  const iso = fmtDate(d, 'yyyy-MM-dd');
+                  setSelectedDate(iso > today ? today : iso);
+                }}
+                maxDate={parseISO(today)}
+                format="dd/MM/yyyy"
+                slotProps={{
+                  textField: {
+                    size: 'small',
+                    placeholder: 'DD/MM/YYYY',
+                    sx: { minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem', bgcolor: 'background.paper' } },
+                  },
+                }}
+              />
+              {!isToday && (
+                <Button size="small" variant="outlined" onClick={() => setSelectedDate(today)}>Today</Button>
+              )}
+              <Button
+                variant="contained" size="small"
+                startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                onClick={refreshAll}
+                disabled={loading}
+                sx={{ bgcolor: tealAccent, '&:hover': { bgcolor: tealAccent, filter: 'brightness(0.92)' } }}
+              >
+                Refresh
+              </Button>
+            </Box>
+          </Box>
+
+        </CardContent>
+      </Card>
+
+
+      {/* ── Needs Attention (conditional) ──────────────────────────
+          Only shows when at least one client meets an alert rule
+          (e.g. Meta spending but no leads back). Saves "is anything
+          on fire" from being a manual scan through every client card. */}
+      {attentionItems.length > 0 && (
+        <MuiAlert
+          severity="warning"
+          icon={<WarningIcon />}
+          sx={{
+            mb: 2,
+            borderLeft: '4px solid #f59e0b',
+            '& .MuiAlert-message': { width: '100%' },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8, flexWrap: 'wrap', gap: 1 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
+              {attentionItems.length} client{attentionItems.length === 1 ? '' : 's'} need{attentionItems.length === 1 ? 's' : ''} attention
+            </Typography>
+            <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+              Click any item to open that client's ads page
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {attentionItems.map((item, i) => (
+              <Box
+                key={i}
+                onClick={() => navigate(`/client-ads/${item.clientId}`)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1,
+                  py: 0.5, px: 1, borderRadius: 1, cursor: 'pointer',
+                  '&:hover': { bgcolor: 'rgba(245,158,11,0.1)' },
+                }}
+              >
+                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#f59e0b', flexShrink: 0 }} />
+                <Typography sx={{ fontSize: '0.82rem', flex: 1 }}>
+                  {item.message}
+                </Typography>
+                <ArrowForwardIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+              </Box>
+            ))}
+          </Box>
+        </MuiAlert>
+      )}
 
       {/* ── Row 1: Headline KPIs (big cards) — Total Clients, Active
           Clients, Total Leads. Per-platform totals and spend used to
@@ -423,8 +601,8 @@ const Dashboard = () => {
                   {clients.length}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1.2, mt: 0.5, flexWrap: 'wrap' }}>
-                  <Chip size="small" icon={<Facebook sx={{ fontSize: 13, color: '#C08552 !important' }} />} label={`Meta: ${clientMix.metaCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#C0855215', color: '#C08552', fontWeight: 600 }} />
-                  <Chip size="small" icon={<Google sx={{ fontSize: 13, color: '#3E2723 !important' }} />} label={`Google: ${clientMix.googleCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600 }} />
+                  <Chip size="small" label={`Meta: ${clientMix.metaCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#C0855215', color: '#C08552', fontWeight: 600 }} />
+                  <Chip size="small" label={`Google: ${clientMix.googleCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600 }} />
                   <Chip size="small" label={`Both: ${clientMix.bothCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: `${tealAccent}15`, color: tealAccent, fontWeight: 600 }} />
                 </Box>
               </Box>
@@ -451,6 +629,118 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </Grid>
+      </Grid>
+
+      {/* ── Today's Spotlights ─────────────────────────────────────
+          Three analytical cards that surface the standout clients
+          right now: who's generating the most leads, who's getting
+          them cheapest, and who's burning spend without results.
+          Each card is clickable and routes straight to that client's
+          ads detail page so the user can act in one step. */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        {[
+          {
+            key: 'top',
+            label: 'Top Performer Today',
+            sub: 'Most leads received',
+            icon: <TrophyIcon />,
+            color: '#10b981',
+            client: topPerformer,
+            metric: topPerformer ? `${topPerformer.leads}` : '—',
+            metricSub: topPerformer ? 'leads today' : 'No client active yet',
+          },
+          {
+            key: 'cpl',
+            label: 'Best Value Today',
+            sub: 'Lowest cost per lead',
+            icon: <SavingsIcon />,
+            color: '#C08552',
+            client: bestCpl,
+            metric: bestCpl ? `₹${Math.round(bestCpl.cpl).toLocaleString('en-IN')}` : '—',
+            metricSub: bestCpl ? `for ${bestCpl.leads} lead${bestCpl.leads === 1 ? '' : 's'}` : 'No spend data yet',
+          },
+          {
+            key: 'review',
+            label: 'Needs Review',
+            sub: zeroLeadSpender ? 'Spending but no leads back' : 'Highest cost per lead',
+            icon: <ReportProblemIcon />,
+            color: '#ef4444',
+            client: needsReview,
+            metric: needsReview
+              ? (zeroLeadSpender
+                  ? `₹${Math.round(zeroLeadSpender.spend).toLocaleString('en-IN')}`
+                  : `₹${Math.round(needsReview.cpl).toLocaleString('en-IN')}`)
+              : '—',
+            metricSub: needsReview
+              ? (zeroLeadSpender ? 'spent, 0 leads' : 'per lead')
+              : 'Nothing to flag',
+          },
+        ].map((s) => (
+          <Grid key={s.key} size={{ xs: 12, md: 4 }}>
+            <Card
+              variant="outlined"
+              onClick={() => s.client && navigate(`/client-ads/${s.client.id}`)}
+              sx={{
+                height: '100%',
+                borderLeft: `4px solid ${s.color}`,
+                cursor: s.client ? 'pointer' : 'default',
+                transition: 'transform 0.15s, box-shadow 0.15s',
+                opacity: s.client ? 1 : 0.6,
+                '&:hover': s.client
+                  ? { transform: 'translateY(-2px)', boxShadow: '0 6px 16px rgba(0,0,0,0.08)' }
+                  : {},
+              }}
+            >
+              <CardContent sx={{ py: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.2 }}>
+                  <Box sx={{
+                    width: 40, height: 40, borderRadius: 2,
+                    bgcolor: `${s.color}15`, color: s.color,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    {React.cloneElement(s.icon, { sx: { fontSize: 22 } })}
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: 'text.primary', lineHeight: 1.1 }}>
+                      {s.label}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                      {s.sub}
+                    </Typography>
+                  </Box>
+                  {s.client && (
+                    <ArrowForwardIcon sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
+                  )}
+                </Box>
+                {s.client ? (
+                  <>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', mb: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.client.name}>
+                      {s.client.name}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.8 }}>
+                      <Typography sx={{ fontWeight: 800, fontSize: '1.6rem', color: s.color, lineHeight: 1 }}>
+                        {s.metric}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary' }}>
+                        {s.metricSub}
+                      </Typography>
+                    </Box>
+                  </>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.8 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: '1.2rem', color: 'text.disabled' }}>
+                      {s.metric}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary' }}>
+                      {s.metricSub}
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
       {/* ── Row 2: Per-platform donuts — Meta + Google, one slice per
@@ -696,6 +986,7 @@ const Dashboard = () => {
         </Card>
       )}
     </Box>
+    </LocalizationProvider>
   );
 };
 

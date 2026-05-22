@@ -34,9 +34,27 @@ const clientSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive', 'pending', 'suspended'],
+      // 'dropped' is a soft-delete status — the row stays in the DB
+      // for history but is excluded from the live client list by
+      // default. Re-onboarding flips the status back to 'active'.
+      enum: ['active', 'inactive', 'pending', 'suspended', 'dropped'],
       default: 'active',
     },
+    // ── Drop history ─────────────────────────────────────────────
+    // Captures why a client was dropped, when, and by whom — plus
+    // a small list of past drop/re-onboard events so the audit
+    // trail isn't wiped if the client is later reactivated and
+    // dropped a second time.
+    drop_reason: { type: String, default: '' },
+    dropped_at: { type: Date, default: null },
+    dropped_by: { type: String, default: '' },
+    reonboarded_at: { type: Date, default: null },
+    drop_history: [{
+      action: { type: String, enum: ['dropped', 'reonboarded'], required: true },
+      reason: { type: String, default: '' },
+      at: { type: Date, default: Date.now },
+      by: { type: String, default: '' },
+    }],
     accountID: {
       type: String,
       trim: true,
