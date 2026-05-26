@@ -290,10 +290,7 @@ const Clients = () => {
       setSnackbar({ open: true, message: 'Address is required', severity: 'error' });
       return;
     }
-    if (!editClient.gstNumber?.trim()) {
-      setSnackbar({ open: true, message: 'GST Number is required', severity: 'error' });
-      return;
-    }
+    // GST Number is optional on edit too — matches the Add flow.
 
     setSaving(true);
     try {
@@ -620,10 +617,9 @@ const Clients = () => {
       setSnackbar({ open: true, message: 'Address is required', severity: 'error' });
       return;
     }
-    if (!newClient.gstNumber.trim()) {
-      setSnackbar({ open: true, message: 'GST Number is required', severity: 'error' });
-      return;
-    }
+    // GST Number is optional — many clients onboard without one
+    // (small businesses, freelancers). If filled it still trims +
+    // saves; if empty it's stored as ''.
 
     setSaving(true);
     try {
@@ -744,34 +740,38 @@ const Clients = () => {
           Clients Management
         </Typography>
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setAddClientOpen(true)}
-            sx={{
-              // Lock the base + hover bg to primaryColor and just
-              // darken via filter — using secondaryColor for hover
-              // was painting white text onto a light theme colour
-              // and making the label invisible.
-              bgcolor: primaryColor,
-              color: '#fff',
-              '&:hover': {
+          <Tooltip arrow title="Add a new client to the CRM">
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setAddClientOpen(true)}
+              sx={{
+                // Lock the base + hover bg to primaryColor and just
+                // darken via filter — using secondaryColor for hover
+                // was painting white text onto a light theme colour
+                // and making the label invisible.
                 bgcolor: primaryColor,
                 color: '#fff',
-                filter: 'brightness(0.92)',
-              },
-            }}
-          >
-            Add Client
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
-            onClick={fetchClients}
-            disabled={loading}
-          >
-            Refresh
-          </Button>
+                '&:hover': {
+                  bgcolor: primaryColor,
+                  color: '#fff',
+                  filter: 'brightness(0.92)',
+                },
+              }}
+            >
+              Add Client
+            </Button>
+          </Tooltip>
+          <Tooltip arrow title="Re-fetch the client list from the server">
+            <Button
+              variant="outlined"
+              startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
+              onClick={fetchClients}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </Tooltip>
         </Box>
       </Box>
 
@@ -809,22 +809,24 @@ const Clients = () => {
       {/* Stats Cards */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {[
-          { label: 'Total Clients', value: clients.length, color: primaryColor },
-          { label: 'Active Clients', value: clients.filter(c => c.status === 'active').length, color: '#10b981' },
-          { label: 'Inactive Clients', value: clients.filter(c => c.status === 'inactive').length, color: '#C08552' },
+          { label: 'Total Clients', value: clients.length, color: primaryColor, tip: 'Every client on your books' },
+          { label: 'Active Clients', value: clients.filter(c => c.status === 'active').length, color: '#10b981', tip: 'Clients with an Active status' },
+          { label: 'Inactive Clients', value: clients.filter(c => c.status === 'inactive').length, color: '#C08552', tip: 'Clients marked Inactive — paused but not dropped' },
         ].map((s, i) => (
           <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
-            <Card variant="outlined" sx={{ borderLeft: `3px solid ${s.color}` }}>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BusinessIcon sx={{ color: s.color, fontSize: 20 }} />
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
-                  <Typography sx={{ fontWeight: 700, color: s.color, fontSize: '1.3rem', lineHeight: 1.2 }}>{s.value}</Typography>
-                </Box>
-              </CardContent>
-            </Card>
+            <Tooltip arrow placement="top" title={s.tip}>
+              <Card variant="outlined" sx={{ borderLeft: `3px solid ${s.color}`, cursor: 'help' }}>
+                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: `${s.color}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <BusinessIcon sx={{ color: s.color, fontSize: 20 }} />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Typography>
+                    <Typography sx={{ fontWeight: 700, color: s.color, fontSize: '1.3rem', lineHeight: 1.2 }}>{s.value}</Typography>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Tooltip>
           </Grid>
         ))}
       </Grid>
@@ -839,22 +841,23 @@ const Clients = () => {
             <Table>
               <TableHead>
                 <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
-                  <TableCell sx={{ fontWeight: 600 }}>Client ID</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Team</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Industry</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Assigned SMM</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Assigned SME</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Place</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Onboarded</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }} align="center">Actions</TableCell>
+                  {/* Team / Assigned SMM / Assigned SME columns hidden
+                      here per spec — fields stay in state + on the
+                      backend so they're still editable from the Edit
+                      dialog and queryable elsewhere. */}
+                  <Tooltip arrow title="Short unique ID used in URLs and reports"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Client ID</TableCell></Tooltip>
+                  <Tooltip arrow title="Display name shown across the CRM"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Name</TableCell></Tooltip>
+                  <Tooltip arrow title="Client's business / vertical"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Industry</TableCell></Tooltip>
+                  <Tooltip arrow title="Client's primary location"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Place</TableCell></Tooltip>
+                  <Tooltip arrow title="Date this client was added to the CRM"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Onboarded</TableCell></Tooltip>
+                  <Tooltip arrow title="Active / Inactive / Pending / Dropped"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Status</TableCell></Tooltip>
+                  <Tooltip arrow title="View, edit, link Google/Meta, drop or re-onboard"><TableCell sx={{ fontWeight: 600, cursor: 'help' }} align="center">Actions</TableCell></Tooltip>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {clients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={7} align="center">
                       <Typography color="text.secondary" sx={{ py: 4 }}>
                         No clients found. Click "Refresh" to fetch from Main API.
                       </Typography>
@@ -862,7 +865,7 @@ const Clients = () => {
                   </TableRow>
                 ) : filteredClients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">
+                    <TableCell colSpan={7} align="center">
                       <Typography color="text.secondary" sx={{ py: 4 }}>
                         No clients match "{searchQuery}".
                       </Typography>
@@ -883,22 +886,14 @@ const Clients = () => {
                           {client.name}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        {client.team ? (
-                          <Chip label={client.team} size="small" color="success" variant="outlined" />
-                        ) : '-'}
-                      </TableCell>
+                      {/* Team / Assigned SMM / Assigned SME columns were
+                          dropped from this table — values still live on
+                          the client doc and surface in the Edit dialog. */}
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <BusinessIcon fontSize="small" color="action" />
                           {client.organisationType || '-'}
                         </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{client.assignedSMM || '-'}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{client.assignedSME || '-'}</Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">{client.place || '-'}</Typography>
@@ -1167,11 +1162,11 @@ const Clients = () => {
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 fullWidth
-                label="GST Number *"
+                label="GST Number"
                 name="gstNumber"
                 value={newClient.gstNumber}
                 onChange={handleInputChange}
-                placeholder="GST Number"
+                placeholder="Optional"
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -1347,11 +1342,11 @@ const Clients = () => {
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   fullWidth
-                  label="GST Number *"
+                  label="GST Number"
                   name="gstNumber"
                   value={editClient.gstNumber}
                   onChange={handleEditInputChange}
-                  placeholder="GST Number"
+                  placeholder="Optional"
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>

@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, CardContent, Typography, Grid, Paper, Chip,
-  LinearProgress, CircularProgress, Alert, Button,
+  LinearProgress, CircularProgress, Alert, Button, Tooltip,
 } from '@mui/material';
 import {
   WhatsApp as WhatsAppIcon,
@@ -16,6 +16,8 @@ import {
   Group as LeadIcon,
   TrendingUp as TrendIcon,
   OpenInNew as OpenInNewIcon,
+  Assessment as ReportIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 
 // PortalDashboardToday — the landing page for the client portal sidebar.
@@ -46,7 +48,11 @@ const SOURCE_CARDS = [
 const fmt = (n) => Number(n ?? 0).toLocaleString('en-IN');
 const pct = (n) => `${Number(n ?? 0).toFixed(0)}%`;
 
-const KpiTile = ({ label, value, sub, color, Icon, onClick }) => (
+// `change` is the day-over-day delta (today − yesterday). When set,
+// a small coloured badge with ▲/▼/· appears below the metric.
+// `lowerIsBetter` flips the colour scheme (e.g. for Not Connected,
+// where down is good).
+const KpiTile = ({ label, value, sub, color, Icon, onClick, change, lowerIsBetter }) => (
   <Card
     variant="outlined"
     onClick={onClick}
@@ -71,9 +77,30 @@ const KpiTile = ({ label, value, sub, color, Icon, onClick }) => (
         <Typography sx={{ fontSize: '0.66rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
           {label}
         </Typography>
-        <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color, lineHeight: 1.1 }}>
-          {value}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.8, flexWrap: 'wrap' }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color, lineHeight: 1.1 }}>
+            {value}
+          </Typography>
+          {change != null && (() => {
+            const up = change > 0;
+            const flat = change === 0;
+            const good = flat ? null : (lowerIsBetter ? !up : up);
+            const bg = flat ? '#9ca3af' : (good ? '#10b981' : '#ef4444');
+            const arrow = flat ? '·' : (up ? '▲' : '▼');
+            return (
+              <Tooltip arrow title={`${flat ? 'No change' : (up ? '+' + change : change)} vs yesterday`}>
+                <Box sx={{
+                  display: 'inline-flex', alignItems: 'center', gap: 0.2,
+                  px: 0.6, py: 0.1, borderRadius: 0.8,
+                  bgcolor: `${bg}15`, color: bg,
+                  fontSize: '0.7rem', fontWeight: 800, cursor: 'help',
+                }}>
+                  {arrow} {Math.abs(change)}
+                </Box>
+              </Tooltip>
+            );
+          })()}
+        </Box>
         {sub && (
           <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
             {sub}
@@ -118,24 +145,40 @@ const SourceCard = ({ label, count, Icon, color, onJump }) => (
 const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
   const navigate = useNavigate();
   const [report, setReport] = useState(null);
+  const [yesterdayReport, setYesterdayReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [bgRefreshing, setBgRefreshing] = useState(false);
   const [error, setError] = useState('');
 
   const today = new Date().toISOString().slice(0, 10);
+  const yesterday = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
   const todayPretty = new Date().toLocaleDateString('en-GB', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   });
+  // Time-of-day greeting so the hero feels alive — Good morning before
+  // noon, afternoon up to 5pm, then evening.
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  }, []);
 
   const fetchReport = useCallback(async ({ silent = false } = {}) => {
     if (!clientId || !apiInstance) return;
     if (silent) setBgRefreshing(true); else setLoading(true);
     setError('');
     try {
-      const res = await apiInstance.get(`/meta/client/${clientId}/telecalling-report`, {
-        params: { date: today },
-      });
-      setReport(res.data || null);
+      // Fetch today + yesterday in parallel — yesterday powers the
+      // vs-yesterday comparison badges on the KPI tiles.
+      const [todayRes, yRes] = await Promise.allSettled([
+        apiInstance.get(`/meta/client/${clientId}/telecalling-report`, { params: { date: today } }),
+        apiInstance.get(`/meta/client/${clientId}/telecalling-report`, { params: { date: yesterday } }),
+      ]);
+      if (todayRes.status === 'fulfilled') setReport(todayRes.value.data || null);
+      else throw todayRes.reason;
+      if (yRes.status === 'fulfilled') setYesterdayReport(yRes.value.data || null);
     } catch (err) {
       console.error('dashboard fetch failed', err);
       if (!silent) {
@@ -144,7 +187,7 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
     } finally {
       if (silent) setBgRefreshing(false); else setLoading(false);
     }
-  }, [clientId, apiInstance, today]);
+  }, [clientId, apiInstance, today, yesterday]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -189,6 +232,24 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
   const consultedToday = consult.consulted || 0;
   const convertedToday = consult.converted || 0;
 
+  // ── Yesterday comparison deltas ────────────────────────────────
+  // Each delta is "today − yesterday"; the KpiTile renders it as a
+  // ▲/▼ badge in green or red. Plain object (no useMemo) since this
+  // sits *after* the early-return guards above and hooks must stay
+  // in a stable order.
+  const yDay = yesterdayReport?.day || null;
+  const yAbs = yDay?.leads_abstract || {};
+  const yCalls = yDay?.calls || {};
+  const yConsult = yDay?.consultation || {};
+  const deltas = yDay ? {
+    totalLeads: totalLeads - (yAbs.total || 0),
+    connectedLeads: connectedLeads - (yAbs.connected || 0),
+    totalCalls: totalCalls - (yCalls.total || 0),
+    appointmentsBooked: appointmentsBooked - (yDay.appointments_booked || 0),
+    consultedToday: consultedToday - (yConsult.consulted || 0),
+    convertedToday: convertedToday - (yConsult.converted || 0),
+  } : {};
+
   // Yesterday + today from the appointment_status array, for the bottom strip.
   const appts = report?.appointment_status || [];
   const todayApptRow = appts.find((r) => r.offset === 0) || {};
@@ -196,38 +257,110 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* Hero strip — date + live indicator */}
-      <Paper variant="outlined" sx={{ p: 2, borderLeft: `4px solid ${MAROON}`, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: 1, minWidth: 220 }}>
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-            Today's Dashboard
-          </Typography>
-          <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: MAROON }}>
-            {displayName || 'Client Portal'}
-          </Typography>
-          <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary' }}>
-            {todayPretty}
-          </Typography>
-        </Box>
-        <Chip
-          icon={
-            bgRefreshing
-              ? <CircularProgress size={12} sx={{ color: '#10b981 !important' }} />
-              : <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#10b981', mx: 0.5 }} />
-          }
-          label={bgRefreshing ? 'Refreshing…' : 'Live · auto-refresh 30s'}
-          size="small"
-          sx={{ bgcolor: '#10b98115', color: '#10b981', fontWeight: 700, fontSize: '0.72rem', height: 28 }}
-        />
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => fetchReport()}
-          sx={{ borderColor: MAROON, color: MAROON, '&:hover': { borderColor: MAROON, bgcolor: `${MAROON}10` } }}
-        >
-          Refresh
-        </Button>
-      </Paper>
+      {/* Hero strip — gradient banner with personalised greeting +
+          live indicator + Refresh + quick action shortcuts to the
+          three most common workflows (Open Leads, Add Lead, EOD). */}
+      <Card
+        variant="outlined"
+        sx={{
+          background: `linear-gradient(135deg, ${MAROON}15 0%, ${MAROON}05 50%, transparent 100%)`,
+          borderLeft: `4px solid ${MAROON}`,
+        }}
+      >
+        <CardContent sx={{ py: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5, mb: 1.5 }}>
+            <Box sx={{ minWidth: 220, flex: 1 }}>
+              <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                {greeting}
+              </Typography>
+              <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color: MAROON, lineHeight: 1.1 }}>
+                {displayName || 'Client Portal'}
+              </Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: 'text.secondary', mt: 0.3 }}>
+                {todayPretty} · Here's how your day is shaping up
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Tooltip arrow title="The dashboard refreshes itself every 30 seconds">
+                <Chip
+                  icon={
+                    bgRefreshing
+                      ? <CircularProgress size={12} sx={{ color: '#10b981 !important' }} />
+                      : <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#10b981', mx: 0.5 }} />
+                  }
+                  label={bgRefreshing ? 'Refreshing…' : 'Live · auto-refresh 30s'}
+                  size="small"
+                  sx={{ bgcolor: '#10b98115', color: '#10b981', fontWeight: 700, fontSize: '0.72rem', height: 28, cursor: 'help' }}
+                />
+              </Tooltip>
+              <Tooltip arrow title="Re-fetch the latest numbers now">
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => fetchReport()}
+                  sx={{
+                    bgcolor: MAROON, color: '#fff',
+                    '&:hover': { bgcolor: MAROON, filter: 'brightness(0.92)' },
+                  }}
+                >
+                  Refresh
+                </Button>
+              </Tooltip>
+            </Box>
+          </Box>
+
+          {/* Quick action shortcuts */}
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
+            <Tooltip arrow title="Open the full leads table">
+              <Button
+                size="small"
+                startIcon={<LeadIcon sx={{ fontSize: 16 }} />}
+                onClick={() => navigate('/client-portal/leads')}
+                sx={{
+                  bgcolor: '#fff', color: MAROON, fontWeight: 700, textTransform: 'none',
+                  border: `1px solid ${MAROON}30`,
+                  '&:hover': { bgcolor: `${MAROON}08`, borderColor: MAROON },
+                }}
+              >
+                Open Leads
+              </Button>
+            </Tooltip>
+            <Tooltip arrow title="Add a new WhatsApp / manual lead">
+              <Button
+                size="small"
+                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                onClick={() => navigate('/client-portal/leads', { state: { openAdd: true } })}
+                sx={{
+                  bgcolor: '#fff', color: '#25D366', fontWeight: 700, textTransform: 'none',
+                  border: '1px solid #25D36640',
+                  '&:hover': { bgcolor: '#25D36608', borderColor: '#25D366' },
+                }}
+              >
+                Add Lead
+              </Button>
+            </Tooltip>
+            <Tooltip arrow title="View the EOD Report — full daily snapshot">
+              <Button
+                size="small"
+                startIcon={<ReportIcon sx={{ fontSize: 16 }} />}
+                onClick={() => {
+                  // The EOD Report lives at tab 4 inside the portal shell.
+                  // Going to /client-portal triggers the default tab (Dashboard)
+                  // unless we hash; the parent page reads ?tab if present.
+                  navigate('/client-portal?tab=4');
+                }}
+                sx={{
+                  bgcolor: '#fff', color: '#B45309', fontWeight: 700, textTransform: 'none',
+                  border: '1px solid #B4530940',
+                  '&:hover': { bgcolor: '#B4530908', borderColor: '#B45309' },
+                }}
+              >
+                EOD Report
+              </Button>
+            </Tooltip>
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Row 1 — six big KPI tiles */}
       <Grid container spacing={1.5}>
@@ -238,6 +371,7 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
             sub="today"
             color="#1877F2"
             Icon={LeadIcon}
+            change={deltas.totalLeads}
             onClick={() => jumpToLeads()}
           />
         </Grid>
@@ -248,6 +382,7 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
             sub={`${pct(connectedPct)} of valid`}
             color="#10b981"
             Icon={CheckIcon}
+            change={deltas.connectedLeads}
             onClick={() => jumpToLeads({ callLabel: ['CONNECTED'] })}
           />
         </Grid>
@@ -258,6 +393,7 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
             sub={`${fmt(connectedCalls)} connected`}
             color="#7E22CE"
             Icon={PhoneIcon}
+            change={deltas.totalCalls}
           />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
@@ -267,6 +403,7 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
             sub="booked today"
             color="#F59E0B"
             Icon={AppointmentIcon}
+            change={deltas.appointmentsBooked}
             onClick={() => jumpToLeads({ appointment: ['APPOINTMENT BOOKED', 'RESCHEDULED', 'COMPLETED'] })}
           />
         </Grid>
@@ -277,6 +414,7 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
             sub="today"
             color={MAROON}
             Icon={PhoneInTalkIcon}
+            change={deltas.consultedToday}
             onClick={() => jumpToLeads({ response: ['CONSULTED'] })}
           />
         </Grid>
@@ -287,6 +425,7 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
             sub="treatment booked"
             color="#0e7c4a"
             Icon={TrendIcon}
+            change={deltas.convertedToday}
             onClick={() => jumpToLeads({ response: ['TREATMENT BOOKED', 'CLOSED'] })}
           />
         </Grid>

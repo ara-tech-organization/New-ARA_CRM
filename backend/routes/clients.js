@@ -9,6 +9,7 @@ import {
   getClientStats,
   dropClient,
   reonboardClient,
+  revealPortalPassword,
 } from '../controllers/clientController.js';
 import { protect } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -52,5 +53,10 @@ router.patch('/:id/status', idValidation, validate, checkPermission(PERMISSIONS.
 // CLIENT_UPDATE since it's a status change.
 router.patch('/:id/drop', idValidation, validate, checkPermission(PERMISSIONS.CLIENT_DELETE), dropClient);
 router.patch('/:id/reonboard', idValidation, validate, checkPermission(PERMISSIONS.CLIENT_UPDATE), reonboardClient);
+
+// Admin password reveal — decrypts the recoverable copy of the
+// portal password so admins can read it out to a client who forgot
+// theirs. Audited by the normal request log.
+router.get('/:id/portal-credentials', idValidation, validate, checkPermission(PERMISSIONS.CLIENT_UPDATE), revealPortalPassword);
 
 export default router;

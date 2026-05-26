@@ -32,7 +32,12 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['superadmin', 'admin', 'SMM', 'PMM', 'staff'],
+      // Free-form on purpose — admins create their own role names from
+      // the Access Management page. The two role strings the rest of
+      // the app special-cases are 'admin' and 'superadmin' (full page
+      // access). Everything else is a custom role and gets permissions
+      // assigned explicitly.
+      trim: true,
       default: 'SMM',
     },
     permissions: {
@@ -60,6 +65,14 @@ const userSchema = new mongoose.Schema(
     team: {
       type: String,
       trim: true,
+      default: '',
+    },
+    // Profile photo stored as a data URL (base64). No CDN setup
+    // needed — these are small (resized to ≤256x256 client-side
+    // before upload) so a string column is fine. Empty string when
+    // the user hasn't uploaded one.
+    avatar: {
+      type: String,
       default: '',
     },
   },

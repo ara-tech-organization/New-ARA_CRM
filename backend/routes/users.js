@@ -10,6 +10,7 @@ import {
   changeUserPassword,
   getUserStats,
   getTeams,
+  getRoles,
 } from '../controllers/userController.js';
 import { protect, authorize } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -27,6 +28,7 @@ router.route('/')
 
 router.get('/stats', getUserStats);
 router.get('/teams', getTeams);
+router.get('/roles', getRoles);
 
 router.route('/:id')
   .get(idValidation, validate, getUser)

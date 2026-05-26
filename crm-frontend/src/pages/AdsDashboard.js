@@ -6,6 +6,8 @@ import {
   TextField, LinearProgress, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, InputAdornment, CircularProgress, Alert, Paper,
   Tabs, Tab,
+  Tooltip as MuiTooltip,
+  Select, MenuItem, FormControl, InputLabel,
 } from '@mui/material';
 import {
   Google as GoogleIcon, Facebook as FacebookIcon, Search as SearchIcon,
@@ -14,6 +16,8 @@ import {
   Warning as WarningIcon, AccountBalanceWallet as WalletIcon,
   Refresh as RefreshIcon, Circle as CircleIcon, Campaign as CampaignIcon,
   OpenInNew as OpenInNewIcon,
+  EmojiEvents as TrophyIcon, Savings as SavingsIcon,
+  ReportProblem as ReportProblemIcon, Bolt as BoltIcon,
 } from '@mui/icons-material';
 import {
   BarChart, Bar, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
@@ -220,6 +224,72 @@ const AdsDashboard = () => {
       .map(([k, v]) => ({ name: k.replace(/_/g, ' '), value: v }));
   }, [filteredClients]);
 
+  // ── Comparison Spotlights ─────────────────────────────────────
+  // Surface the "winners" and "concerns" in the current client list
+  // so users can compare at a glance without scanning every row.
+  // Each entry derives from filteredClients (Google) / filteredMetaClients (Meta).
+  const googleSpotlights = useMemo(() => {
+    const withCost = filteredClients.filter((c) => Number(c.totalCost) > 0);
+    const withLeads = filteredClients.filter((c) => Number(c.totalConversions) > 0);
+    const cpl = (c) => (Number(c.totalConversions) > 0 ? Number(c.totalCost) / Number(c.totalConversions) : 0);
+    return {
+      topSpender: [...withCost].sort((a, b) => (Number(b.totalCost) || 0) - (Number(a.totalCost) || 0))[0],
+      topLeads: [...withLeads].sort((a, b) => (Number(b.totalConversions) || 0) - (Number(a.totalConversions) || 0))[0],
+      bestCpl: [...withLeads].filter((c) => cpl(c) > 0).sort((a, b) => cpl(a) - cpl(b))[0],
+      worstCpl: [...withLeads].filter((c) => cpl(c) > 0).sort((a, b) => cpl(b) - cpl(a))[0],
+    };
+  }, [filteredClients]);
+  const metaSpotlights = useMemo(() => {
+    const withSpend = filteredMetaClients.filter((c) => Number(c.spend) > 0);
+    const withLeads = filteredMetaClients.filter((c) => Number(c.leads) > 0);
+    const cpl = (c) => (Number(c.leads) > 0 ? Number(c.spend) / Number(c.leads) : 0);
+    return {
+      topSpender: [...withSpend].sort((a, b) => (Number(b.spend) || 0) - (Number(a.spend) || 0))[0],
+      topLeads: [...withLeads].sort((a, b) => (Number(b.leads) || 0) - (Number(a.leads) || 0))[0],
+      bestCpl: [...withLeads].filter((c) => cpl(c) > 0).sort((a, b) => cpl(a) - cpl(b))[0],
+      worstCpl: [...withLeads].filter((c) => cpl(c) > 0).sort((a, b) => cpl(b) - cpl(a))[0],
+    };
+  }, [filteredMetaClients]);
+
+  // Best/worst CPL ids — used to colour-code the table rows so the
+  // user spots the extremes at a glance without sorting.
+  const googleBestCplId = googleSpotlights.bestCpl?.clientId;
+  const googleWorstCplId = googleSpotlights.worstCpl?.clientId;
+  const metaBestCplId = metaSpotlights.bestCpl?.clientId;
+  const metaWorstCplId = metaSpotlights.worstCpl?.clientId;
+
+  // Sort state — single source for the table's order. Defaults rank
+  // clients by cost (highest first) so the spend leaderboard reads
+  // top-down on load.
+  const [googleSortKey, setGoogleSortKey] = useState('totalCost');
+  const [metaSortKey, setMetaSortKey] = useState('spend');
+
+  const sortedGoogleClients = useMemo(() => {
+    return [...filteredClients].sort((a, b) => {
+      if (googleSortKey === 'cpl') {
+        const cplA = a.totalConversions > 0 ? a.totalCost / a.totalConversions : Infinity;
+        const cplB = b.totalConversions > 0 ? b.totalCost / b.totalConversions : Infinity;
+        return cplA - cplB;
+      }
+      const av = Number(a[googleSortKey]) || 0;
+      const bv = Number(b[googleSortKey]) || 0;
+      return bv - av;
+    });
+  }, [filteredClients, googleSortKey]);
+
+  const sortedMetaClients = useMemo(() => {
+    return [...filteredMetaClients].sort((a, b) => {
+      if (metaSortKey === 'cpl') {
+        const cplA = a.leads > 0 ? a.spend / a.leads : Infinity;
+        const cplB = b.leads > 0 ? b.spend / b.leads : Infinity;
+        return cplA - cplB;
+      }
+      const av = Number(a[metaSortKey]) || 0;
+      const bv = Number(b[metaSortKey]) || 0;
+      return bv - av;
+    });
+  }, [filteredMetaClients, metaSortKey]);
+
   const currentColor = tab === 0 ? GOOGLE_GREEN : META_BLUE;
   const currentIcon = tab === 0 ? <GoogleIcon sx={{ fontSize: 28, color: GOOGLE_GREEN }} /> : <FacebookIcon sx={{ fontSize: 28, color: META_BLUE }} />;
 
@@ -237,15 +307,19 @@ const AdsDashboard = () => {
             </Typography>
           </Box>
         </Box>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={(tab === 0 ? loading : metaLoading) ? <CircularProgress size={14} /> : <RefreshIcon />}
-          onClick={tab === 0 ? fetchAnalytics : fetchMetaAnalytics}
-          disabled={tab === 0 ? loading : metaLoading}
-        >
-          {(tab === 0 ? loading : metaLoading) ? 'Loading...' : 'Refresh'}
-        </Button>
+        <MuiTooltip arrow title="Re-fetch the active platform's data">
+          <span>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={(tab === 0 ? loading : metaLoading) ? <CircularProgress size={14} /> : <RefreshIcon />}
+              onClick={tab === 0 ? fetchAnalytics : fetchMetaAnalytics}
+              disabled={tab === 0 ? loading : metaLoading}
+            >
+              {(tab === 0 ? loading : metaLoading) ? 'Loading...' : 'Refresh'}
+            </Button>
+          </span>
+        </MuiTooltip>
       </Box>
 
       {/* Platform Tabs */}
@@ -259,8 +333,12 @@ const AdsDashboard = () => {
             '& .Mui-selected': { color: `${currentColor} !important` },
           }}
         >
-          <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
-          <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+          <MuiTooltip arrow title="Compare Google Ads performance across clients">
+            <Tab icon={<GoogleIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Google Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+          </MuiTooltip>
+          <MuiTooltip arrow title="Compare Meta (Facebook + Instagram) performance across clients">
+            <Tab icon={<FacebookIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Meta Ads" sx={{ textTransform: 'none', fontWeight: 600 }} />
+          </MuiTooltip>
         </Tabs>
       </Card>
 
@@ -271,20 +349,28 @@ const AdsDashboard = () => {
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
           <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.secondary' }}>Date Range:</Typography>
-          <DatePicker
-            label="From"
-            value={dateFrom ? parseISO(dateFrom) : null}
-            onChange={(d) => { if (d && isValidDate(d)) setDateFrom(fmtDateFn(d, 'yyyy-MM-dd')); }}
-            format="dd/MM/yyyy"
-            slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
-          />
-          <DatePicker
-            label="To"
-            value={dateTo ? parseISO(dateTo) : null}
-            onChange={(d) => { if (d && isValidDate(d)) setDateTo(fmtDateFn(d, 'yyyy-MM-dd')); }}
-            format="dd/MM/yyyy"
-            slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
-          />
+          <MuiTooltip arrow title="Start of the date range">
+            <Box>
+              <DatePicker
+                label="From"
+                value={dateFrom ? parseISO(dateFrom) : null}
+                onChange={(d) => { if (d && isValidDate(d)) setDateFrom(fmtDateFn(d, 'yyyy-MM-dd')); }}
+                format="dd/MM/yyyy"
+                slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
+              />
+            </Box>
+          </MuiTooltip>
+          <MuiTooltip arrow title="End of the date range">
+            <Box>
+              <DatePicker
+                label="To"
+                value={dateTo ? parseISO(dateTo) : null}
+                onChange={(d) => { if (d && isValidDate(d)) setDateTo(fmtDateFn(d, 'yyyy-MM-dd')); }}
+                format="dd/MM/yyyy"
+                slotProps={{ textField: { size: 'small', placeholder: 'DD/MM/YYYY', sx: { minWidth: 160 } } }}
+              />
+            </Box>
+          </MuiTooltip>
           <Box sx={{ display: 'flex', gap: 0.8 }}>
             <Button size="small" variant="outlined" onClick={() => { const d = new Date().toISOString().split('T')[0]; setDateFrom(d); setDateTo(d); }}>Today</Button>
             <Button size="small" variant="outlined" onClick={() => { const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 6); setDateFrom(from.toISOString().split('T')[0]); setDateTo(to.toISOString().split('T')[0]); }}>Last 7 Days</Button>
@@ -328,44 +414,118 @@ const AdsDashboard = () => {
         </Card>
       ) : (
         <>
+          {/* ── Performance Spotlights ─────────────────────────────
+              Headline comparison cards — top spender, top leads,
+              best CPL (cheapest), worst CPL (most expensive). Each
+              card click-jumps to that client's ads detail page so
+              users can dig in immediately. */}
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            {[
+              { key: 'spender', label: 'Top Spender', tip: 'Client with the highest ad spend in the range', client: googleSpotlights.topSpender, color: GOOGLE_GREEN, icon: <MoneyIcon />, metric: googleSpotlights.topSpender ? fmtINR(googleSpotlights.topSpender.totalCost) : '—', sub: 'spent' },
+              { key: 'leads', label: 'Top Lead Generator', tip: 'Client converting the most leads', client: googleSpotlights.topLeads, color: '#10b981', icon: <BoltIcon />, metric: googleSpotlights.topLeads ? fmtNum(googleSpotlights.topLeads.totalConversions) : '—', sub: 'leads' },
+              { key: 'bestCpl', label: 'Best CPL', tip: 'Client paying the least per lead', client: googleSpotlights.bestCpl, color: '#0e7c4a', icon: <SavingsIcon />, metric: googleSpotlights.bestCpl ? fmtINR(googleSpotlights.bestCpl.totalCost / googleSpotlights.bestCpl.totalConversions) : '—', sub: 'per lead' },
+              { key: 'worstCpl', label: 'Worst CPL', tip: 'Client paying the most per lead — needs review', client: googleSpotlights.worstCpl, color: '#ef4444', icon: <ReportProblemIcon />, metric: googleSpotlights.worstCpl ? fmtINR(googleSpotlights.worstCpl.totalCost / googleSpotlights.worstCpl.totalConversions) : '—', sub: 'per lead' },
+            ].map((s) => (
+              <Grid key={s.key} size={{ xs: 6, md: 3 }}>
+                <MuiTooltip arrow title={s.tip}>
+                  <Card
+                    variant="outlined"
+                    onClick={() => s.client && navigate(`/client-ads/${s.client.clientId}`)}
+                    sx={{
+                      height: '100%', borderLeft: `4px solid ${s.color}`,
+                      cursor: s.client ? 'pointer' : 'default',
+                      opacity: s.client ? 1 : 0.6,
+                      transition: 'transform 0.15s, box-shadow 0.15s',
+                      '&:hover': s.client ? { transform: 'translateY(-2px)', boxShadow: '0 6px 16px rgba(0,0,0,0.08)' } : {},
+                    }}
+                  >
+                    <CardContent sx={{ py: 1.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.8 }}>
+                        <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: `${s.color}15`, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {React.cloneElement(s.icon, { sx: { fontSize: 18 } })}
+                        </Box>
+                        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>{s.label}</Typography>
+                      </Box>
+                      {s.client ? (
+                        <>
+                          <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.client.googleAdsAccountName || s.client.clientName}>
+                            {s.client.googleAdsAccountName || s.client.clientName}
+                          </Typography>
+                          <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: s.color, lineHeight: 1.1, mt: 0.3 }}>
+                            {s.metric} <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>{s.sub}</Typography>
+                          </Typography>
+                        </>
+                      ) : (
+                        <Typography sx={{ fontSize: '0.78rem', color: 'text.disabled' }}>No data</Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </MuiTooltip>
+              </Grid>
+            ))}
+          </Grid>
+
           {/* Accounts Table */}
           <Card variant="outlined">
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, gap: 1, flexWrap: 'wrap' }}>
                 <Box>
                   <Typography sx={{ fontWeight: 600, fontSize: '0.92rem' }}>All Linked Accounts</Typography>
                   <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Click a row to view detailed analytics</Typography>
                 </Box>
-                <Chip label={`${filteredClients.length} account${filteredClients.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: `${COPPER}15`, color: COPPER, fontWeight: 600 }} />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap' }}>
+                  <MuiTooltip arrow title="Re-rank the table by a chosen metric">
+                    <FormControl size="small" sx={{ minWidth: 160 }}>
+                      <InputLabel id="g-sort">Sort by</InputLabel>
+                      <Select labelId="g-sort" label="Sort by" value={googleSortKey} onChange={(e) => setGoogleSortKey(e.target.value)}>
+                        <MenuItem value="totalCost">Highest Spend</MenuItem>
+                        <MenuItem value="totalConversions">Most Leads</MenuItem>
+                        <MenuItem value="totalClicks">Most Clicks</MenuItem>
+                        <MenuItem value="totalImpressions">Most Impressions</MenuItem>
+                        <MenuItem value="cpl">Lowest CPL</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </MuiTooltip>
+                  <Chip label={`${filteredClients.length} account${filteredClients.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: `${COPPER}15`, color: COPPER, fontWeight: 600 }} />
+                </Box>
               </Box>
 
               <TableContainer>
                 <Table size="small" sx={{ minWidth: 1200 }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }}>Account</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }}>Customer ID</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Budget</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Fund</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Available</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Impressions</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Clicks</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">CTR</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">CPC</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Cost</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">Conversions</TableCell>
-                      <TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10` }} align="right">CPL</TableCell>
+                      <MuiTooltip arrow title="Client / ad account name"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }}>Account</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Google Ads Customer ID"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }}>Customer ID</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Account-level budget set in Google Ads"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Budget</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Total funds loaded to date"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Fund</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Remaining balance to spend"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Available</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Times the ads were shown"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Impressions</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Total ad clicks received"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Clicks</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Click-through rate = clicks ÷ impressions"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">CTR</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Cost per click = cost ÷ clicks"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">CPC</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Total ad spend in the range"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Cost</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Conversions reported by Google Ads"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Conversions</TableCell></MuiTooltip>
+                      <MuiTooltip arrow title="Cost per lead = cost ÷ conversions"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">CPL</TableCell></MuiTooltip>
                       <TableCell sx={{ bgcolor: `${GOOGLE_GREEN}10` }}></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredClients.map((c) => {
+                    {sortedGoogleClients.map((c) => {
                       const utilization = c.totalBudget > 0 ? (c.totalCost / c.totalBudget) * 100 : 0;
+                      // Tint rows for the cheapest / most expensive CPL
+                      // so the extremes pop while scanning.
+                      const isBest = c.clientId === googleBestCplId;
+                      const isWorst = c.clientId === googleWorstCplId;
+                      const rowTint = isBest
+                        ? { bgcolor: '#10b98108', borderLeft: '3px solid #10b981' }
+                        : isWorst
+                          ? { bgcolor: '#ef444408', borderLeft: '3px solid #ef4444' }
+                          : {};
                       return (
                         <TableRow
                           key={c.clientId}
                           hover
-                          sx={{ cursor: 'pointer' }}
+                          sx={{ cursor: 'pointer', ...rowTint }}
                           onClick={() => navigate(`/client-ads/${c.clientId}`)}
                         >
                           <TableCell>
@@ -515,43 +675,117 @@ const AdsDashboard = () => {
               </CardContent>
             </Card>
           ) : (
+            <>
+            {/* ── Meta Performance Spotlights ─────────────────────
+                Same comparison cards as Google — top spender, top
+                lead generator, best/worst CPL across the Meta-linked
+                client list. */}
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              {[
+                { key: 'spender', label: 'Top Spender', tip: 'Client with the highest Meta ad spend', client: metaSpotlights.topSpender, color: META_BLUE, icon: <MoneyIcon />, metric: metaSpotlights.topSpender ? fmtINR(metaSpotlights.topSpender.spend) : '—', sub: 'spent' },
+                { key: 'leads', label: 'Top Lead Generator', tip: 'Client generating the most Meta leads', client: metaSpotlights.topLeads, color: '#10b981', icon: <BoltIcon />, metric: metaSpotlights.topLeads ? fmtNum(metaSpotlights.topLeads.leads) : '—', sub: 'leads' },
+                { key: 'bestCpl', label: 'Best CPL', tip: 'Client paying the least per Meta lead', client: metaSpotlights.bestCpl, color: '#0e7c4a', icon: <SavingsIcon />, metric: metaSpotlights.bestCpl ? fmtINR(metaSpotlights.bestCpl.spend / metaSpotlights.bestCpl.leads) : '—', sub: 'per lead' },
+                { key: 'worstCpl', label: 'Worst CPL', tip: 'Client paying the most per Meta lead — needs review', client: metaSpotlights.worstCpl, color: '#ef4444', icon: <ReportProblemIcon />, metric: metaSpotlights.worstCpl ? fmtINR(metaSpotlights.worstCpl.spend / metaSpotlights.worstCpl.leads) : '—', sub: 'per lead' },
+              ].map((s) => (
+                <Grid key={s.key} size={{ xs: 6, md: 3 }}>
+                  <MuiTooltip arrow title={s.tip}>
+                    <Card
+                      variant="outlined"
+                      onClick={() => s.client && navigate(`/client-ads/${s.client.clientId}`)}
+                      sx={{
+                        height: '100%', borderLeft: `4px solid ${s.color}`,
+                        cursor: s.client ? 'pointer' : 'default',
+                        opacity: s.client ? 1 : 0.6,
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                        '&:hover': s.client ? { transform: 'translateY(-2px)', boxShadow: '0 6px 16px rgba(0,0,0,0.08)' } : {},
+                      }}
+                    >
+                      <CardContent sx={{ py: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.8 }}>
+                          <Box sx={{ width: 32, height: 32, borderRadius: 1.5, bgcolor: `${s.color}15`, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {React.cloneElement(s.icon, { sx: { fontSize: 18 } })}
+                          </Box>
+                          <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>{s.label}</Typography>
+                        </Box>
+                        {s.client ? (
+                          <>
+                            <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.client.metaAccountName || s.client.clientName}>
+                              {s.client.metaAccountName || s.client.clientName}
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: s.color, lineHeight: 1.1, mt: 0.3 }}>
+                              {s.metric} <Typography component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>{s.sub}</Typography>
+                            </Typography>
+                          </>
+                        ) : (
+                          <Typography sx={{ fontSize: '0.78rem', color: 'text.disabled' }}>No data</Typography>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </MuiTooltip>
+                </Grid>
+              ))}
+            </Grid>
+
             <Card variant="outlined">
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, gap: 1, flexWrap: 'wrap' }}>
                   <Box>
                     <Typography sx={{ fontWeight: 600, fontSize: '0.92rem' }}>All Linked Meta Accounts</Typography>
                     <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Click a row to view detailed analytics</Typography>
                   </Box>
-                  <Chip label={`${filteredMetaClients.length} account${filteredMetaClients.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap' }}>
+                    <MuiTooltip arrow title="Re-rank the table by a chosen metric">
+                      <FormControl size="small" sx={{ minWidth: 160 }}>
+                        <InputLabel id="m-sort">Sort by</InputLabel>
+                        <Select labelId="m-sort" label="Sort by" value={metaSortKey} onChange={(e) => setMetaSortKey(e.target.value)}>
+                          <MenuItem value="spend">Highest Spend</MenuItem>
+                          <MenuItem value="leads">Most Leads</MenuItem>
+                          <MenuItem value="clicks">Most Clicks</MenuItem>
+                          <MenuItem value="reach">Highest Reach</MenuItem>
+                          <MenuItem value="impressions">Most Impressions</MenuItem>
+                          <MenuItem value="cpl">Lowest CPL</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </MuiTooltip>
+                    <Chip label={`${filteredMetaClients.length} account${filteredMetaClients.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
+                  </Box>
                 </Box>
 
                 <TableContainer>
                   <Table size="small" sx={{ minWidth: 1300 }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Account</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }}>Ad Account ID</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Budget</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Spend</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Available</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Reach</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impressions</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Frequency</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPC</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPM</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPL</TableCell>
+                        <MuiTooltip arrow title="Client / ad account name"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }}>Account</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Meta Ad Account ID"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }}>Ad Account ID</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Daily / account-level budget set in Meta"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Budget</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Total ad spend in the date range"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Spend</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Remaining ad account balance"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Available</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Unique users the ad reached"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Reach</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Total times the ad was shown"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Impressions</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Avg impressions per unique user"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Frequency</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Total clicks on the ad"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Clicks</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Click-through rate = clicks ÷ impressions"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CTR</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Cost per click = spend ÷ clicks"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CPC</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Cost per 1,000 impressions"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CPM</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Form + WhatsApp leads in the range"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Leads</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Cost per lead = spend ÷ leads"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CPL</TableCell></MuiTooltip>
                         <TableCell sx={{ bgcolor: `${META_BLUE}10` }}></TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {filteredMetaClients.map((c) => (
+                      {sortedMetaClients.map((c) => {
+                        const isBest = c.clientId === metaBestCplId;
+                        const isWorst = c.clientId === metaWorstCplId;
+                        const rowTint = isBest
+                          ? { bgcolor: '#10b98108', borderLeft: '3px solid #10b981' }
+                          : isWorst
+                            ? { bgcolor: '#ef444408', borderLeft: '3px solid #ef4444' }
+                            : {};
+                        return (
                         <TableRow
                           key={c.clientId}
                           hover
-                          sx={{ cursor: 'pointer' }}
+                          sx={{ cursor: 'pointer', ...rowTint }}
                           onClick={() => navigate(`/client-ads/${c.clientId}`)}
                         >
                           <TableCell>
@@ -597,12 +831,14 @@ const AdsDashboard = () => {
                             <OpenInNewIcon sx={{ fontSize: 16, color: META_BLUE }} />
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>
               </CardContent>
             </Card>
+            </>
           )}
         </>
       )}

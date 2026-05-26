@@ -22,6 +22,7 @@ import {
   TextField,
   InputAdornment,
   IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   PictureAsPdf as PdfIcon,
@@ -289,67 +290,79 @@ const Leads = () => {
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Search clients — narrows the table rows by client name.
               Clears in one click via the trailing X icon. */}
-          <TextField
-            size="small"
-            placeholder="Search clients…"
-            value={clientSearch}
-            onChange={(e) => setClientSearch(e.target.value)}
-            sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem', bgcolor: 'background.paper' } }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                  </InputAdornment>
-                ),
-                endAdornment: clientSearch ? (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setClientSearch('')} edge="end">
-                      <ClearIcon sx={{ fontSize: 16 }} />
-                    </IconButton>
-                  </InputAdornment>
-                ) : null,
-              },
-            }}
-          />
-          <Button
-            variant="outlined"
-            startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
-            onClick={fetchLeads}
-            disabled={loading}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<PdfIcon />}
-            onClick={handleExportPDF}
-            disabled={clients.length === 0}
-            sx={{
-              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-              fontWeight: 600,
-              '&:hover': {
-                background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-              },
-            }}
-          >
-            Export PDF
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<ExcelIcon />}
-            onClick={handleExportExcel}
-            disabled={clients.length === 0}
-            sx={{
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              fontWeight: 600,
-              '&:hover': {
-                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-              },
-            }}
-          >
-            Export Excel
-          </Button>
+          <Tooltip arrow title="Filter the table by client name">
+            <TextField
+              size="small"
+              placeholder="Search clients…"
+              value={clientSearch}
+              onChange={(e) => setClientSearch(e.target.value)}
+              sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem', bgcolor: 'background.paper' } }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: clientSearch ? (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setClientSearch('')} edge="end">
+                        <ClearIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : null,
+                },
+              }}
+            />
+          </Tooltip>
+          <Tooltip arrow title="Re-fetch this month's leads from the server">
+            <Button
+              variant="outlined"
+              startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
+              onClick={fetchLeads}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </Tooltip>
+          <Tooltip arrow title="Download this month's table as a PDF report">
+            <span>
+              <Button
+                variant="contained"
+                startIcon={<PdfIcon />}
+                onClick={handleExportPDF}
+                disabled={clients.length === 0}
+                sx={{
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  fontWeight: 600,
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                  },
+                }}
+              >
+                Export PDF
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip arrow title="Download this month's table as a CSV (Excel)">
+            <span>
+              <Button
+                variant="contained"
+                startIcon={<ExcelIcon />}
+                onClick={handleExportExcel}
+                disabled={clients.length === 0}
+                sx={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  fontWeight: 600,
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  },
+                }}
+              >
+                Export Excel
+              </Button>
+            </span>
+          </Tooltip>
         </Box>
       </Box>
 
@@ -408,13 +421,14 @@ const Leads = () => {
               }}
             >
               {months.map((month) => (
-                <Tab
-                  key={month}
-                  value={month}
-                  icon={<CalendarMonthIcon sx={{ fontSize: 16 }} />}
-                  iconPosition="start"
-                  label={formatMonth(month)}
-                />
+                <Tooltip key={month} arrow title={`Switch to ${formatMonth(month)}`}>
+                  <Tab
+                    value={month}
+                    icon={<CalendarMonthIcon sx={{ fontSize: 16 }} />}
+                    iconPosition="start"
+                    label={formatMonth(month)}
+                  />
+                </Tooltip>
               ))}
             </Tabs>
           </Box>
@@ -516,26 +530,31 @@ const Leads = () => {
                         zIndex: 3,
                         minWidth: 180,
                         borderRight: `2px solid ${secondaryColor}`,
+                        cursor: 'help',
                       }}
                     >
-                      Client
+                      <Tooltip arrow title="Client name (sticky column)">
+                        <Box component="span">Client</Box>
+                      </Tooltip>
                     </TableCell>
                     {filteredDates.map((date) => (
-                      <TableCell
-                        key={date}
-                        align="center"
-                        sx={{
-                          fontWeight: 600,
-                          background: `${primaryColor} !important`,
-                          color: 'white !important',
-                          minWidth: 60,
-                          fontSize: '0.75rem',
-                          py: 1,
-                          borderRight: `1px solid ${secondaryColor}`,
-                        }}
-                      >
-                        {formatDate(date)}
-                      </TableCell>
+                      <Tooltip key={date} arrow title={`Leads received on ${formatDate(date)}`}>
+                        <TableCell
+                          align="center"
+                          sx={{
+                            fontWeight: 600,
+                            background: `${primaryColor} !important`,
+                            color: 'white !important',
+                            minWidth: 60,
+                            fontSize: '0.75rem',
+                            py: 1,
+                            borderRight: `1px solid ${secondaryColor}`,
+                            cursor: 'help',
+                          }}
+                        >
+                          {formatDate(date)}
+                        </TableCell>
+                      </Tooltip>
                     ))}
                     <TableCell
                       align="center"
@@ -549,9 +568,12 @@ const Leads = () => {
                         position: 'sticky',
                         right: 0,
                         zIndex: 3,
+                        cursor: 'help',
                       }}
                     >
-                      Total
+                      <Tooltip arrow title="Sum of all daily leads for this client this month">
+                        <Box component="span">Total</Box>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 </TableHead>

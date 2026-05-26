@@ -107,6 +107,9 @@ export const createUser = asyncHandler(async (req, res) => {
 
   // Create user
   try {
+    // Team is decoupled from role now — admins can put a custom-role
+    // user (e.g., "Designer") on a team. Stays an empty string when
+    // the dialog didn't provide one.
     const user = await User.create({
       name,
       email,
@@ -115,7 +118,7 @@ export const createUser = asyncHandler(async (req, res) => {
       permissions: userPermissions,
       phone,
       department,
-      team: role === 'SMM' ? (team || '') : '',
+      team: team || '',
     });
 
     // Return user without password
@@ -308,6 +311,23 @@ export const getTeams = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     data: teams,
+  });
+});
+
+/**
+ * @desc    Get distinct roles from users. Powers the role Autocomplete
+ *          on Access Management so admins see every role that's been
+ *          created so far (built-ins + custom ones they typed in).
+ * @route   GET /api/users/roles
+ * @access  Private (Admin/Superadmin)
+ */
+export const getRoles = asyncHandler(async (req, res) => {
+  const roles = await User.distinct('role', { role: { $nin: [null, ''] } });
+  roles.sort();
+
+  res.status(200).json({
+    success: true,
+    data: roles,
   });
 });
 

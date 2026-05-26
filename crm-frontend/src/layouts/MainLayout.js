@@ -459,8 +459,35 @@ const MainLayout = () => {
           },
         },
       }}>
-        {filteredMenuItems.map((item) => (
+        {filteredMenuItems.map((item, index) => {
+          // Render a divider + "ADMIN" group label right before the first
+          // admin-only item (Client Portal, Access Management). This makes
+          // the admin-only cluster visually distinct from the workspace
+          // tabs above without changing the sidebar order or hiding
+          // anything from the user.
+          const prev = filteredMenuItems[index - 1];
+          const showAdminDivider = item.adminOnly && (!prev || !prev.adminOnly);
+          return (
           <React.Fragment key={item.text}>
+            {showAdminDivider && (
+              <Box sx={{ mt: 1.5, mb: 0.8 }}>
+                <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)', mb: sidebarCollapsed ? 0 : 0.8 }} />
+                {!sidebarCollapsed && (
+                  <Typography
+                    sx={{
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      letterSpacing: 1,
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      px: 1.5,
+                    }}
+                  >
+                    Admin
+                  </Typography>
+                )}
+              </Box>
+            )}
             <ListItem disablePadding sx={{ mb: 0.25 }}>
               <Tooltip title={sidebarCollapsed ? item.text : ''} placement="right">
                 <ListItemButton
@@ -572,7 +599,8 @@ const MainLayout = () => {
               </Collapse>
             )}
           </React.Fragment>
-        ))}
+          );
+        })}
       </List>
 
     </Box>
@@ -665,7 +693,7 @@ const MainLayout = () => {
                 hidden from everyone else to keep the bar uncluttered. */}
             {(isAdmin || isSuperAdmin) && (
               <>
-                <Tooltip title="ARA SaaS">
+                <Tooltip title="ARA SaaShe ">
                   <IconButton
                     onClick={(e) => setAppsAnchorEl(e.currentTarget)}
                     sx={{

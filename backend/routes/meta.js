@@ -34,6 +34,7 @@ import {
   getClientsAdsComparison,
   getTelecallingReport,
   getMonthlyAbstract,
+  saveMonthlyAbstractCell,
   updateTelecallingTargets,
 } from "../controllers/metaController.js";
 
@@ -108,6 +109,10 @@ router.put("/client/:clientId/telecalling-targets", updateTelecallingTargets);
 // Monthly abstract — one row per date with source / call / appointment
 // columns. Powers the "Monthly Abstract" view in the EOD section.
 router.get("/client/:clientId/monthly-abstract", getMonthlyAbstract);
+
+// Save a single manually-entered abstract cell (today: convert_value).
+// Auto-saves on blur from the telecaller's inline editor.
+router.post("/client/:clientId/monthly-abstract/cell", saveMonthlyAbstractCell);
 
 // Utilities
 router.get("/ad-account/:adAccountId/verify", getVerifyAdAccount);

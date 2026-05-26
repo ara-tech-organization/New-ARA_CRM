@@ -21,6 +21,62 @@ import EditIcon from '@mui/icons-material/Edit';
 //                           call back with a filter object the parent
 //                           page uses to switch tabs + pre-filter the
 //                           leads table.
+// Inline number editor used by every editable cell in the EOD report
+// (Converted Value, Physical Marketing, …). Keeps its own draft string
+// so partial typing doesn't fight numeric parent state; commits on
+// blur or Enter, reverts on Escape. Borderless so it fills the cell
+// without changing row height.
+const EditableNumberInput = ({ initialValue, onCommit }) => {
+  const [draft, setDraft] = useState(String(initialValue ?? 0));
+  const inputRef = useRef(null);
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setDraft(String(initialValue ?? 0));
+    }
+  }, [initialValue]);
+  const commit = () => {
+    const cleaned = draft.replace(/[^0-9.]/g, '');
+    const num = Number(cleaned);
+    if (!Number.isFinite(num) || num < 0) {
+      setDraft(String(initialValue ?? 0));
+      return;
+    }
+    if (num === Number(initialValue || 0)) return;
+    onCommit(num);
+  };
+  return (
+    <input
+      ref={inputRef}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+        else if (e.key === 'Escape') {
+          setDraft(String(initialValue ?? 0));
+          e.currentTarget.blur();
+        }
+      }}
+      inputMode="numeric"
+      title="Type a value and press Enter (or click away) to save. Also shows up in the Monthly Abstract."
+      style={{
+        width: '100%',
+        height: '100%',
+        padding: '8px 6px',
+        border: 'none',
+        outline: 'none',
+        background: 'transparent',
+        textAlign: 'center',
+        fontSize: '0.85rem',
+        fontWeight: 700,
+        fontFamily: 'inherit',
+        color: '#111',
+        cursor: 'text',
+      }}
+    />
+  );
+};
+
 const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads }) => {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -36,6 +92,100 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
   const [editingTarget, setEditingTarget] = useState(null); // 'day_consult' | 'day_calls' | 'month_consult' | 'month_calls' | null
   const [targetDraft, setTargetDraft] = useState('');
   const [savingTarget, setSavingTarget] = useState(false);
+
+  // Generic manual-override state. Two parallel maps keyed by field
+  // name — `manualOverrides` holds the optimistic value the telecaller
+  // just typed (so the cell shows it before the next 30s refetch),
+  // `cellState` drives the brief save-status flash. Today we use this
+  // for `convert_value` and `physical_marketing`; adding a third
+  // editable field is just a new EditableCell render below.
+  const [manualOverrides, setManualOverrides] = useState({});
+  const [cellState, setCellState] = useState({});
+
+  // Reset both maps whenever the displayed date or fetched report
+  // changes — otherwise the override from yesterday would still
+  // appear on top of today's auto-fetched value.
+  useEffect(() => {
+    setManualOverrides({});
+    setCellState({});
+  }, [date, report?.date]);
+
+  const saveCell = useCallback(async (field, newVal) => {
+    if (!clientId || !apiInstance) return;
+    setCellState((s) => ({ ...s, [field]: 'saving' }));
+    try {
+      await apiInstance.post(`/meta/client/${clientId}/monthly-abstract/cell`, {
+        date,
+        field,
+        value: newVal,
+      });
+      setManualOverrides((o) => ({ ...o, [field]: newVal }));
+      setCellState((s) => ({ ...s, [field]: 'ok' }));
+      setTimeout(() => {
+        setCellState((s) => {
+          if (s[field] !== 'ok') return s;
+          const next = { ...s }; delete next[field]; return next;
+        });
+      }, 1200);
+    } catch (err) {
+      console.error(`save ${field} failed`, err);
+      setCellState((s) => ({ ...s, [field]: 'err' }));
+    }
+  }, [clientId, apiInstance, date]);
+
+  // Tiny helper — translates the cell save state into a background
+  // tint. Falls back to the editable-cell cream so the visual signal
+  // ("this cell can be typed in") survives at rest.
+  const editableCellBg = (field) => {
+    const state = cellState[field];
+    if (state === 'ok') return '#d1fae5';
+    if (state === 'err') return '#fee2e2';
+    if (state === 'saving') return `${COPPER}22`;
+    return EDITABLE_BG;
+  };
+
+  // Shared renderer for every editable cell in the Day Summary. Wraps
+  // the input with: a cream background, a faint ✏️ corner badge, and
+  // a hover-tint so users can tell at a glance that the cell accepts
+  // typing. The badge is `pointer-events: none` so it doesn't steal
+  // clicks meant for the input.
+  const renderEditableCell = (field, initial) => (
+    <TableCell
+      style={{
+        ...valueStyle,
+        backgroundColor: editableCellBg(field),
+      }}
+      sx={{
+        ...valueSx,
+        p: 0,
+        position: 'relative',
+        transition: 'background-color 0.15s',
+        '&:hover': { backgroundColor: EDITABLE_BG_HOVER },
+      }}
+    >
+      <EditableNumberInput
+        initialValue={initial}
+        onCommit={(v) => saveCell(field, v)}
+      />
+      <EditIcon sx={{
+        position: 'absolute',
+        top: 2, right: 3,
+        fontSize: 11,
+        color: COPPER,
+        opacity: 0.55,
+        pointerEvents: 'none',
+      }} />
+    </TableCell>
+  );
+
+  // Backwards-compat helper used by the source-bucket rows (which all
+  // pull their fallback value from `leads_abstract[field]`).
+  const renderEditableSourceCell = (field) => renderEditableCell(
+    field,
+    manualOverrides[field] != null
+      ? manualOverrides[field]
+      : (report?.day?.leads_abstract?.[field] || 0),
+  );
 
   // `fetchReport` accepts `silent: true` so the 30s timer can refresh
   // numbers without making the whole panel look "loading".
@@ -146,13 +296,22 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
     }
   };
 
-  // Spreadsheet palette — maroon banners, cream rows, red highlight
-  // cells for the worst metric (Achieved / Projection %).
-  const MAROON = '#8B1F2F';
-  const MAROON_SOFT = '#A03445';
+  // Software palette — brown banners, copper sub-banners, cream rows.
+  // Red highlight stays red on purpose: it marks the worst metric
+  // (Achieved / Projection %) and the warning colour reads instantly.
+  const BROWN = '#3E2723';
+  const COPPER = '#C08552';
   const CREAM = '#FFF4ED';
-  const RED_HL = '#E63946';
-  const RED_HL_BG = '#FFD9D6';
+  const BORDER = '#E8D5C4';
+  const RED_HL = '#D9534F';
+  const RED_HL_BG = '#FBE4E2';
+  // Editable-cell paint — a warm yellow-cream that's visibly different
+  // from the regular white value cells, plus a slightly warmer hover
+  // state. The corner ✏️ icon is rendered on top so the two signals
+  // (colour + icon) reinforce each other and a colour-blind user
+  // still sees the affordance.
+  const EDITABLE_BG = '#FFF7D6';
+  const EDITABLE_BG_HOVER = '#FFEFA8';
 
   // Inline editor for the target cells. Click the number → small text
   // input + tick/cross. Enter saves, Escape cancels, click-away saves.
@@ -168,11 +327,11 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
           sx={{
             display: 'inline-flex', alignItems: 'center', gap: 0.5,
             cursor: 'pointer', px: 0.5, borderRadius: 0.5,
-            '&:hover': { backgroundColor: 'rgba(139,31,47,0.08)' },
+            '&:hover': { backgroundColor: 'rgba(192,133,82,0.12)' },
           }}
         >
           <Typography sx={{ fontWeight: 700, fontSize: '0.86rem' }}>{value ?? 0}</Typography>
-          <EditIcon sx={{ fontSize: 12, color: MAROON, opacity: 0.55 }} />
+          <EditIcon sx={{ fontSize: 12, color: BROWN, opacity: 0.55 }} />
         </Box>
       );
     }
@@ -250,7 +409,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
   //   * the `*Sx` object goes to the `sx` prop and carries everything
   //     MUI's spacing scale handles (py, px) plus typography.
   const bannerStyle = {
-    backgroundColor: MAROON,
+    backgroundColor: BROWN,
     color: '#fff',
     borderBottom: '1px solid #fff',
     borderRight: '1px solid #fff',
@@ -266,7 +425,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
   };
 
   const subStyle = {
-    backgroundColor: MAROON_SOFT,
+    backgroundColor: COPPER,
     color: '#fff',
     borderBottom: '1px solid #fff',
     borderRight: '1px solid #fff',
@@ -283,8 +442,8 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
 
   const sectionTitleStyle = {
     backgroundColor: CREAM,
-    color: MAROON,
-    borderBottom: `2px solid ${MAROON}`,
+    color: BROWN,
+    borderBottom: `2px solid ${BROWN}`,
   };
   const sectionTitleSx = {
     fontWeight: 800,
@@ -298,7 +457,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
   const labelStyle = {
     backgroundColor: CREAM,
     color: '#1a1a1a',
-    border: '1px solid #f0d4c4',
+    border: `1px solid ${BORDER}`,
   };
   const labelSx = {
     fontWeight: 700,
@@ -311,7 +470,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
   const valueStyle = {
     backgroundColor: '#fff',
     color: '#1a1a1a',
-    border: '1px solid #f0d4c4',
+    border: `1px solid ${BORDER}`,
   };
   const valueSx = {
     fontWeight: 700,
@@ -348,14 +507,14 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
       {/* Toolbar — title + date picker + refresh */}
-      <Paper variant="outlined" sx={{ p: 1.2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', borderLeft: `3px solid ${MAROON}` }}>
+      <Paper variant="outlined" sx={{ p: 1.2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', borderLeft: `3px solid ${BROWN}` }}>
         <Box sx={{ flex: 1, minWidth: 220 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: MAROON, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: BROWN, display: 'flex', alignItems: 'center', gap: 1 }}>
             EOD Report
-            {bgRefreshing && <CircularProgress size={12} sx={{ color: MAROON, opacity: 0.6 }} />}
+            {bgRefreshing && <CircularProgress size={12} sx={{ color: BROWN, opacity: 0.6 }} />}
           </Typography>
           <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-            Numbers come from the Leads table — auto-refreshes every 30s. Click any target to edit it.
+            Auto-refreshes every 30s · numbers update from the Leads table as telecallers save.
           </Typography>
         </Box>
         <TextField
@@ -374,6 +533,36 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
         </Button>
       </Paper>
 
+      {/* Legend — two small chips that teach the visual language used
+          throughout the report so users know which cells they can
+          click into vs which ones are auto-fetched. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap', px: 0.4 }}>
+        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', fontWeight: 600 }}>
+          Legend:
+        </Typography>
+        <Box sx={{
+          display: 'inline-flex', alignItems: 'center', gap: 0.6,
+          px: 0.9, py: 0.3, borderRadius: 1,
+          border: `1px solid ${BORDER}`, backgroundColor: EDITABLE_BG,
+          position: 'relative',
+        }}>
+          <EditIcon sx={{ fontSize: 12, color: COPPER, opacity: 0.8 }} />
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: BROWN }}>
+            Editable — click to type
+          </Typography>
+        </Box>
+        <Box sx={{
+          display: 'inline-flex', alignItems: 'center', gap: 0.6,
+          px: 0.9, py: 0.3, borderRadius: 1,
+          border: `1px solid ${BORDER}`, backgroundColor: '#fff',
+        }}>
+          <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: BORDER }} />
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: BROWN }}>
+            Read-only — auto-fetched from leads
+          </Typography>
+        </Box>
+      </Box>
+
       {/* Header card — TELECALLING REPORT - <CLIENT>  |  DATE  |  DD-MM-YYYY */}
       <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1 }}>
         <Table size="small" sx={{ borderCollapse: 'collapse' }}>
@@ -383,7 +572,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
                 TELECALLING REPORT{displayName ? ` - ${displayName}` : ''}
               </TableCell>
               <TableCell style={bannerStyle} sx={{ ...bannerSx, width: '15%' }}>DATE</TableCell>
-              <TableCell style={valueStyle} sx={{ ...valueSx, fontWeight: 800, color: MAROON, fontSize: '0.95rem' }}>
+              <TableCell style={valueStyle} sx={{ ...valueSx, fontWeight: 800, color: BROWN, fontSize: '0.95rem' }}>
                 {datePretty}
               </TableCell>
             </TableRow>
@@ -416,14 +605,14 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
           <TableBody>
             <TableRow>
               <TableCell style={labelStyle} sx={labelSx}>&nbsp;</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
+              <TableCell style={{ ...valueStyle, backgroundColor: EDITABLE_BG }} sx={{ ...valueSx, position: 'relative', '&:hover': { backgroundColor: EDITABLE_BG_HOVER } }}>
                 <EditableTarget targetKey="day_consult" value={report.day.target_consulted.target} />
               </TableCell>
               <TableCell style={redHlStyle} sx={redHlSx}>
                 <Num value={report.day.target_consulted.achieved} filter={{ response: ['CONSULTED'] }} color="#fff" size="1rem" />
               </TableCell>
               <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.target_calls} /></TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
+              <TableCell style={{ ...valueStyle, backgroundColor: EDITABLE_BG }} sx={{ ...valueSx, position: 'relative', '&:hover': { backgroundColor: EDITABLE_BG_HOVER } }}>
                 <EditableTarget targetKey="day_calls" value={report.day.target_connected.target} />
               </TableCell>
               <TableCell style={redHlStyle} sx={redHlSx}>
@@ -460,12 +649,12 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
           <TableBody>
             <TableRow>
               <TableCell style={labelStyle} sx={labelSx}>&nbsp;</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
+              <TableCell style={{ ...valueStyle, backgroundColor: EDITABLE_BG }} sx={{ ...valueSx, position: 'relative', '&:hover': { backgroundColor: EDITABLE_BG_HOVER } }}>
                 <EditableTarget targetKey="month_consult" value={report.month_target.consulted.target} />
               </TableCell>
               <TableCell style={valueStyle} sx={valueSx}><Num value={report.month_target.consulted.achieved} filter={{ response: ['CONSULTED'] }} /></TableCell>
               <TableCell style={valueStyle} sx={valueSx}><Num value={report.month_target.consulted.projection} /></TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
+              <TableCell style={{ ...valueStyle, backgroundColor: EDITABLE_BG }} sx={{ ...valueSx, position: 'relative', '&:hover': { backgroundColor: EDITABLE_BG_HOVER } }}>
                 <EditableTarget targetKey="month_calls" value={report.month_target.connected.target} />
               </TableCell>
               <TableCell style={valueStyle} sx={valueSx}><Num value={report.month_target.connected.achieved} filter={{ callLabel: ['CONNECTED'] }} /></TableCell>
@@ -567,7 +756,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
           <TableHead>
             <TableRow>
               <TableCell colSpan={2} style={bannerStyle} sx={{ ...bannerSx, fontSize: '0.84rem', py: 0.9 }}>DAY SUMMARY</TableCell>
-              <TableCell colSpan={4} style={{ ...bannerStyle, backgroundColor: MAROON_SOFT }} sx={{ ...bannerSx, fontSize: '0.78rem', py: 0.9 }}>{datePretty}</TableCell>
+              <TableCell colSpan={4} style={{ ...bannerStyle, backgroundColor: COPPER }} sx={{ ...bannerSx, fontSize: '0.78rem', py: 0.9 }}>{datePretty}</TableCell>
             </TableRow>
             <TableRow>
               <TableCell colSpan={2} style={bannerStyle} sx={{ ...bannerSx, py: 0.6 }}>Leads Abstract</TableCell>
@@ -616,23 +805,19 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
             {/* Row 4 — Google Lead / Total Leads / Total Appointments banner */}
             <TableRow>
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>GOOGLE LEAD</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
-                <Num value={report.day.leads_abstract.google_lead} filter={{ source: ['google_lead'] }} />
-              </TableCell>
+              {renderEditableSourceCell('google_lead')}
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>TOTAL LEADS</TableCell>
               <TableCell style={valueStyle} sx={{ ...valueSx, fontWeight: 800 }}>
                 <Num value={report.day.leads_abstract.total} weight={800} />
               </TableCell>
-              <TableCell colSpan={2} style={{ ...subStyle, backgroundColor: MAROON_SOFT }} sx={{ ...subSx, fontWeight: 800 }}>
+              <TableCell colSpan={2} style={{ ...subStyle, backgroundColor: COPPER }} sx={{ ...subSx, fontWeight: 800 }}>
                 TOTAL APPOINTMENTS BOOKED
               </TableCell>
             </TableRow>
             {/* Row 5 — Justdial / Valid Leads / Appointments value */}
             <TableRow>
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>JUSTDIAL</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
-                <Num value={report.day.leads_abstract.justdial} filter={{ source: ['justdial'] }} />
-              </TableCell>
+              {renderEditableSourceCell('justdial')}
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>VALID LEADS</TableCell>
               <TableCell style={valueStyle} sx={valueSx}>
                 <Num value={report.day.leads_abstract.valid} />
@@ -644,23 +829,19 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
             {/* Row 6 — Walk-In / Connected Leads / Consultation banner */}
             <TableRow>
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>WALK-IN</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
-                <Num value={report.day.leads_abstract.walk_in} filter={{ source: ['walk_in'] }} />
-              </TableCell>
+              {renderEditableSourceCell('walk_in')}
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>CONNECTED LEADS</TableCell>
               <TableCell style={valueStyle} sx={valueSx}>
                 <Num value={report.day.leads_abstract.connected} filter={{ callLabel: ['CONNECTED'] }} />
               </TableCell>
-              <TableCell colSpan={2} style={{ ...subStyle, backgroundColor: MAROON_SOFT }} sx={{ ...subSx, fontWeight: 800 }}>
+              <TableCell colSpan={2} style={{ ...subStyle, backgroundColor: COPPER }} sx={{ ...subSx, fontWeight: 800 }}>
                 CONSULTATION AND CONVERSION
               </TableCell>
             </TableRow>
             {/* Row 7 — Referral / Not Connected / Total Consultation */}
             <TableRow>
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>REFERRAL</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
-                <Num value={report.day.leads_abstract.referral} filter={{ source: ['referral'] }} />
-              </TableCell>
+              {renderEditableSourceCell('referral')}
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>NOT CONNECTED LEADS</TableCell>
               <TableCell style={valueStyle} sx={valueSx}>
                 <Num value={report.day.leads_abstract.not_connected} filter={{ callLabel: ['NOT CONNECTED', 'DISCONNECTED', 'RNR', 'BUSY'] }} />
@@ -673,9 +854,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
             {/* Row 8 — Physical Marketing / Connected % / Total Conversion */}
             <TableRow>
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>PHYSICAL MARKETING</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
-                <Num value={report.day.leads_abstract.physical_marketing} filter={{ source: ['physical_marketing'] }} />
-              </TableCell>
+              {renderEditableSourceCell('physical_marketing')}
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>CONNECTED %</TableCell>
               <TableCell style={valueStyle} sx={valueSx}>
                 <Num value={report.day.leads_abstract.connected_pct} />
@@ -688,17 +867,24 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
             {/* Row 9 — Incall / Valid Leads % / Converted Value */}
             <TableRow>
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>INCALL</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
-                <Num value={report.day.leads_abstract.incall} filter={{ source: ['incall_google', 'incall_fb', 'incall_insta', 'incall_self'] }} />
-              </TableCell>
+              {/* Single editable cell. Saves to `incall_total` — when
+                  set, overrides the sum of the four incall_* sub-types
+                  for both views. If left alone, the cell shows the
+                  running sum of whatever was typed in the Abstract. */}
+              {renderEditableCell('incall_total', manualOverrides.incall_total != null
+                ? manualOverrides.incall_total
+                : (report?.day?.leads_abstract?.incall || 0))}
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>VALID LEADS %</TableCell>
               <TableCell style={valueStyle} sx={valueSx}>
                 <Num value={report.day.leads_abstract.valid_pct} />
               </TableCell>
               <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>CONVERTED VALUE</TableCell>
-              <TableCell style={valueStyle} sx={valueSx}>
-                <Num value={(report.day.consultation.converted_value || 0).toLocaleString('en-IN')} />
-              </TableCell>
+              {/* Editable. Saves to AbstractEntry — the same row the
+                  Monthly Abstract reads, so the two views stay in
+                  lockstep across reloads. */}
+              {renderEditableCell('convert_value', manualOverrides.convert_value != null
+                ? manualOverrides.convert_value
+                : (report.day.consultation.converted_value || 0))}
             </TableRow>
           </TableBody>
         </Table>

@@ -6,6 +6,7 @@ import {
   Chip, Avatar, Button, Divider, TextField, InputAdornment,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Alert as MuiAlert,
+  Tooltip,
 } from '@mui/material';
 import {
   Facebook, Google, People, Refresh as RefreshIcon,
@@ -500,35 +501,43 @@ const Dashboard = () => {
               {/* MUI X DatePicker in en-GB / dd-MM-yyyy. maxDate stops
                   future selections; state still stores ISO YYYY-MM-DD
                   so the rest of the page doesn't need to change. */}
-              <DatePicker
-                value={selectedDate ? parseISO(selectedDate) : null}
-                onChange={(d) => {
-                  if (!d || !isValidDate(d)) return;
-                  const iso = fmtDate(d, 'yyyy-MM-dd');
-                  setSelectedDate(iso > today ? today : iso);
-                }}
-                maxDate={parseISO(today)}
-                format="dd/MM/yyyy"
-                slotProps={{
-                  textField: {
-                    size: 'small',
-                    placeholder: 'DD/MM/YYYY',
-                    sx: { minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem', bgcolor: 'background.paper' } },
-                  },
-                }}
-              />
+              <Tooltip arrow title="Pick a date to view that day's performance">
+                <Box>
+                  <DatePicker
+                    value={selectedDate ? parseISO(selectedDate) : null}
+                    onChange={(d) => {
+                      if (!d || !isValidDate(d)) return;
+                      const iso = fmtDate(d, 'yyyy-MM-dd');
+                      setSelectedDate(iso > today ? today : iso);
+                    }}
+                    maxDate={parseISO(today)}
+                    format="dd/MM/yyyy"
+                    slotProps={{
+                      textField: {
+                        size: 'small',
+                        placeholder: 'DD/MM/YYYY',
+                        sx: { minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem', bgcolor: 'background.paper' } },
+                      },
+                    }}
+                  />
+                </Box>
+              </Tooltip>
               {!isToday && (
-                <Button size="small" variant="outlined" onClick={() => setSelectedDate(today)}>Today</Button>
+                <Tooltip arrow title="Jump back to today's view">
+                  <Button size="small" variant="outlined" onClick={() => setSelectedDate(today)}>Today</Button>
+                </Tooltip>
               )}
-              <Button
-                variant="contained" size="small"
-                startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
-                onClick={refreshAll}
-                disabled={loading}
-                sx={{ bgcolor: tealAccent, '&:hover': { bgcolor: tealAccent, filter: 'brightness(0.92)' } }}
-              >
-                Refresh
-              </Button>
+              <Tooltip arrow title="Re-fetch latest data from the server">
+                <Button
+                  variant="contained" size="small"
+                  startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                  onClick={refreshAll}
+                  disabled={loading}
+                  sx={{ bgcolor: tealAccent, '&:hover': { bgcolor: tealAccent, filter: 'brightness(0.92)' } }}
+                >
+                  Refresh
+                </Button>
+              </Tooltip>
             </Box>
           </Box>
 
@@ -588,7 +597,8 @@ const Dashboard = () => {
           repeating the same info less usefully. */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <Card variant="outlined" sx={{ borderLeft: `4px solid ${tealAccent}`, height: '100%' }}>
+          <Tooltip arrow placement="top" title="Every client on your books, with their platform mix">
+          <Card variant="outlined" sx={{ borderLeft: `4px solid ${tealAccent}`, height: '100%', cursor: 'help' }}>
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
               <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: `${tealAccent}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <People sx={{ color: tealAccent, fontSize: 30 }} />
@@ -601,16 +611,18 @@ const Dashboard = () => {
                   {clients.length}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1.2, mt: 0.5, flexWrap: 'wrap' }}>
-                  <Chip size="small" label={`Meta: ${clientMix.metaCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#C0855215', color: '#C08552', fontWeight: 600 }} />
-                  <Chip size="small" label={`Google: ${clientMix.googleCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600 }} />
-                  <Chip size="small" label={`Both: ${clientMix.bothCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: `${tealAccent}15`, color: tealAccent, fontWeight: 600 }} />
+                  <Tooltip arrow title="Clients with a linked Meta ad account"><Chip size="small" label={`Meta: ${clientMix.metaCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#C0855215', color: '#C08552', fontWeight: 600 }} /></Tooltip>
+                  <Tooltip arrow title="Clients with a linked Google ad account"><Chip size="small" label={`Google: ${clientMix.googleCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600 }} /></Tooltip>
+                  <Tooltip arrow title="Clients linked to both Meta and Google"><Chip size="small" label={`Both: ${clientMix.bothCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: `${tealAccent}15`, color: tealAccent, fontWeight: 600 }} /></Tooltip>
                 </Box>
               </Box>
             </CardContent>
           </Card>
+          </Tooltip>
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
-          <Card variant="outlined" sx={{ borderLeft: `4px solid #10b981`, height: '100%' }}>
+          <Tooltip arrow placement="top" title="Clients currently in an Active status">
+          <Card variant="outlined" sx={{ borderLeft: `4px solid #10b981`, height: '100%', cursor: 'help' }}>
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
               <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: '#10b98115', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <People sx={{ color: '#10b981', fontSize: 30 }} />
@@ -628,6 +640,7 @@ const Dashboard = () => {
               </Box>
             </CardContent>
           </Card>
+          </Tooltip>
         </Grid>
       </Grid>
 
@@ -643,6 +656,7 @@ const Dashboard = () => {
             key: 'top',
             label: 'Top Performer Today',
             sub: 'Most leads received',
+            tip: 'Client with the highest lead count today',
             icon: <TrophyIcon />,
             color: '#10b981',
             client: topPerformer,
@@ -653,6 +667,7 @@ const Dashboard = () => {
             key: 'cpl',
             label: 'Best Value Today',
             sub: 'Lowest cost per lead',
+            tip: 'Client paying the least per lead today',
             icon: <SavingsIcon />,
             color: '#C08552',
             client: bestCpl,
@@ -663,6 +678,7 @@ const Dashboard = () => {
             key: 'review',
             label: 'Needs Review',
             sub: zeroLeadSpender ? 'Spending but no leads back' : 'Highest cost per lead',
+            tip: 'Client losing money or paying the most per lead',
             icon: <ReportProblemIcon />,
             color: '#ef4444',
             client: needsReview,
@@ -677,6 +693,7 @@ const Dashboard = () => {
           },
         ].map((s) => (
           <Grid key={s.key} size={{ xs: 12, md: 4 }}>
+            <Tooltip arrow placement="top" title={s.tip}>
             <Card
               variant="outlined"
               onClick={() => s.client && navigate(`/client-ads/${s.client.id}`)}
@@ -739,6 +756,7 @@ const Dashboard = () => {
                 )}
               </CardContent>
             </Card>
+            </Tooltip>
           </Grid>
         ))}
       </Grid>
@@ -754,6 +772,7 @@ const Dashboard = () => {
             key: 'meta',
             title: 'Meta Leads by Client',
             sub: "Today's Meta leads split per client",
+            tip: 'Share of today\'s Meta leads contributed by each client',
             data: metaPieData,
             icon: <Facebook sx={{ fontSize: 16, color: '#C08552' }} />,
             empty: 'No Meta leads today',
@@ -762,6 +781,7 @@ const Dashboard = () => {
             key: 'google',
             title: 'Google Leads by Client',
             sub: "Today's Google leads split per client",
+            tip: 'Share of today\'s Google leads contributed by each client',
             data: googlePieData,
             icon: <Google sx={{ fontSize: 16, color: '#3E2723' }} />,
             // Google leads aren't pulled live the way Meta forms are —
@@ -774,16 +794,22 @@ const Dashboard = () => {
           },
         ].map((p) => {
           const total = p.data.reduce((s, x) => s + x.value, 0);
+          // `p.data` is already filtered to clients with value > 0, so
+          // its length is exactly the count of clients contributing
+          // leads today — what the centre label and subtitle show.
+          const clientCount = p.data.length;
           return (
             <Grid key={p.key} size={{ xs: 12, lg: 6 }}>
               <Card sx={{ height: '100%' }}>
                 <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3 }}>
-                    {p.icon}
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.92rem' }}>{p.title}</Typography>
-                  </Box>
+                  <Tooltip arrow placement="top" title={p.tip}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3, cursor: 'help', width: 'fit-content' }}>
+                      {p.icon}
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.92rem' }}>{p.title}</Typography>
+                    </Box>
+                  </Tooltip>
                   <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mb: 1.5 }}>
-                    {p.sub} · <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{total} total</Box>
+                    {p.sub} · <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{clientCount} client{clientCount === 1 ? '' : 's'} with leads</Box>
                   </Typography>
                   {p.data.length > 0 ? (
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
@@ -822,10 +848,10 @@ const Dashboard = () => {
                             the tooltip (wrapperStyle z-index 20). */}
                         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 1 }}>
                           <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', lineHeight: 1, color: 'text.primary' }}>
-                            {total}
+                            {clientCount}
                           </Typography>
                           <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5, mt: 0.3 }}>
-                            leads
+                            {clientCount === 1 ? 'client' : 'clients'}
                           </Typography>
                         </Box>
                       </Box>
@@ -936,21 +962,23 @@ const Dashboard = () => {
       {topClients.length > 0 && (
         <Card>
           <CardContent>
-            <Typography sx={{ fontWeight: 600, fontSize: '0.92rem', mb: 1.5 }}>
-              Top Performing Clients
-              <Typography component="span" sx={{ fontSize: '0.72rem', color: 'text.secondary', ml: 1 }}>Ranked by today's leads</Typography>
-            </Typography>
+            <Tooltip arrow placement="top-start" title="Top clients today, ranked by total leads">
+              <Typography sx={{ fontWeight: 600, fontSize: '0.92rem', mb: 1.5, cursor: 'help', display: 'inline-block' }}>
+                Top Performing Clients
+                <Typography component="span" sx={{ fontSize: '0.72rem', color: 'text.secondary', ml: 1 }}>Ranked by today's leads</Typography>
+              </Typography>
+            </Tooltip>
             <TableContainer sx={{ overflowX: "auto" }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 600 }}>#</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>Client</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#C08552' }} align="right">Meta</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: '#3E2723' }} align="right">Google</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }} align="right">Total</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }} align="right">Spend</TableCell>
-                    <TableCell sx={{ fontWeight: 600 }} align="right">CPL</TableCell>
+                    <Tooltip arrow title="Rank by total leads"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>#</TableCell></Tooltip>
+                    <Tooltip arrow title="Client name"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Client</TableCell></Tooltip>
+                    <Tooltip arrow title="Meta leads today (Form + WhatsApp)"><TableCell sx={{ fontWeight: 600, color: '#C08552', cursor: 'help' }} align="right">Meta</TableCell></Tooltip>
+                    <Tooltip arrow title="Google leads today (Call + Website)"><TableCell sx={{ fontWeight: 600, color: '#3E2723', cursor: 'help' }} align="right">Google</TableCell></Tooltip>
+                    <Tooltip arrow title="All leads from this client today"><TableCell sx={{ fontWeight: 600, cursor: 'help' }} align="right">Total</TableCell></Tooltip>
+                    <Tooltip arrow title="Total ad spend today (₹)"><TableCell sx={{ fontWeight: 600, cursor: 'help' }} align="right">Spend</TableCell></Tooltip>
+                    <Tooltip arrow title="Cost per lead = spend ÷ leads"><TableCell sx={{ fontWeight: 600, cursor: 'help' }} align="right">CPL</TableCell></Tooltip>
                   </TableRow>
                 </TableHead>
                 <TableBody>

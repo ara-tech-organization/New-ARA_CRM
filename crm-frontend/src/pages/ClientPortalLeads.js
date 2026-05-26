@@ -107,7 +107,6 @@ const ClientPortalLeads = () => {
     try {
       const res = await clientApi.get(`/meta/client/${clientId}/analytics`, {
         params: { from: dateFrom, to: dateTo },
-        timeout: 20000,
       });
       setData(res.data || null);
     } catch (err) {
@@ -130,7 +129,6 @@ const ClientPortalLeads = () => {
     const { data: resp } = await clientApi.put(
       `/meta/client/${clientId}/leads/${leadId}`,
       payload,
-      { timeout: 20000 }
     );
     const updated = resp?.lead;
     if (updated) {
@@ -151,7 +149,6 @@ const ClientPortalLeads = () => {
     const { data: resp } = await clientApi.post(
       `/meta/client/${clientId}/leads`,
       payload,
-      { timeout: 20000 }
     );
     const created = resp?.lead;
     if (created) {
@@ -168,7 +165,6 @@ const ClientPortalLeads = () => {
     if (!clientId) throw new Error('Client session expired — please log in again.');
     await clientApi.delete(
       `/meta/client/${clientId}/leads/${leadId}`,
-      { timeout: 20000 }
     );
     setData((prev) => {
       if (!prev?.leads_in_range) return prev;

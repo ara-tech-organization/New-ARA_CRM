@@ -24,6 +24,9 @@ import {
   Button,
   CircularProgress,
   Autocomplete,
+  Tooltip as MuiTooltip,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -33,6 +36,7 @@ import {
   Facebook,
   WhatsApp,
   Refresh as RefreshIcon,
+  InfoOutlined as InfoOutlinedIcon,
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -87,35 +91,73 @@ const METRIC_CONFIG = {
   },
 };
 
-const MetricCard = ({ title, value, icon, color, prefix = '' }) => {
-  return (
-    <Card sx={{ height: '100%' }}>
+// Now accepts an optional `tooltip` prop — when supplied, hovering
+// anywhere on the card shows the explanation. Useful for the headline
+// stat tiles where the title alone may not be self-explanatory.
+// `change` is an optional period-over-period percentage — when set
+// to a number, a coloured up/down badge renders beneath the value.
+// `lowerIsBetter` flips the colour scheme (e.g. CPL going down is good).
+const MetricCard = ({ title, value, icon, color, prefix = '', tooltip, change, lowerIsBetter, prevLabel }) => {
+  const card = (
+    <Card sx={{ height: '100%', cursor: tooltip ? 'help' : 'default', borderLeft: `4px solid ${color}` }}>
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.2 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography color="text.secondary" variant="overline" gutterBottom>
               {title}
             </Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700, color }}>
+            <Typography variant="h5" sx={{ fontWeight: 800, color }}>
               {prefix}{typeof value === 'number' ? value.toLocaleString() : value}
             </Typography>
           </Box>
           <Box
             sx={{
-              width: 56,
-              height: 56,
+              width: 52,
+              height: 52,
               borderRadius: 2,
               bgcolor: `${color}15`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
             {React.cloneElement(icon, { sx: { fontSize: 22, color } })}
           </Box>
         </Box>
+        {/* Period-over-period change badge — green if better, red if worse. */}
+        {change != null && (
+          (() => {
+            const isUp = change > 0;
+            const goodDirection = lowerIsBetter ? !isUp : isUp;
+            const isNeutral = change === 0;
+            const badgeColor = isNeutral ? '#6b7280' : (goodDirection ? '#10b981' : '#ef4444');
+            const arrow = isNeutral ? '·' : (isUp ? '▲' : '▼');
+            return (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
+                <Box sx={{
+                  display: 'inline-flex', alignItems: 'center', gap: 0.3,
+                  px: 0.8, py: 0.2, borderRadius: 1,
+                  bgcolor: `${badgeColor}15`, color: badgeColor,
+                  fontSize: '0.72rem', fontWeight: 700,
+                }}>
+                  {arrow} {Math.abs(change)}%
+                </Box>
+                <Typography sx={{ fontSize: '0.66rem', color: 'text.secondary' }}>
+                  vs prev period{prevLabel ? ` (${prevLabel})` : ''}
+                </Typography>
+              </Box>
+            );
+          })()
+        )}
       </CardContent>
     </Card>
+  );
+  if (!tooltip) return card;
+  return (
+    <MuiTooltip arrow placement="top" title={tooltip}>
+      {card}
+    </MuiTooltip>
   );
 };
 
@@ -260,6 +302,37 @@ const Reports = () => {
     return new Date().toISOString().split('T')[0];
   });
   const [monthFilter, setMonthFilter] = useState('1');
+  // chartTab: 0 = Daily Trends, 1 = Monthly Overview, 2 = Date-wise Table.
+  // The three sections used to stack vertically — now they live behind
+  // tabs so the page above the fold stays compact and readable.
+  const [chartTab, setChartTab] = useState(0);
+
+  // Apply a quick range preset (in days). Updates from/to in one go.
+  const applyQuickRange = (kind) => {
+    const today = new Date();
+    const isoToday = today.toISOString().split('T')[0];
+    if (kind === 'today') {
+      setFromDate(isoToday); setToDate(isoToday); return;
+    }
+    if (kind === 'week') {
+      const d = new Date(); d.setDate(today.getDate() - 6);
+      setFromDate(d.toISOString().split('T')[0]); setToDate(isoToday); return;
+    }
+    if (kind === 'month') {
+      const d = new Date(); d.setDate(today.getDate() - 29);
+      setFromDate(d.toISOString().split('T')[0]); setToDate(isoToday); return;
+    }
+    if (kind === 'thisMonth') {
+      const d = new Date(today.getFullYear(), today.getMonth(), 1);
+      setFromDate(d.toISOString().split('T')[0]); setToDate(isoToday); return;
+    }
+    if (kind === 'lastMonth') {
+      const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const end = new Date(today.getFullYear(), today.getMonth(), 0);
+      setFromDate(start.toISOString().split('T')[0]);
+      setToDate(end.toISOString().split('T')[0]);
+    }
+  };
 
   // Auto-select first client when clients load
   useEffect(() => {
@@ -475,6 +548,63 @@ const Reports = () => {
     };
   }, [filteredEntries]);
 
+  // ── Period-over-period comparison ────────────────────────────────
+  // Build the same stats for the equivalent range immediately before
+  // the selected one (e.g. if current is the last 7 days, prev is the
+  // 7 days before that). Source data is `barChartEntries` since it
+  // spans a wider month-filter range than the current selection —
+  // when the prev period falls inside that wider window, we get free
+  // historical data without an extra fetch.
+  const prevPeriodStats = useMemo(() => {
+    if (!fromDate || !toDate || !barChartEntries || barChartEntries.length === 0) return null;
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    const dayMs = 24 * 3600 * 1000;
+    const lenDays = Math.max(Math.round((end - start) / dayMs) + 1, 1);
+    const prevEnd = new Date(start.getTime() - dayMs);
+    const prevStart = new Date(prevEnd.getTime() - (lenDays - 1) * dayMs);
+    const prevStartIso = prevStart.toISOString().split('T')[0];
+    const prevEndIso = prevEnd.toISOString().split('T')[0];
+
+    const prevRows = barChartEntries.filter((e) => {
+      const d = e.date;
+      return d >= prevStartIso && d <= prevEndIso;
+    });
+    // If no rows from the broader window fall into the prev period
+    // (i.e. it's older than the monthFilter covers), don't show stale
+    // comparisons — return null so badges hide.
+    if (prevRows.length === 0) return null;
+
+    const leads = prevRows.reduce((s, e) => s + (e.metaTotalLeads || 0), 0);
+    const spend = prevRows.reduce((s, e) => s + (e.totalSpend || 0), 0);
+    return {
+      metaTotalLeads: leads,
+      totalSpend: spend,
+      avgCPL: leads > 0 ? spend / leads : 0,
+      entriesCount: prevRows.length,
+      label: `${prevStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} → ${prevEnd.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
+    };
+  }, [barChartEntries, fromDate, toDate]);
+
+  // Helper: percentage change from prev → curr, capped & rounded.
+  const pctChange = (curr, prev) => {
+    if (!prev || prev === 0) return curr > 0 ? null : 0; // null = no baseline to compare
+    return Math.round(((curr - prev) / prev) * 100);
+  };
+
+  // ── Best / Worst day insights ────────────────────────────────────
+  // Pick the day in range with the most leads and the day with the
+  // fewest (excluding zero-only days for "best"). Helps spot peaks
+  // worth investigating.
+  const bestWorstDay = useMemo(() => {
+    if (!lineChartData || lineChartData.length === 0) return null;
+    const withData = lineChartData.filter((d) => d.metaTotalLeads > 0);
+    if (withData.length === 0) return null;
+    const best = withData.reduce((a, b) => (b.metaTotalLeads > a.metaTotalLeads ? b : a));
+    const worst = withData.reduce((a, b) => (b.metaTotalLeads < a.metaTotalLeads ? b : a));
+    return { best, worst, same: best.date === worst.date };
+  }, [lineChartData]);
+
   // Table data — change column tracks day-over-day Meta total movement.
   const tableData = useMemo(() => {
     return lineChartData.map((item, index) => {
@@ -499,24 +629,54 @@ const Reports = () => {
     // so the calendar shows day-first formatting throughout.
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enGB}>
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
-            Analytics & Reports
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Track client lead performance with detailed metrics
-          </Typography>
-        </Box>
-        <Button
-          variant="outlined"
-          startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
-          onClick={fetchAllData}
-          disabled={loading}
-        >
-          Refresh
-        </Button>
-      </Box>
+      {/* ── Hero strip ────────────────────────────────────────────
+          Sets the tone — gradient background, page title with
+          one-line tooltip, current period summary, refresh button
+          on the right. Mirrors the polished Dashboard hero so the
+          two pages feel like siblings. */}
+      <Card
+        variant="outlined"
+        sx={{
+          mb: 2,
+          background: 'linear-gradient(135deg, #C0855215 0%, #C0855205 50%, transparent 100%)',
+          borderLeft: '4px solid #C08552',
+        }}
+      >
+        <CardContent sx={{ py: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, flexWrap: 'wrap', gap: 1.5 }}>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.3 }}>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color: '#3E2723', lineHeight: 1.1 }}>
+                  Analytics & Reports
+                </Typography>
+                <MuiTooltip
+                  arrow placement="right"
+                  title="Per-client analytics — pick a client + range, explore charts and the day-wise table"
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary', cursor: 'help' }} />
+                </MuiTooltip>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                {selectedClientName !== 'Select a Client'
+                  ? <><Box component="span" sx={{ fontWeight: 600, color: '#C08552' }}>{selectedClientName}</Box> · {fromDate && toDate ? `${fmtDDMMYYYY(fromDate)} → ${fmtDDMMYYYY(toDate)}` : 'Pick a date range below'}</>
+                  : 'Pick a client to start exploring performance'}
+              </Typography>
+            </Box>
+            <MuiTooltip arrow title="Re-fetch the latest leads and analytics">
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                onClick={fetchAllData}
+                disabled={loading}
+                sx={{ bgcolor: '#C08552', color: '#fff', '&:hover': { bgcolor: '#C08552', filter: 'brightness(0.92)' } }}
+              >
+                Refresh
+              </Button>
+            </MuiTooltip>
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Filters Section */}
       <Card sx={{ mb: 2 }}>
@@ -541,15 +701,17 @@ const Reports = () => {
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
-              {/* MUI X DatePicker with en-GB locale + dd/MM/yyyy format
-                  — the typed input AND the calendar popover both show
-                  DD/MM/YYYY. State stays as ISO YYYY-MM-DD so downstream
-                  fetches don't need any change. */}
+              {/* MUI X DatePicker with en-GB locale + dd/MM/yyyy format.
+                  `maxDate` is locked to today so future dates can't be
+                  picked — no leads exist for the future, so allowing
+                  them just yields blank reports. The "To" picker uses
+                  the same ceiling. */}
               <DatePicker
                 label="From Date"
                 value={fromDate ? parseISO(fromDate) : null}
                 onChange={(d) => setFromDate(d && isValidDate(d) ? fmtDate(d, 'yyyy-MM-dd') : '')}
                 format="dd/MM/yyyy"
+                maxDate={new Date()}
                 slotProps={{
                   textField: { fullWidth: true, size: 'small', placeholder: 'DD/MM/YYYY' },
                 }}
@@ -561,10 +723,43 @@ const Reports = () => {
                 value={toDate ? parseISO(toDate) : null}
                 onChange={(d) => setToDate(d && isValidDate(d) ? fmtDate(d, 'yyyy-MM-dd') : '')}
                 format="dd/MM/yyyy"
+                maxDate={new Date()}
+                // The To-date can also never precede the From-date.
+                minDate={fromDate ? parseISO(fromDate) : undefined}
                 slotProps={{
                   textField: { fullWidth: true, size: 'small', placeholder: 'DD/MM/YYYY' },
                 }}
               />
+            </Grid>
+            {/* Quick range preset chips — save the user two clicks
+                per common range. Click sets both From + To in one go. */}
+            <Grid size={{ xs: 12 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+                <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, mr: 0.5 }}>
+                  Quick range:
+                </Typography>
+                {[
+                  { key: 'today', label: 'Today' },
+                  { key: 'week', label: 'Last 7 Days' },
+                  { key: 'month', label: 'Last 30 Days' },
+                  { key: 'thisMonth', label: 'This Month' },
+                  { key: 'lastMonth', label: 'Last Month' },
+                ].map((p) => (
+                  <Chip
+                    key={p.key}
+                    label={p.label}
+                    size="small"
+                    onClick={() => applyQuickRange(p.key)}
+                    sx={{
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      bgcolor: '#C0855210',
+                      color: '#C08552',
+                      '&:hover': { bgcolor: '#C0855225' },
+                    }}
+                  />
+                ))}
+              </Box>
             </Grid>
           </Grid>
         </CardContent>
@@ -586,6 +781,9 @@ const Reports = () => {
                 value={stats.metaTotalLeads}
                 icon={<Facebook />}
                 color={METRIC_CONFIG.metaTotalLeads.color}
+                tooltip="Sum of Meta Form + Meta WhatsApp leads across every day in the selected date range for this client."
+                change={prevPeriodStats ? pctChange(stats.metaTotalLeads, prevPeriodStats.metaTotalLeads) : null}
+                prevLabel={prevPeriodStats?.label}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -595,6 +793,9 @@ const Reports = () => {
                 prefix="₹"
                 icon={<AttachMoney />}
                 color="#9c27b0"
+                tooltip="Total ad spend across the selected date range — sum of every day's Meta Fund + Google Fund from Daily Lead Entry records."
+                change={prevPeriodStats ? pctChange(stats.totalSpend, prevPeriodStats.totalSpend) : null}
+                prevLabel={prevPeriodStats?.label}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -604,6 +805,10 @@ const Reports = () => {
                 prefix="₹"
                 icon={<TrendingUp />}
                 color="#ff9800"
+                tooltip="Average Cost Per Lead = Total Spend ÷ Total Leads for the selected range. Lower is better — tells you how much each lead is costing."
+                change={prevPeriodStats ? pctChange(stats.avgCPL, prevPeriodStats.avgCPL) : null}
+                prevLabel={prevPeriodStats?.label}
+                lowerIsBetter
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -612,12 +817,81 @@ const Reports = () => {
                 value={stats.entriesCount}
                 icon={<CalendarMonth />}
                 color="#4caf50"
+                tooltip="Number of Daily Lead Entry records logged in the selected range. One entry per day per client — a low count means days were missed."
+                change={prevPeriodStats ? pctChange(stats.entriesCount, prevPeriodStats.entriesCount) : null}
+                prevLabel={prevPeriodStats?.label}
               />
             </Grid>
           </Grid>
 
-          {/* Line Charts Section */}
-          <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, mt: 4 }}>
+          {/* ── Best / Worst Day Insights ──────────────────────────
+              Auto-detected day spotlights so users immediately see
+              which day to celebrate and which to investigate. */}
+          {bestWorstDay && (
+            <Grid container spacing={1.5} sx={{ mb: 2 }}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Card variant="outlined" sx={{ borderLeft: '4px solid #10b981', height: '100%' }}>
+                  <CardContent sx={{ py: 1.8, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: '#10b98115', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <TrendingUp sx={{ color: '#10b981', fontSize: 24 }} />
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        Best Day
+                      </Typography>
+                      <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: '#10b981', lineHeight: 1.1 }}>
+                        {bestWorstDay.best.date}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                        {bestWorstDay.best.metaTotalLeads} total leads ({bestWorstDay.best.metaForm} form + {bestWorstDay.best.metaWhatsapp} WhatsApp)
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Card variant="outlined" sx={{ borderLeft: '4px solid #ef4444', height: '100%' }}>
+                  <CardContent sx={{ py: 1.8, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: '#ef444415', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <TrendingDown sx={{ color: '#ef4444', fontSize: 24 }} />
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        Quietest Day
+                      </Typography>
+                      <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: '#ef4444', lineHeight: 1.1 }}>
+                        {bestWorstDay.worst.date}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                        {bestWorstDay.same ? 'Only day with activity in the range' : `${bestWorstDay.worst.metaTotalLeads} total leads (${bestWorstDay.worst.metaForm} form + ${bestWorstDay.worst.metaWhatsapp} WhatsApp)`}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {/* ── Section tabs — Daily Trends · Monthly Overview · Date Table */}
+          <Card variant="outlined" sx={{ mb: 2 }}>
+            <Tabs
+              value={chartTab}
+              onChange={(_, v) => setChartTab(v)}
+              sx={{
+                px: 2,
+                '& .MuiTabs-indicator': { bgcolor: '#C08552', height: 3 },
+                '& .Mui-selected': { color: '#C08552 !important' },
+              }}
+            >
+              <Tab label="Daily Trends" sx={{ textTransform: 'none', fontWeight: 700 }} />
+              <Tab label="Monthly Overview" sx={{ textTransform: 'none', fontWeight: 700 }} />
+              <Tab label="Date-wise Table" sx={{ textTransform: 'none', fontWeight: 700 }} />
+            </Tabs>
+          </Card>
+
+          {/* Line Charts Section — only visible on the Daily Trends tab */}
+          {chartTab === 0 && (<>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.3 }}>
             Daily Lead Trends
             <Chip label={selectedClientName} size="small" sx={{ ml: 2 }} color="primary" />
           </Typography>
@@ -651,11 +925,13 @@ const Reports = () => {
               />
             </Grid>
           </Grid>
+          </>)}
 
-          {/* Bar Charts Section */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2, mt: 4, flexWrap: 'wrap', gap: 1.5 }}>
+          {/* Bar Charts Section — Monthly Overview tab */}
+          {chartTab === 1 && (<>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
             <Box>
-              <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 Monthly Overview
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -709,29 +985,65 @@ const Reports = () => {
               />
             </Grid>
           </Grid>
+          </>)}
 
-          {/* Data Table */}
+          {/* Data Table — Date-wise Table tab */}
+          {chartTab === 2 && (
           <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                {selectedClientName} - Date-wise Performance
-              </Typography>
+              {/* Section title gets an inline info icon explaining what
+                  the table holds + tiny tooltips on every column header
+                  AND on each cell value so a fresh team member can
+                  hover over any number to learn what it represents. */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  {selectedClientName} - Date-wise Performance
+                </Typography>
+                <MuiTooltip
+                  arrow placement="right"
+                  title="One row per day in the selected range. Numbers come from this client's Daily Lead Entries — Meta Form + Meta WhatsApp leads tracked manually each day. The Change column shows the day-over-day movement in Meta Total."
+                >
+                  <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+                </MuiTooltip>
+              </Box>
               <TableContainer component={Paper} variant="outlined">
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
-                      <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
+                        <MuiTooltip arrow title="Calendar date the leads were received on (DD/MM/YYYY).">
+                          <Box component="span" sx={{ borderBottom: '1px dotted', borderColor: 'text.disabled', cursor: 'help' }}>
+                            Date
+                          </Box>
+                        </MuiTooltip>
+                      </TableCell>
                       <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.metaForm.color }} align="right">
-                        Meta Form
+                        <MuiTooltip arrow title="Meta Form Leads — leads that submitted the Facebook / Instagram lead-form on this day. Synced from the Daily Lead Entry record.">
+                          <Box component="span" sx={{ borderBottom: '1px dotted', borderColor: 'text.disabled', cursor: 'help' }}>
+                            Meta Form
+                          </Box>
+                        </MuiTooltip>
                       </TableCell>
                       <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.metaWhatsapp.color }} align="right">
-                        Meta WA
+                        <MuiTooltip arrow title="Meta WhatsApp Leads — conversations started via the WhatsApp click-to-chat ad on this day. Includes both auto-replies and human follow-ups.">
+                          <Box component="span" sx={{ borderBottom: '1px dotted', borderColor: 'text.disabled', cursor: 'help' }}>
+                            Meta WA
+                          </Box>
+                        </MuiTooltip>
                       </TableCell>
                       <TableCell sx={{ fontWeight: 600, color: METRIC_CONFIG.metaTotalLeads.color }} align="right">
-                        Meta Total
+                        <MuiTooltip arrow title="Meta Total = Meta Form + Meta WhatsApp leads for this day. The headline number to scan when you only want one figure per day.">
+                          <Box component="span" sx={{ borderBottom: '1px dotted', borderColor: 'text.disabled', cursor: 'help' }}>
+                            Meta Total
+                          </Box>
+                        </MuiTooltip>
                       </TableCell>
                       <TableCell sx={{ fontWeight: 600 }} align="center">
-                        Change
+                        <MuiTooltip arrow title="Day-over-day movement in Meta Total compared to the previous row. Green ▲ means more leads today, red ▼ means fewer. Blank on the first row (no previous day to compare).">
+                          <Box component="span" sx={{ borderBottom: '1px dotted', borderColor: 'text.disabled', cursor: 'help' }}>
+                            Change
+                          </Box>
+                        </MuiTooltip>
                       </TableCell>
                     </TableRow>
                   </TableHead>
@@ -739,42 +1051,62 @@ const Reports = () => {
                     {tableData.length > 0 ? (
                       tableData.map((row, index) => (
                         <TableRow key={index} hover>
-                          <TableCell>{row.date}</TableCell>
-                          <TableCell align="right">
-                            <Chip
-                              label={row.metaForm}
-                              size="small"
-                              sx={{ bgcolor: METRIC_CONFIG.metaForm.bgColor, color: METRIC_CONFIG.metaForm.color, fontWeight: 600 }}
-                            />
+                          <TableCell>
+                            <MuiTooltip arrow title={`Performance for ${row.date}`}>
+                              <Box component="span" sx={{ cursor: 'help' }}>{row.date}</Box>
+                            </MuiTooltip>
                           </TableCell>
                           <TableCell align="right">
-                            <Chip
-                              label={row.metaWhatsapp}
-                              size="small"
-                              sx={{ bgcolor: METRIC_CONFIG.metaWhatsapp.bgColor, color: METRIC_CONFIG.metaWhatsapp.color, fontWeight: 600 }}
-                            />
+                            <MuiTooltip arrow title={`${row.metaForm} Meta Form lead${row.metaForm === 1 ? '' : 's'} on ${row.date}`}>
+                              <Chip
+                                label={row.metaForm}
+                                size="small"
+                                sx={{ bgcolor: METRIC_CONFIG.metaForm.bgColor, color: METRIC_CONFIG.metaForm.color, fontWeight: 600, cursor: 'help' }}
+                              />
+                            </MuiTooltip>
+                          </TableCell>
+                          <TableCell align="right">
+                            <MuiTooltip arrow title={`${row.metaWhatsapp} Meta WhatsApp conversation${row.metaWhatsapp === 1 ? '' : 's'} on ${row.date}`}>
+                              <Chip
+                                label={row.metaWhatsapp}
+                                size="small"
+                                sx={{ bgcolor: METRIC_CONFIG.metaWhatsapp.bgColor, color: METRIC_CONFIG.metaWhatsapp.color, fontWeight: 600, cursor: 'help' }}
+                              />
+                            </MuiTooltip>
                           </TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, color: METRIC_CONFIG.metaTotalLeads.color }}>
-                            {row.metaTotalLeads}
+                            <MuiTooltip arrow title={`Total Meta leads on ${row.date}: ${row.metaForm} form + ${row.metaWhatsapp} WhatsApp = ${row.metaTotalLeads}`}>
+                              <Box component="span" sx={{ cursor: 'help' }}>{row.metaTotalLeads}</Box>
+                            </MuiTooltip>
                           </TableCell>
                           <TableCell align="center">
                             {row.change !== 0 && (
-                              <Chip
-                                icon={row.change > 0 ? <TrendingUp sx={{ fontSize: 14 }} /> : <TrendingDown sx={{ fontSize: 14 }} />}
-                                label={`${row.change > 0 ? '+' : ''}${row.change}`}
-                                size="small"
-                                sx={{
-                                  bgcolor: row.change > 0 ? '#10b98115' : '#ef444415',
-                                  color: row.change > 0 ? '#10b981' : '#ef4444',
-                                  fontWeight: 600,
-                                  '& .MuiChip-icon': {
+                              <MuiTooltip
+                                arrow
+                                title={row.change > 0
+                                  ? `${row.change} more lead${row.change === 1 ? '' : 's'} than the previous day`
+                                  : `${Math.abs(row.change)} fewer lead${Math.abs(row.change) === 1 ? '' : 's'} than the previous day`}
+                              >
+                                <Chip
+                                  icon={row.change > 0 ? <TrendingUp sx={{ fontSize: 14 }} /> : <TrendingDown sx={{ fontSize: 14 }} />}
+                                  label={`${row.change > 0 ? '+' : ''}${row.change}`}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: row.change > 0 ? '#10b98115' : '#ef444415',
                                     color: row.change > 0 ? '#10b981' : '#ef4444',
-                                  }
-                                }}
-                              />
+                                    fontWeight: 600,
+                                    cursor: 'help',
+                                    '& .MuiChip-icon': {
+                                      color: row.change > 0 ? '#10b981' : '#ef4444',
+                                    }
+                                  }}
+                                />
+                              </MuiTooltip>
                             )}
                             {row.change === 0 && index > 0 && (
-                              <Typography variant="body2" color="text.secondary">-</Typography>
+                              <MuiTooltip arrow title="No change — same Meta Total as the previous day">
+                                <Typography variant="body2" color="text.secondary" sx={{ cursor: 'help' }}>-</Typography>
+                              </MuiTooltip>
                             )}
                           </TableCell>
                         </TableRow>
@@ -791,6 +1123,7 @@ const Reports = () => {
               </TableContainer>
             </CardContent>
           </Card>
+          )}
         </>
       )}
     </Box>

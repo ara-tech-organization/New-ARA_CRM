@@ -55,6 +55,12 @@ export const userApi = {
     return response.data;
   },
 
+  // Get distinct roles from database (powers the Role Autocomplete)
+  getRoles: async () => {
+    const response = await api.get('/users/roles');
+    return response.data;
+  },
+
   // Get user statistics
   getUserStats: async () => {
     const response = await api.get('/users/stats');

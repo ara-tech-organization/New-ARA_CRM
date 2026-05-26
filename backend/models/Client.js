@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { encrypt } from '../utils/encryption.js';
 
 const clientSchema = new mongoose.Schema(
   {
@@ -238,6 +239,17 @@ const clientSchema = new mongoose.Schema(
       default: '',
       select: false,
     },
+    // Recoverable encrypted copy of the portal password — used by
+    // the admin "Reveal password" button on the Client Portal Access
+    // page so the original plaintext can be shown when a client
+    // forgets it. Stored encrypted-at-rest with AES via the
+    // utils/encryption helper (server-side key only). `portalPassword`
+    // above is still the bcrypt hash used for actual login auth.
+    portalPasswordEnc: {
+      type: String,
+      default: '',
+      select: false,
+    },
     portalEnabled: {
       type: Boolean,
       default: false,
@@ -259,11 +271,25 @@ const clientSchema = new mongoose.Schema(
   }
 );
 
-// Hash portal password before save
+// Hash portal password before save AND keep a recoverable encrypted
+// copy alongside for admin reveal. The plaintext only exists on the
+// model instance for the duration of this hook — once `portalPassword`
+// is overwritten with the bcrypt hash, it's gone from the document.
 clientSchema.pre('save', async function () {
   if (!this.isModified('portalPassword') || !this.portalPassword) return;
+  const plaintext = this.portalPassword;
+  // 1) Hash for login auth — same as before.
   const salt = await bcrypt.genSalt(10);
-  this.portalPassword = await bcrypt.hash(this.portalPassword, salt);
+  this.portalPassword = await bcrypt.hash(plaintext, salt);
+  // 2) Encrypted copy so an admin can reveal the original when a
+  //    client forgets it. encrypt() throws if the env key is missing,
+  //    so we swallow the error and leave portalPasswordEnc empty —
+  //    login still works via the hash; only reveal is unavailable.
+  try {
+    this.portalPasswordEnc = encrypt(plaintext);
+  } catch (err) {
+    this.portalPasswordEnc = '';
+  }
 });
 
 // Compare portal password

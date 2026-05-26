@@ -29,6 +29,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Autocomplete,
+  Tooltip,
 } from '@mui/material';
 import {
   CalendarToday as CalendarIcon,
@@ -443,8 +444,12 @@ const DailyLeadData = () => {
             '& .Mui-selected': { color: `${primaryColor} !important` },
           }}
         >
-          <Tab label="By Client" sx={{ textTransform: 'none', fontWeight: 700 }} />
-          <Tab label="Lead Check" sx={{ textTransform: 'none', fontWeight: 700 }} />
+          <Tooltip arrow title="One row per client per date — detailed view">
+            <Tab label="By Client" sx={{ textTransform: 'none', fontWeight: 700 }} />
+          </Tooltip>
+          <Tooltip arrow title="One row per date — totals rolled up across all clients">
+            <Tab label="Lead Check" sx={{ textTransform: 'none', fontWeight: 700 }} />
+          </Tooltip>
         </Tabs>
       </Card>
 
@@ -453,46 +458,62 @@ const DailyLeadData = () => {
         <Box sx={{ mb: 2 }}>
           <Card sx={{ mb: 2 }}>
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 1.5 }}>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mr: 1 }}>
-                Range:
-              </Typography>
+              <Tooltip arrow title="Quick presets for the date range">
+                <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mr: 1, cursor: 'help' }}>
+                  Range:
+                </Typography>
+              </Tooltip>
               <ToggleButtonGroup
                 value={activeRange === 'custom' ? null : activeRange}
                 exclusive
                 size="small"
                 onChange={(_, v) => v && setRangePreset(v)}
               >
-                <ToggleButton value="daily" sx={{ textTransform: 'none', fontWeight: 600 }}>
-                  Daily (Today)
-                </ToggleButton>
-                <ToggleButton value="weekly" sx={{ textTransform: 'none', fontWeight: 600 }}>
-                  Weekly (Last 7 days)
-                </ToggleButton>
-                <ToggleButton value="monthly" sx={{ textTransform: 'none', fontWeight: 600 }}>
-                  Monthly (This month)
-                </ToggleButton>
+                <Tooltip arrow title="Show only today's leads">
+                  <ToggleButton value="daily" sx={{ textTransform: 'none', fontWeight: 600 }}>
+                    Daily (Today)
+                  </ToggleButton>
+                </Tooltip>
+                <Tooltip arrow title="Show the last 7 days of leads">
+                  <ToggleButton value="weekly" sx={{ textTransform: 'none', fontWeight: 600 }}>
+                    Weekly (Last 7 days)
+                  </ToggleButton>
+                </Tooltip>
+                <Tooltip arrow title="Show every day from the 1st of this month">
+                  <ToggleButton value="monthly" sx={{ textTransform: 'none', fontWeight: 600 }}>
+                    Monthly (This month)
+                  </ToggleButton>
+                </Tooltip>
               </ToggleButtonGroup>
               {activeRange === 'custom' && (
-                <Chip
-                  size="small"
-                  label="Custom range — change in the From/To fields above"
-                  sx={{ bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600 }}
-                />
+                <Tooltip arrow title="Range was set manually via From/To above">
+                  <Chip
+                    size="small"
+                    label="Custom range — change in the From/To fields above"
+                    sx={{ bgcolor: '#fef3c7', color: '#92400e', fontWeight: 600, cursor: 'help' }}
+                  />
+                </Tooltip>
               )}
               <Box sx={{ ml: 'auto', display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                <Chip
-                  label={`${dayWiseRows.length} day${dayWiseRows.length === 1 ? '' : 's'}`}
-                  variant="outlined"
-                  sx={{ fontWeight: 600 }}
-                />
-                <Chip
-                  label={`Meta Leads: ${dailyTotals.metaTotalLeads}`}
-                  sx={{ bgcolor: `${primaryColor}15`, color: primaryColor, fontWeight: 700 }}
-                />
-                <Chip
-                  label={`Meta Spend: ₹${dailyTotals.metaFund.toLocaleString('en-IN')}`}
-                  sx={{ bgcolor: '#10b98115', color: '#10b981', fontWeight: 700 }}
-                />
+                <Tooltip arrow title="Number of days included in this view">
+                  <Chip
+                    label={`${dayWiseRows.length} day${dayWiseRows.length === 1 ? '' : 's'}`}
+                    variant="outlined"
+                    sx={{ fontWeight: 600, cursor: 'help' }}
+                  />
+                </Tooltip>
+                <Tooltip arrow title="Total Meta leads across the selected range">
+                  <Chip
+                    label={`Meta Leads: ${dailyTotals.metaTotalLeads}`}
+                    sx={{ bgcolor: `${primaryColor}15`, color: primaryColor, fontWeight: 700, cursor: 'help' }}
+                  />
+                </Tooltip>
+                <Tooltip arrow title="Total Meta ad spend across the selected range">
+                  <Chip
+                    label={`Meta Spend: ₹${dailyTotals.metaFund.toLocaleString('en-IN')}`}
+                    sx={{ bgcolor: '#10b98115', color: '#10b981', fontWeight: 700, cursor: 'help' }}
+                  />
+                </Tooltip>
               </Box>
             </CardContent>
           </Card>
@@ -519,12 +540,12 @@ const DailyLeadData = () => {
                   <Table sx={{ minWidth: 720 }}>
                     <TableHead>
                       <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
-                        <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }} align="center">Day</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Form</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta WhatsApp</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Total</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Meta Fund</TableCell>
+                        <Tooltip arrow title="Calendar date (DD MMM YYYY)"><TableCell sx={{ fontWeight: 700, cursor: 'help' }}>Date</TableCell></Tooltip>
+                        <Tooltip arrow title="Day of week (Mon, Tue, …)"><TableCell sx={{ fontWeight: 700, cursor: 'help' }} align="center">Day</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta lead-form submissions on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Meta Form</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta click-to-WhatsApp conversations on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Meta WhatsApp</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta Form + Meta WhatsApp total for this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Meta Total</TableCell></Tooltip>
+                        <Tooltip arrow title="Total Meta ad spend on this day (₹)"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="right">Meta Fund</TableCell></Tooltip>
                       </TableRow>
                     </TableHead>
                     <TableBody>

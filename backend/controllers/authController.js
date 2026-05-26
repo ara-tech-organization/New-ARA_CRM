@@ -158,12 +158,14 @@ export const getMe = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const updateDetails = asyncHandler(async (req, res) => {
-  const fieldsToUpdate = {
-    name: req.body.name,
-    email: req.body.email,
-    phone: req.body.phone,
-    department: req.body.department,
-  };
+  // Only allow-listed fields can be updated through this endpoint —
+  // role / permissions / password come through separate routes.
+  // `avatar` is the new profile-photo data URL (validated on the
+  // frontend to be <= ~250KB before sending).
+  const fieldsToUpdate = {};
+  ['name', 'email', 'phone', 'department', 'avatar'].forEach((key) => {
+    if (req.body[key] !== undefined) fieldsToUpdate[key] = req.body[key];
+  });
 
   const user = await User.findByIdAndUpdate(req.user._id, fieldsToUpdate, {
     new: true,

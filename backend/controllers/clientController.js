@@ -5,6 +5,7 @@ import ContentEntry from '../models/ContentEntry.js';
 import Lead from '../models/Lead.js';
 import Vault from '../models/Vault.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { decrypt } from '../utils/encryption.js';
 
 const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net';
 
@@ -294,6 +295,48 @@ export const reonboardClient = asyncHandler(async (req, res) => {
  * @route   PATCH /api/clients/:id/status
  * @access  Private
  */
+/**
+ * @desc    Reveal the client's portal password in plaintext for admin
+ *          recovery (e.g. when a client forgets their login). Reads
+ *          the encrypted copy stored alongside the bcrypt hash and
+ *          decrypts it on the server. Returns empty when no
+ *          recoverable copy exists (older clients saved before this
+ *          field was added).
+ * @route   GET /api/clients/:id/portal-credentials
+ * @access  Private (CLIENT_UPDATE permission)
+ */
+export const revealPortalPassword = asyncHandler(async (req, res) => {
+  const client = await Client.findById(req.params.id).select('+portalPasswordEnc portalEmail clientName');
+  if (!client) {
+    return res.status(404).json({ success: false, message: 'Client not found' });
+  }
+
+  let password = '';
+  if (client.portalPasswordEnc) {
+    try {
+      password = decrypt(client.portalPasswordEnc);
+    } catch (err) {
+      // Encryption key changed / corrupted ciphertext — fail soft
+      // so the UI can show a "couldn't recover" hint without crashing.
+      console.error('revealPortalPassword decrypt failed:', err?.message);
+      password = '';
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      clientName: client.clientName,
+      portalEmail: client.portalEmail || '',
+      portalPassword: password,
+      // hasRecoverable tells the UI whether to show "Reveal" or
+      // "Reset password" — old records (saved before this feature)
+      // have no encrypted copy.
+      hasRecoverable: !!password,
+    },
+  });
+});
+
 export const updateClientStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
 

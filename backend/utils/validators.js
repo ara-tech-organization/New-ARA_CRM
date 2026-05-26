@@ -22,8 +22,10 @@ export const registerValidation = [
     .withMessage('Password must be at least 6 characters'),
   body('role')
     .optional()
-    .isIn(['superadmin', 'admin', 'SMM', 'PMM', 'staff'])
-    .withMessage('Invalid role'),
+    .isString()
+    .trim()
+    .isLength({ min: 2, max: 30 })
+    .withMessage('Role must be 2-30 characters'),
 ];
 
 export const loginValidation = [
@@ -51,8 +53,10 @@ export const updateUserValidation = [
     .normalizeEmail(),
   body('role')
     .optional()
-    .isIn(['superadmin', 'admin', 'SMM', 'PMM', 'staff'])
-    .withMessage('Invalid role'),
+    .isString()
+    .trim()
+    .isLength({ min: 2, max: 30 })
+    .withMessage('Role must be 2-30 characters'),
 ];
 
 // Client validation rules - matching main API schema

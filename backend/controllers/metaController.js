@@ -13,6 +13,7 @@ import MetaAdSet from '../models/MetaAdSet.js';
 import MetaAd from '../models/MetaAd.js';
 import MetaInsights from '../models/MetaInsights.js';
 import Lead from '../models/Lead.js';
+import AbstractEntry from '../models/AbstractEntry.js';
 import {
   syncAllMetaClients,
   syncSingleMetaClient,
@@ -1559,15 +1560,20 @@ export const getTelecallingReport = async (req, res) => {
   // ── DAY aggregate ─────────────────────────────────────────────────
   const dayLeads = monthLeads.filter((l) => dateMatches(l, targetDate, targetEnd));
 
+  // Per-source bucket counts for the EOD's Day Summary block.
+  // Each incall variant is tracked separately so manual overrides
+  // for individual incall types (from the Abstract grid) can land
+  // on the right key; the combined `incall` field below is a
+  // computed sum that's what the EOD UI actually renders.
   const bucketCounts = {
     whatsapp: 0, instagram: 0, facebook: 0, google_lead: 0,
     justdial: 0, walk_in: 0, referral: 0, physical_marketing: 0,
-    incall: 0,   // Incall_* are summed into one bucket on the dashboard.
+    incall_google: 0, incall_fb: 0, incall_insta: 0, incall_self: 0,
+    incall: 0,
   };
   dayLeads.forEach((l) => {
     const b = sourceBucketOf(l);
-    if (b.startsWith('incall_')) bucketCounts.incall += 1;
-    else if (bucketCounts[b] != null) bucketCounts[b] += 1;
+    if (bucketCounts[b] != null) bucketCounts[b] += 1;
     else bucketCounts.facebook += 1;
   });
 
@@ -1624,9 +1630,41 @@ export const getTelecallingReport = async (req, res) => {
   const convertedDay = monthLeads.filter((l) =>
     ['TREATMENT BOOKED', 'CLOSED'].includes(String(l.response_label || '').toUpperCase()) && touchedToday(l)
   ).length;
-  // Converted value isn't tracked on Lead — return 0 so the UI keeps
-  // the row in place; revisit when a `converted_value` field is added.
-  const convertedValueDay = 0;
+  // Pull whatever the telecaller has manually saved for today and
+  // apply it the same way the Monthly Abstract does — that's how the
+  // two views stay in lockstep. The allow-list inside readManualValues
+  // gates which keys are honored.
+  const manualToday = await AbstractEntry.findOne({
+    client: client._id,
+    date: targetDateStr,
+  }).lean();
+  const manualOverridesToday = readManualValues(manualToday?.manualValues);
+
+  // Source overrides — every key in EDITABLE_ABSTRACT_FIELDS that maps
+  // onto a bucket gets replaced when a manual value exists. Replace
+  // semantics on purpose: with the Leads source dropdown now limited
+  // to WhatsApp / Instagram / Facebook, no new lead can have these
+  // values, so the manual entry IS the authoritative count.
+  Object.entries(manualOverridesToday).forEach(([k, v]) => {
+    if (bucketCounts[k] != null) bucketCounts[k] = v;
+  });
+
+  // INCALL display rule:
+  //   - If the telecaller typed a value into the EOD's single INCALL
+  //     cell (`incall_total`), that wins.
+  //   - Otherwise sum the four sub-types — which themselves reflect
+  //     any manual edits made in the Monthly Abstract.
+  if (manualOverridesToday.incall_total != null) {
+    bucketCounts.incall = manualOverridesToday.incall_total;
+  } else {
+    bucketCounts.incall =
+      bucketCounts.incall_google + bucketCounts.incall_fb +
+      bucketCounts.incall_insta + bucketCounts.incall_self;
+  }
+
+  // Converted value isn't derivable from the Lead schema at all, so
+  // we fall back to 0 if the telecaller hasn't entered one yet.
+  const convertedValueDay = manualOverridesToday.convert_value ?? 0;
 
   // ── MONTH aggregate ───────────────────────────────────────────────
   const consultedMonth = monthLeads.filter((l) =>
@@ -2016,6 +2054,25 @@ export const getMonthlyAbstract = async (req, res) => {
     r.total_connected_calls = r.fresh_calls_connected + r.callback_connected;
   });
 
+  // Merge manually-entered values over the auto-computed numbers.
+  // `readManualValues` enforces the editable allow-list, so even if
+  // someone managed to write an unexpected key to AbstractEntry by
+  // hand, it can't bleed into auto-computed columns here.
+  const manualEntries = await AbstractEntry.find({
+    client: client._id,
+    date: { $gte: isoDate(monthStart), $lte: isoDate(monthEnd) },
+  }).lean();
+  const manualByDate = new Map(
+    manualEntries.map((e) => [e.date, readManualValues(e.manualValues)])
+  );
+  rows.forEach((r) => {
+    const overrides = manualByDate.get(r.date);
+    if (!overrides) return;
+    Object.entries(overrides).forEach(([k, v]) => {
+      r[k] = v;
+    });
+  });
+
   // Totals row — sum every numeric column across the month.
   const total = blankRow();
   total.date = 'TOTAL';
@@ -2034,5 +2091,103 @@ export const getMonthlyAbstract = async (req, res) => {
     days_in_month: daysInMonth,
     rows,
     total,
+  });
+};
+
+// POST /api/meta/client/:clientId/monthly-abstract/cell
+//   body: { date: "YYYY-MM-DD", field: "<editable_key>", value: number }
+// Save (upsert) a single manually-entered abstract cell. The
+// allow-list below is the single source of truth for what columns
+// telecallers can override — every code path that merges manual
+// values consults it before applying anything, so adding a new
+// editable field is a one-line change (plus flipping `editable: true`
+// on the corresponding column in the frontend).
+//
+// Editable set — every column the Lead collection can't populate.
+// The Leads table source dropdown is now limited to WhatsApp /
+// Instagram / Facebook (those flow in via Meta sync + manual adds),
+// so all the OTHER source columns and Convert Value are typed in by
+// telecallers and stored on AbstractEntry.
+const EDITABLE_ABSTRACT_FIELDS = new Set([
+  // Source columns the Leads table can't represent anymore:
+  'google_lead',
+  'justdial',
+  'walk_in',
+  'referral',
+  'physical_marketing',
+  'incall_google',
+  'incall_fb',
+  'incall_insta',
+  'incall_self',
+  // Top-level INCALL override saved from the EOD report's single
+  // INCALL cell. When set, it wins over the sum of the four
+  // incall_* sub-types for that day — useful when the team only
+  // tracks a combined number instead of the breakdown.
+  'incall_total',
+  // Revenue — no field on Lead at all:
+  'convert_value',
+]);
+
+// Pull editable values out of a stored `manualValues` map. Returns a
+// plain object keyed by field name. Defensive — the lean() shape can
+// be either a Map or a plain object depending on driver versions.
+const readManualValues = (manualValues) => {
+  if (!manualValues) return {};
+  const entries = manualValues instanceof Map
+    ? Array.from(manualValues.entries())
+    : Object.entries(manualValues);
+  const out = {};
+  entries.forEach(([k, v]) => {
+    if (EDITABLE_ABSTRACT_FIELDS.has(k) && v != null && Number.isFinite(Number(v))) {
+      out[k] = Number(v);
+    }
+  });
+  return out;
+};
+
+export const saveMonthlyAbstractCell = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  const { date, field } = req.body || {};
+  const rawValue = req.body?.value;
+
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: 'date must be YYYY-MM-DD' });
+  }
+  if (!field || !EDITABLE_ABSTRACT_FIELDS.has(field)) {
+    return res.status(400).json({ message: `field "${field}" is not editable` });
+  }
+  const num = Number(rawValue);
+  if (!Number.isFinite(num) || num < 0) {
+    return res.status(400).json({ message: 'value must be a non-negative number' });
+  }
+
+  // Upsert: same (client, date) doc gets new key set; brand-new
+  // (client, date) creates a fresh doc with this field as the only key.
+  const updatedBy = req.user?.name || req.user?.email || '';
+  const updated = await AbstractEntry.findOneAndUpdate(
+    { client: client._id, date },
+    {
+      $set: {
+        [`manualValues.${field}`]: num,
+        updatedBy,
+      },
+      $setOnInsert: {
+        client: client._id,
+        date,
+      },
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  ).lean();
+
+  res.json({
+    success: true,
+    data: {
+      date,
+      field,
+      value: num,
+      manualValues: updated?.manualValues || {},
+    },
   });
 };

@@ -635,10 +635,14 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
         <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, mr: 0.5 }}>
           Filter
         </Typography>
+        {/* Only the three channels we actually pull leads from:
+            Facebook + Instagram come from the Meta sync, WhatsApp is
+            manually added via the "Add Lead" dialog. Everything else
+            (Google, JustDial, Walk-In, Referral, Physical Marketing,
+            Incall …) was removed — those weren't being fetched and
+            cluttered the filter. */}
         {renderFilter('Source', filterSource, setFilterSource, [
-          'whatsapp', 'instagram', 'facebook', 'google_lead', 'justdial',
-          'walk_in', 'referral', 'physical_marketing',
-          'incall_google', 'incall_fb', 'incall_insta', 'incall_self',
+          'whatsapp', 'instagram', 'facebook',
         ])}
         {renderFilter('Call Label', filterCallLabel, setFilterCallLabel, CALL_LABEL_OPTIONS)}
         {renderFilter('Response', filterResponse, setFilterResponse, RESPONSE_LABEL_OPTIONS)}
@@ -1147,20 +1151,11 @@ const MetaLeadsTable = ({ leads = [], metaAccount, maxHeight, onSaveLead, onAddL
                 value={addForm.manual_source_type}
                 onChange={(e) => setAddForm((f) => ({ ...f, manual_source_type: e.target.value }))}
                 disabled={addBusy}
-                helperText="Which channel did this lead come from?"
+                helperText="Which channel did this lead come from? WhatsApp is the typical manual add — Facebook + Instagram leads usually flow in via the Meta sync."
               >
                 <MenuItem value="whatsapp">WhatsApp</MenuItem>
                 <MenuItem value="instagram">Instagram</MenuItem>
                 <MenuItem value="facebook">Facebook</MenuItem>
-                <MenuItem value="google_lead">Google Lead</MenuItem>
-                <MenuItem value="justdial">Justdial</MenuItem>
-                <MenuItem value="walk_in">Walk-In</MenuItem>
-                <MenuItem value="referral">Referral</MenuItem>
-                <MenuItem value="physical_marketing">Physical Marketing</MenuItem>
-                <MenuItem value="incall_google">Incall — Google</MenuItem>
-                <MenuItem value="incall_fb">Incall — Facebook</MenuItem>
-                <MenuItem value="incall_insta">Incall — Instagram</MenuItem>
-                <MenuItem value="incall_self">Incall — Self</MenuItem>
               </TextField>
               <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                 <TextField
