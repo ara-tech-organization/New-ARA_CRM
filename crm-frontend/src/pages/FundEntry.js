@@ -106,7 +106,8 @@ const FundEntry = () => {
   const [fetchingBalances, setFetchingBalances] = useState(false);
 
   // Use cached clients
-  const { clients: cachedClients, clientsLoading } = useDataCache();
+  const { clients: cachedClients, clientsLoading, fetchClients } = useDataCache();
+  useEffect(() => { fetchClients(); }, [fetchClients]);
 
   useEffect(() => {
     if (cachedClients.length > 0) {

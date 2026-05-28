@@ -284,7 +284,8 @@ const MetricBarChart = ({ data, metricKey, title }) => {
 };
 
 const Reports = () => {
-  const { clients: cachedClients } = useDataCache();
+  const { clients: cachedClients, fetchClients } = useDataCache();
+  useEffect(() => { fetchClients(); }, [fetchClients]);
 
   // Transform cached client list to the simple shape this page needs.
   const clients = useMemo(() =>

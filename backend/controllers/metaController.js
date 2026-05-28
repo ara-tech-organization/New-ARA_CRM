@@ -1319,6 +1319,50 @@ export const getClientsAdsComparison = async (req, res) => {
   }
 };
 
+// GET /api/meta/dashboard-overview?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Dashboard-specific bulk summary. Same aggregation as /meta/clients but
+// returns only the fields the dashboard's per-client cards consume, in the
+// snake_case shape they already expect. Replaces the N+1 of one
+// /meta/client/:id/analytics call per client on dashboard load.
+export const getMetaDashboardOverview = async (req, res) => {
+  try {
+    const { since, until } = parseDateRange(req.query);
+    const dateRange = { $gte: since, $lte: until };
+
+    const clients = await Client.find({ meta_enabled: true })
+      .select('_id')
+      .lean();
+    if (clients.length === 0) return res.json({ count: 0, clients: [] });
+
+    const clientIds = clients.map((c) => c._id);
+    const rows = await MetaInsights.aggregate([
+      { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
+      {
+        $group: {
+          _id: '$client_id',
+          spend: { $sum: '$spend' },
+          form_leads: { $sum: '$leads' },
+          whatsapp_leads: { $sum: '$messaging_conversations_started' },
+        },
+      },
+    ]);
+
+    const overviews = rows.map((r) => {
+      const spend = round2(r.spend);
+      const form_leads = r.form_leads || 0;
+      const whatsapp_leads = r.whatsapp_leads || 0;
+      const total_leads = form_leads + whatsapp_leads;
+      const cpl = total_leads > 0 ? round2(spend / total_leads) : 0;
+      return { clientId: r._id, spend, total_leads, form_leads, whatsapp_leads, cpl };
+    });
+
+    res.json({ count: overviews.length, clients: overviews });
+  } catch (error) {
+    console.error('getMetaDashboardOverview error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // POST /api/meta/client/:clientId/leads
 // Create a manual lead row — used for WhatsApp leads that don't come
 // through the normal Meta lead-form sync. The portal admin and the

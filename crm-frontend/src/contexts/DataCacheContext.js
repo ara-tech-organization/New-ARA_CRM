@@ -164,12 +164,11 @@ export const DataCacheProvider = ({ children }) => {
     [clients],
   );
 
-  // On mount: only fetch today's leads + clients (fast). All-leads is lazy.
-  useEffect(() => {
-    fetchTodayLeads();
-    fetchClients();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // No auto-fetch on mount — pages that need cached data call the
+  // corresponding fetcher in their own useEffect (or via the
+  // useEnsureClients / useEnsureTodayLeads / useEnsureLeads hooks below).
+  // Pages that don't need the cache (Settings, AccessManagement, etc.)
+  // pay zero network cost.
 
   // Force refresh whichever caches are currently populated
   const refreshAll = useCallback(async () => {
@@ -215,4 +214,32 @@ export const useDataCache = () => {
     throw new Error("useDataCache must be used within DataCacheProvider");
   }
   return context;
+};
+
+// Auto-triggered fetchers — call these in pages that depend on the cache.
+// They fire the corresponding fetch on mount (no-op if data is fresh) and
+// return the value + loading flag. Replaces the previous app-wide eager
+// fetch in DataCacheProvider so non-data pages skip the network entirely.
+export const useEnsureClients = () => {
+  const { clients, clientsLoading, fetchClients } = useDataCache();
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
+  return { clients, loading: clientsLoading };
+};
+
+export const useEnsureTodayLeads = () => {
+  const { todayLeads, todayLeadsLoading, fetchTodayLeads } = useDataCache();
+  useEffect(() => {
+    fetchTodayLeads();
+  }, [fetchTodayLeads]);
+  return { todayLeads, loading: todayLeadsLoading };
+};
+
+export const useEnsureLeads = () => {
+  const { leads, leadsLoading, fetchLeads } = useDataCache();
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
+  return { leads, loading: leadsLoading };
 };

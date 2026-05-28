@@ -22,3 +22,14 @@ root.render(
 // to log results (for example: reportWebVitals(console.log))
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
+
+// Service worker — production only. The SW caches static assets cache-first
+// and HTML network-first; API calls are never cached. See
+// crm-frontend/public/service-worker.js. In dev we'd fight the CRA HMR.
+if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/service-worker.js')
+      .catch((err) => console.warn('SW registration failed:', err));
+  });
+}

@@ -32,6 +32,7 @@ import {
   createClientLead,
   deleteClientLead,
   getClientsAdsComparison,
+  getMetaDashboardOverview,
   getTelecallingReport,
   getMonthlyAbstract,
   saveMonthlyAbstractCell,
@@ -84,6 +85,11 @@ router.get("/client/:clientId/analytics", getClientAnalytics);
 // Multi-client comparison — sibling to /api/analytics/clients for Google.
 // Powers the Meta tab on the AdsDashboard ("Ads Comparison") page.
 router.get("/clients", getClientsAdsComparison);
+
+// Bulk dashboard summary — one row per Meta-enabled client with just the
+// fields the home Dashboard's per-client cards need. Replaces an N+1 that
+// fired one /client/:id/analytics call per client on dashboard load.
+router.get("/dashboard-overview", getMetaDashboardOverview);
 
 // Inline CRM edits from MetaLeadsTable. Reachable from both the admin
 // /client-ads page and the client portal — same auth pattern as the

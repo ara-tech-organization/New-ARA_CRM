@@ -176,6 +176,11 @@ const Dashboard = () => {
   const { accentColor } = useContext(ThemeContext);
   const tealAccent = accentColor?.secondary || '#C08552';
   const { todayLeads, clients: cachedClients, todayLeadsLoading: leadsLoading, clientsLoading, refreshAll, fetchTodayLeads, fetchClients } = useDataCache();
+  // Trigger fetches now that the cache no longer auto-loads on app mount.
+  useEffect(() => {
+    fetchTodayLeads();
+    fetchClients();
+  }, [fetchTodayLeads, fetchClients]);
   // Pull the logged-in user so the hero strip can address them by
   // name; fall back to "there" so the banner never reads "Welcome, "
   // with a blank trailer.
@@ -264,7 +269,10 @@ const Dashboard = () => {
       .finally(() => setAdsLoading(false));
   }, [cachedClients, selectedDate]);
 
-  // Fetch Meta Ads summary per Meta-enabled client (keyed by clientId)
+  // Fetch Meta Ads summary across all Meta-enabled clients in ONE call.
+  // /meta/dashboard-overview aggregates server-side and returns the exact
+  // snake_case shape the cards consume. Was previously one analytics call
+  // per client (N+1) — see the AdsDashboard-style /meta/clients sibling.
   const [metaDataMap, setMetaDataMap] = useState({});
   const [metaLoading, setMetaLoading] = useState(false);
   useEffect(() => {
@@ -272,19 +280,16 @@ const Dashboard = () => {
     if (metaClients.length === 0) { setMetaDataMap({}); return; }
     let cancelled = false;
     setMetaLoading(true);
-    Promise.allSettled(
-      metaClients.map(c =>
-        api.get(`/meta/client/${c._id}/analytics`, { params: { from: selectedDate, to: selectedDate } })
-          .then(res => ({ clientId: c._id, summary: res.data?.summary }))
-      )
-    ).then(results => {
-      if (cancelled) return;
-      const map = {};
-      results.forEach(r => {
-        if (r.status === 'fulfilled' && r.value?.summary) map[r.value.clientId] = r.value.summary;
-      });
-      setMetaDataMap(map);
-    }).finally(() => { if (!cancelled) setMetaLoading(false); });
+    api.get('/meta/dashboard-overview', { params: { from: selectedDate, to: selectedDate } })
+      .then(res => {
+        if (cancelled) return;
+        const list = res.data?.clients || [];
+        const map = {};
+        list.forEach(c => { if (c.clientId) map[String(c.clientId)] = c; });
+        setMetaDataMap(map);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setMetaLoading(false); });
     return () => { cancelled = true; };
   }, [cachedClients, selectedDate]);
 
