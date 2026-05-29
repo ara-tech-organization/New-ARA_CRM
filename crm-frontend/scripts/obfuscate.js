@@ -11,7 +11,6 @@ const path = require('path');
 const JavaScriptObfuscator = require('javascript-obfuscator');
 
 const JS_DIR = path.resolve(__dirname, '..', 'build', 'static', 'js');
-const SIZE_THRESHOLD = 500 * 1024; // 500 KB — above this, use light options
 
 const lightOptions = {
   compact: true,
@@ -32,17 +31,11 @@ const lightOptions = {
   unicodeEscapeSequence: false,
 };
 
-const heavyOptions = {
-  ...lightOptions,
-  controlFlowFlattening: true,
-  controlFlowFlatteningThreshold: 0.5,
-  deadCodeInjection: true,
-  deadCodeInjectionThreshold: 0.2,
-  selfDefending: true,
-  splitStrings: true,
-  splitStringsChunkLength: 10,
-  numbersToExpressions: true,
-};
+// `heavyOptions` removed — controlFlowFlattening + numbersToExpressions
+// + splitStrings produced "Unexpected token" syntax errors in some
+// chunks (notably 4705.*) and inflated the bundle ~3×. If you re-enable
+// any of them, test the production build against EVERY route in the app
+// — these failures are silent until runtime when a chunk loads.
 
 if (!fs.existsSync(JS_DIR)) {
   console.error(`[obfuscate] Missing directory: ${JS_DIR}`);
@@ -67,12 +60,18 @@ let totalIn = 0;
 let totalOut = 0;
 const overallStart = Date.now();
 
+// Light options for every file. Heavy options (controlFlowFlattening +
+// numbersToExpressions + splitStrings) were producing invalid JS in
+// chunks like 4705.* — "Unexpected token '['" at runtime — and also
+// inflated the bundle ~3×. Light alone still mangles identifiers and
+// string-array-encodes constants, which is the cost-effective tier.
+
 for (const file of jsFiles) {
   const fullPath = path.join(JS_DIR, file);
   const src = fs.readFileSync(fullPath, 'utf8');
   const inSize = Buffer.byteLength(src, 'utf8');
-  const opts = inSize > SIZE_THRESHOLD ? lightOptions : heavyOptions;
-  const preset = opts === heavyOptions ? 'heavy' : 'light';
+  const opts = lightOptions;
+  const preset = 'light';
   const started = Date.now();
 
   try {
