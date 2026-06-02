@@ -1,8 +1,14 @@
-// Phase 3 admin routes for Meta sync. Webhook + config endpoints land in
-// Phase 4. No auth middleware here — matches the existing /api/google-ads
-// pattern; a global auth pass can be added later.
+// Meta sync routes. Used by BOTH the admin app and the client portal,
+// so the auth layer accepts either token type via `protectAdminOrClient`.
+// Tenant ownership is enforced inside the controller (loadClientOr404
+// reads req.clientId / req.user and rejects cross-tenant access).
+//
+// /webhook is the one public endpoint here — Meta itself calls it with
+// its own X-Hub-Signature-256 HMAC; we add it BEFORE protectAdminOrClient
+// so it stays reachable. Everything else requires a valid token.
 
 import express from "express";
+import { protectAdminOrClient } from "../middleware/auth.js";
 import {
   postSyncAll,
   postSyncClient,
@@ -40,29 +46,45 @@ import {
 
 const router = express.Router();
 
-// Webhook (public — authenticated via X-Hub-Signature-256 on POST)
+// Webhook (public — authenticated via X-Hub-Signature-256 on POST).
+// Registered BEFORE the auth wall below so Meta's POSTs aren't rejected.
 router.get("/webhook", getWebhook);
 router.post("/webhook", postWebhook);
 
-// Observability / admin
-router.get("/health", getHealth);
-router.get("/sync-status", getStatus);
-router.get("/sync-runs", getRuns);
-router.post("/sync-runs/cleanup", postCleanupSyncRuns);
-router.get("/retry-queue", getRetryQueue);
-router.get("/raw-leads", getRawLeads);
+// Everything else requires a valid agency or portal JWT.
+router.use(protectAdminOrClient);
 
-// Sync triggers
-router.post("/sync", postSyncAll);
-router.post("/sync/historical", postSyncHistorical);
-router.post("/sync/historical/:clientId", postSyncHistoricalClient);
-router.post("/sync/:clientId", postSyncClient);
-router.post("/sync/ad-account/:adAccountId", postSyncAdAccount);
+// Admin-only gate for the operational/observability routes below.
+// Portal tokens (set req.clientId) get a 403 — they have no business
+// triggering syncs or reading the unassigned-forms queue. Per-client
+// data routes further down stay accessible to portal tokens (their
+// own tenant scope is enforced by loadClientOr404).
+const requireAgencyToken = (req, res, next) => {
+  if (!req.user) {
+    return res.status(403).json({ success: false, message: 'Admin-side endpoint — portal tokens not allowed.' });
+  }
+  next();
+};
 
-// Forms admin
-router.get("/unassigned-forms", getUnassignedForms);
-router.post("/forms/:formId/assign", postAssignForm);
-router.post("/forms/:formId/reprocess", postReprocessForm);
+// Observability / admin — agency only
+router.get("/health", requireAgencyToken, getHealth);
+router.get("/sync-status", requireAgencyToken, getStatus);
+router.get("/sync-runs", requireAgencyToken, getRuns);
+router.post("/sync-runs/cleanup", requireAgencyToken, postCleanupSyncRuns);
+router.get("/retry-queue", requireAgencyToken, getRetryQueue);
+router.get("/raw-leads", requireAgencyToken, getRawLeads);
+
+// Sync triggers — agency only
+router.post("/sync", requireAgencyToken, postSyncAll);
+router.post("/sync/historical", requireAgencyToken, postSyncHistorical);
+router.post("/sync/historical/:clientId", requireAgencyToken, postSyncHistoricalClient);
+router.post("/sync/:clientId", requireAgencyToken, postSyncClient);
+router.post("/sync/ad-account/:adAccountId", requireAgencyToken, postSyncAdAccount);
+
+// Forms admin — agency only
+router.get("/unassigned-forms", requireAgencyToken, getUnassignedForms);
+router.post("/forms/:formId/assign", requireAgencyToken, postAssignForm);
+router.post("/forms/:formId/reprocess", requireAgencyToken, postReprocessForm);
 
 // Client config + onboarding
 router.get("/client/:clientId/config", getClientConfig);

@@ -1,10 +1,25 @@
 import express from 'express';
 import Metric from '../models/Metric.js';
+import { protectAdminOrClient } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Metrics power both the admin dashboard and the client portal's
+// per-client breakdown, so accept either token type. Handlers that
+// take :clientId go through `assertTenantScope` to reject portal
+// tokens addressing a different client.
+router.use(protectAdminOrClient);
+
+const assertTenantScope = (req, res, next) => {
+  const { clientId } = req.params;
+  if (req.clientId && String(req.clientId) !== String(clientId)) {
+    return res.status(403).json({ error: 'Portal token cannot access another client' });
+  }
+  next();
+};
+
 // Get aggregated metrics for dashboard
-router.get('/dashboard/:clientId', async (req, res) => {
+router.get('/dashboard/:clientId', assertTenantScope, async (req, res) => {
   try {
     const { clientId } = req.params;
     const { startDate, endDate } = req.query;
@@ -49,7 +64,7 @@ router.get('/dashboard/:clientId', async (req, res) => {
 });
 
 // Get campaign-specific metrics
-router.get('/campaigns/:clientId', async (req, res) => {
+router.get('/campaigns/:clientId', assertTenantScope, async (req, res) => {
   try {
     const { clientId } = req.params;
     const { startDate, endDate } = req.query;
@@ -90,7 +105,7 @@ router.get('/campaigns/:clientId', async (req, res) => {
 });
 
 // Get daily metrics for charts
-router.get('/daily/:clientId', async (req, res) => {
+router.get('/daily/:clientId', assertTenantScope, async (req, res) => {
   try {
     const { clientId } = req.params;
     const { startDate, endDate } = req.query;

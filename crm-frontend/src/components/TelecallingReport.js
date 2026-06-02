@@ -149,34 +149,41 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
   // a hover-tint so users can tell at a glance that the cell accepts
   // typing. The badge is `pointer-events: none` so it doesn't steal
   // clicks meant for the input.
-  const renderEditableCell = (field, initial) => (
-    <TableCell
-      style={{
-        ...valueStyle,
-        backgroundColor: editableCellBg(field),
-      }}
-      sx={{
-        ...valueSx,
-        p: 0,
-        position: 'relative',
-        transition: 'background-color 0.15s',
-        '&:hover': { backgroundColor: EDITABLE_BG_HOVER },
-      }}
-    >
-      <EditableNumberInput
-        initialValue={initial}
-        onCommit={(v) => saveCell(field, v)}
-      />
-      <EditIcon sx={{
-        position: 'absolute',
-        top: 2, right: 3,
-        fontSize: 11,
-        color: COPPER,
-        opacity: 0.55,
-        pointerEvents: 'none',
-      }} />
-    </TableCell>
-  );
+  //
+  // Hover-tint is suppressed while a save-state flash is showing
+  // (saving / ok / err) so the green or red feedback doesn't get
+  // overwritten with cream the instant the cursor crosses the cell.
+  const renderEditableCell = (field, initial) => {
+    const flashing = !!cellState[field];
+    return (
+      <TableCell
+        style={{
+          ...valueStyle,
+          backgroundColor: editableCellBg(field),
+        }}
+        sx={{
+          ...valueSx,
+          p: 0,
+          position: 'relative',
+          transition: 'background-color 0.15s',
+          ...(flashing ? {} : { '&:hover': { backgroundColor: EDITABLE_BG_HOVER } }),
+        }}
+      >
+        <EditableNumberInput
+          initialValue={initial}
+          onCommit={(v) => saveCell(field, v)}
+        />
+        <EditIcon sx={{
+          position: 'absolute',
+          top: 2, right: 3,
+          fontSize: 11,
+          color: COPPER,
+          opacity: 0.55,
+          pointerEvents: 'none',
+        }} />
+      </TableCell>
+    );
+  };
 
   // Backwards-compat helper used by the source-bucket rows (which all
   // pull their fallback value from `leads_abstract[field]`).

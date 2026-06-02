@@ -54,6 +54,30 @@ import {
 
 import { CardLoader, PageLoader } from '../components/Loading';
 
+// Safely open a user-supplied URL in a new tab. Blocks the
+// `javascript:` / `data:` / `vbscript:` schemes (stored-XSS vector
+// when a malicious credential URL is opened by another user), and
+// always opens with `noopener,noreferrer` so the popped window
+// can't reach back into the agency app via window.opener.
+// URLs without a scheme are treated as http:// so users typing
+// "example.com" still get a working link.
+const safeOpenUrl = (raw) => {
+  const value = String(raw || '').trim();
+  if (!value) return;
+  let href = value;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    href = `http://${value}`;
+  }
+  const scheme = href.slice(0, href.indexOf(':')).toLowerCase();
+  const allowed = ['http', 'https', 'mailto', 'tel'];
+  if (!allowed.includes(scheme)) {
+    // Refuse javascript: / data: / vbscript: / anything else.
+    console.warn(`safeOpenUrl: refusing scheme "${scheme}"`);
+    return;
+  }
+  window.open(href, '_blank', 'noopener,noreferrer');
+};
+
 const ClientVault = () => {
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#C08552';
@@ -90,7 +114,10 @@ const ClientVault = () => {
     setLoading(true);
     try {
       const response = await api.get('/clients');
-      const data = response.data.data || response.data;
+      const raw = response.data.data || response.data || [];
+      // Drop soft-deleted clients — vault entries for them stay in the
+      // DB for audit, but they're not selectable here.
+      const data = Array.isArray(raw) ? raw.filter((c) => c?.status !== 'dropped') : [];
       const transformedClients = data.map(client => ({
         _id: client._id,
         id: client._id,
@@ -635,7 +662,7 @@ const ClientVault = () => {
                                       cursor: 'pointer',
                                       '&:hover': { textDecoration: 'underline' },
                                     }}
-                                    onClick={() => window.open(credential.url, '_blank')}
+                                    onClick={() => safeOpenUrl(credential.url)}
                                   >
                                     {credential.url}
                                   </Typography>

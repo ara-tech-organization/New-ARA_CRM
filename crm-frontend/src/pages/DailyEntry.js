@@ -136,7 +136,11 @@ const DailyEntry = () => {
       setClientsLoading(true);
       try {
         const response = await api.get('/clients');
-        const data = response.data.data || response.data;
+        const raw = response.data.data || response.data || [];
+        // Hide dropped clients — they shouldn't appear in any daily-entry
+        // dropdown / list since they're no longer active. The backend
+        // default already filters them out; this is belt-and-braces.
+        const data = Array.isArray(raw) ? raw.filter((c) => c?.status !== 'dropped') : [];
         // Transform to match expected format
         const transformedClients = data.map(client => ({
           _id: client._id,

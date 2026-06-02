@@ -1,7 +1,13 @@
 import express from 'express';
 import FundEntry from '../models/FundEntry.js';
+import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Agency-side only — fund entries log money movement and shouldn't be
+// readable or writable from anywhere outside an authenticated agency
+// session.
+router.use(protect);
 
 const MAIN_API_URL = process.env.MAIN_API_URL || 'https://crm-new-eue2hubpd8hxfnbv.southeastasia-01.azurewebsites.net';
 

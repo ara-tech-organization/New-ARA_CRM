@@ -100,26 +100,12 @@ const clientSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
-    creativeCommitment: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    staticCommitment: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    motionCreative: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-    notes: {
-      type: String,
-      trim: true,
-      default: '',
-    },
+    // creativeCommitment / staticCommitment / motionCreative / notes
+    // were removed from the schema — they were UI-only commitments
+    // that nothing else in the system read or aggregated, and the
+    // agency stopped using them. Historical documents may still have
+    // these keys; Mongoose just ignores unknown fields on read, so no
+    // migration is needed.
     billing: {
       billing_type: { type: String, enum: ['monthly', 'quarterly'], default: 'monthly' },
       total_added_funds: { type: Number, default: 0 },
@@ -288,6 +274,14 @@ clientSchema.pre('save', async function () {
   try {
     this.portalPasswordEnc = encrypt(plaintext);
   } catch (err) {
+    // The bcrypt hash still landed (login works) but recovery is
+    // disabled until the encryption key is sorted out. Log loudly
+    // so an operator notices instead of silently losing the
+    // "Reveal password" feature for every new save.
+    console.error(
+      '[Client.pre-save] Could not encrypt portalPassword for recovery — '
+      + `feature disabled for this row. Reason: ${err?.message || err}`
+    );
     this.portalPasswordEnc = '';
   }
 });

@@ -86,6 +86,27 @@ const getPasswordStrength = (password) => {
   return { strength: 'strong', color: '#10b981', label: 'Strong' };
 };
 
+// Safe URL opener — see ClientVault.js for full rationale. Blocks
+// javascript: / data: / vbscript: schemes (stored-XSS vector when a
+// malicious credential URL is opened), forces noopener,noreferrer,
+// and prepends http:// to schemeless input so "example.com" still
+// works.
+const safeOpenUrl = (raw) => {
+  const value = String(raw || '').trim();
+  if (!value) return;
+  let href = value;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    href = `http://${value}`;
+  }
+  const scheme = href.slice(0, href.indexOf(':')).toLowerCase();
+  const allowed = ['http', 'https', 'mailto', 'tel'];
+  if (!allowed.includes(scheme)) {
+    console.warn(`safeOpenUrl: refusing scheme "${scheme}"`);
+    return;
+  }
+  window.open(href, '_blank', 'noopener,noreferrer');
+};
+
 const PersonalVault = () => {
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#C08552';
@@ -624,7 +645,7 @@ const PersonalVault = () => {
                                           cursor: 'pointer',
                                           '&:hover': { textDecoration: 'underline' },
                                         }}
-                                        onClick={() => window.open(entry.url, '_blank')}
+                                        onClick={() => safeOpenUrl(entry.url)}
                                       >
                                         {entry.url}
                                       </Typography>

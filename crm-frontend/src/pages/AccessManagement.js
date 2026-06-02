@@ -90,6 +90,36 @@ const availablePages = [
 // because it's the only role that auto-grants every page.
 const DEFAULT_ROLE_SUGGESTIONS = ['admin', 'PMM', 'SMM'];
 
+// Stable colour palette for custom roles (anything outside the three
+// built-ins). Each role name hashes to a fixed swatch so "Social
+// Media Employee" always looks the same across the table, dialog
+// chip, dropdown dot, and stat tile. The palette deliberately avoids:
+//   - red (#ef4444)     — admin
+//   - blue (#3b82f6)    — PMM
+//   - sky (#0ea5e9)     — SMM
+//   - slate (#94a3b8)   — inactive / disabled rows
+//   - green (#10b981)   — active status
+// so no custom role ever paints itself like a built-in or a state.
+const CUSTOM_ROLE_SWATCHES = [
+  '#a855f7',  // violet
+  '#0d9488',  // teal
+  '#f97316',  // orange
+  '#ec4899',  // pink
+  '#f59e0b',  // amber
+  '#6366f1',  // indigo
+  '#dc2626',  // crimson — deeper red, distinguishable from admin red
+  '#0891b2',  // cyan
+  '#84cc16',  // lime
+  '#7c3aed',  // deep purple
+];
+const swatchForRole = (role = '') => {
+  let h = 0;
+  for (let i = 0; i < role.length; i += 1) {
+    h = (h * 31 + role.charCodeAt(i)) | 0;
+  }
+  return CUSTOM_ROLE_SWATCHES[Math.abs(h) % CUSTOM_ROLE_SWATCHES.length];
+};
+
 // MUI's `freeSolo` Autocomplete needs a custom filter to support the
 // "+ Add new" suggestion at the bottom of the dropdown when the typed
 // value doesn't match any existing option. We use it on both Role and
@@ -493,16 +523,22 @@ const AccessManagement = () => {
     }));
   };
 
+  // Built-in role colors. Everything outside this map is a custom
+  // role the admin created — those get a deterministic swatch from
+  // CUSTOM_ROLE_SWATCHES below, NOT the default slate. Earlier the
+  // fallback was '#94a3b8' (slate), identical to the Inactive chip,
+  // which made custom roles like "Social Media Employee" look
+  // greyed-out as if they were deactivated.
   const getRoleColor = (role) => {
     switch (role) {
       case 'admin':
-        return '#ef4444';
+        return '#ef4444';        // red — full access, loud on purpose
       case 'PMM':
-        return '#3b82f6';
+        return '#3b82f6';        // blue — performance marketing
       case 'SMM':
-        return '#0ea5e9';
+        return '#0ea5e9';        // sky blue — social media manager
       default:
-        return '#94a3b8';
+        return swatchForRole(role);
     }
   };
 
@@ -1124,6 +1160,7 @@ const AccessManagement = () => {
                     value={newUser.name}
                     onChange={(e) => handleNewUserChange('name', e.target.value)}
                     required
+                    inputProps={{ maxLength: 50 }}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -1134,6 +1171,7 @@ const AccessManagement = () => {
                     value={newUser.email}
                     onChange={(e) => handleNewUserChange('email', e.target.value)}
                     required
+                    inputProps={{ maxLength: 254 }}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -1145,6 +1183,8 @@ const AccessManagement = () => {
                     onChange={(e) => handleNewUserChange('password', e.target.value)}
                     required
                     autoComplete="new-password"
+                    helperText="Minimum 6 characters"
+                    inputProps={{ minLength: 6, maxLength: 128 }}
                     slotProps={{
                       input: {
                         endAdornment: (
@@ -1164,6 +1204,7 @@ const AccessManagement = () => {
                     label="Phone"
                     value={newUser.phone}
                     onChange={(e) => handleNewUserChange('phone', e.target.value)}
+                    inputProps={{ maxLength: 30 }}
                   />
                 </Grid>
               </Grid>
@@ -1235,6 +1276,7 @@ const AccessManagement = () => {
                     label="Department"
                     value={newUser.department}
                     onChange={(e) => handleNewUserChange('department', e.target.value)}
+                    inputProps={{ maxLength: 60 }}
                   />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -1399,10 +1441,10 @@ const AccessManagement = () => {
           {editUserData && (
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
               <Grid size={{ xs: 12, md: 6 }}>
-                <TextField fullWidth size="small" label="Full Name" value={editUserData.name} onChange={(e) => handleEditUserChange('name', e.target.value)} required />
+                <TextField fullWidth size="small" label="Full Name" value={editUserData.name} onChange={(e) => handleEditUserChange('name', e.target.value)} required inputProps={{ maxLength: 50 }} />
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
-                <TextField fullWidth size="small" label="Email" type="email" value={editUserData.email} onChange={(e) => handleEditUserChange('email', e.target.value)} required />
+                <TextField fullWidth size="small" label="Email" type="email" value={editUserData.email} onChange={(e) => handleEditUserChange('email', e.target.value)} required inputProps={{ maxLength: 254 }} />
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
                 <Autocomplete
@@ -1492,10 +1534,10 @@ const AccessManagement = () => {
                 />
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
-                <TextField fullWidth size="small" label="Phone" value={editUserData.phone} onChange={(e) => handleEditUserChange('phone', e.target.value)} />
+                <TextField fullWidth size="small" label="Phone" value={editUserData.phone} onChange={(e) => handleEditUserChange('phone', e.target.value)} inputProps={{ maxLength: 30 }} />
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
-                <TextField fullWidth size="small" label="Department" value={editUserData.department} onChange={(e) => handleEditUserChange('department', e.target.value)} />
+                <TextField fullWidth size="small" label="Department" value={editUserData.department} onChange={(e) => handleEditUserChange('department', e.target.value)} inputProps={{ maxLength: 60 }} />
               </Grid>
             </Grid>
           )}
@@ -1555,6 +1597,7 @@ const AccessManagement = () => {
             onChange={(e) => setNewPassword(e.target.value)}
             helperText="Minimum 6 characters"
             autoComplete="new-password"
+            inputProps={{ minLength: 6, maxLength: 128 }}
             slotProps={{
               input: {
                 endAdornment: (

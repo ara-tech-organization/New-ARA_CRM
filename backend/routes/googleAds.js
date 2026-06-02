@@ -5,8 +5,14 @@ import Client from '../models/Client.js';
 import Campaign from '../models/Campaign.js';
 import googleAdsService from '../services/googleAdsService.js';
 import mongoose from 'mongoose';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Google Ads sync + configuration are agency-side only and can move
+// real data and money — require an authenticated admin token.
+router.use(protect);
+router.use(authorize('superadmin', 'admin'));
 
 // Manual sync for all clients
 router.post('/sync', async (req, res) => {

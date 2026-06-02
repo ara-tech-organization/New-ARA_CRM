@@ -2,8 +2,14 @@ import express from 'express';
 import Payment from '../models/Payment.js';
 import Client from '../models/Client.js';
 import BillingTransaction from '../models/BillingTransaction.js';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Payments create / read are agency-side only. Privileged role required
+// since these endpoints affect billing balances.
+router.use(protect);
+router.use(authorize('superadmin', 'admin'));
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 

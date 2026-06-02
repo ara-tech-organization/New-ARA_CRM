@@ -107,17 +107,42 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
-  message: "Too many requests from this IP, please try again later.",
+// ── Rate limiting ─────────────────────────────────────────────
+// Two tiers on purpose:
+//   1. authLimiter — strict (10 per 15 min). Targets /api/auth/login
+//      and /api/client-portal/login to make password-guessing
+//      impractical without crippling real users (the agency rarely
+//      logs in more than a few times per window).
+//   2. apiLimiter — generous (1000 per 15 min per IP). Catches
+//      scrape attempts against the rest of the API without
+//      breaking shared-office-IP scenarios where many admins use
+//      the same NAT egress. Tunable via RATE_LIMIT_MAX_REQUESTS.
+//
+// Why this is enabled now: a previous audit found the /api/auth
+// login endpoint was brute-forceable indefinitely because this
+// middleware was commented out.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 10,
+  message: { success: false, message: "Too many login attempts, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,    // a correct password resets the counter
+});
+
+const apiLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
+  message: { success: false, message: "Too many requests from this IP, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Apply rate limiting to all routes
-// app.use('/api/', limiter);
+// Strict limiter goes on login routes specifically; generous one on
+// everything under /api so even unauthenticated probes get throttled.
+app.use("/api/auth/login", authLimiter);
+app.use("/api/client-portal/login", authLimiter);
+app.use("/api/", apiLimiter);
 
 // Body parser middleware.
 // For Meta webhook verification we need the raw request body to compute

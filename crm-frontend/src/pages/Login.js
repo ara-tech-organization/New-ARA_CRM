@@ -250,6 +250,9 @@ const Login = () => {
                   fullWidth
                   id="email"
                   name="email"
+                  type="email"
+                  autoComplete="username"
+                  inputProps={{ maxLength: 254 }}
                   placeholder="Enter your email"
                   value={formik.values.email}
                   onChange={formik.handleChange}
@@ -298,6 +301,8 @@ const Login = () => {
                   fullWidth
                   id="password"
                   name="password"
+                  autoComplete="current-password"
+                  inputProps={{ maxLength: 128 }}
                   placeholder="Enter your password"
                   type={showPassword ? 'text' : 'password'}
                   value={formik.values.password}

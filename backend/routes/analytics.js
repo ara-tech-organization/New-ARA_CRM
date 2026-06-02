@@ -6,6 +6,13 @@ import Campaign from '../models/Campaign.js';
 import Keyword from '../models/Keyword.js';
 import BillingTransaction from '../models/BillingTransaction.js';
 import syncService from '../sync/syncService.js';
+import { protectAdminOrClient } from '../middleware/auth.js';
+
+// Used by BOTH the admin Ads dashboard and the client portal — gate
+// behind the dual-purpose auth middleware so a JWT (agency or portal)
+// is required. Per-route handlers should also enforce tenant ownership
+// (the portal token's clientId must match the URL's :clientId) — see
+// the assertion block below in /client/:clientId.
 
 // Simple in-memory cache with TTL
 const cache = new Map();
@@ -28,6 +35,9 @@ function setCachedData(key, data) {
 }
 
 const router = express.Router();
+
+// Every route under here requires a valid agency or portal token.
+router.use(protectAdminOrClient);
 
 // GET /api/analytics/clients - List all clients with overview data
 router.get('/clients', async (req, res) => {
@@ -171,6 +181,11 @@ router.get('/clients', async (req, res) => {
 router.get('/client/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
+    // Portal tokens MUST be asking about their own client — anything
+    // else is an IDOR attempt and gets a 403. Agency tokens pass.
+    if (req.clientId && String(req.clientId) !== String(clientId)) {
+      return res.status(403).json({ error: 'Portal token cannot access another client' });
+    }
     const { start_date, end_date } = req.query;
     const cacheKey = getCacheKey('client', { clientId, start_date, end_date });
 

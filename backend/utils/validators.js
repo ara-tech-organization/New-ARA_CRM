@@ -26,6 +26,36 @@ export const registerValidation = [
     .trim()
     .isLength({ min: 2, max: 30 })
     .withMessage('Role must be 2-30 characters'),
+  // Free-text fields — kept permissive (we don't want to reject
+  // international phone formats) but bounded so nothing absurdly
+  // long ends up in the DB. Accept empty/missing.
+  body('phone')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isLength({ max: 30 })
+    .withMessage('Phone must be at most 30 characters'),
+  body('department')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isLength({ max: 60 })
+    .withMessage('Department must be at most 60 characters'),
+  body('team')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isLength({ max: 60 })
+    .withMessage('Team must be at most 60 characters'),
+  body('permissions')
+    .optional()
+    .isArray({ max: 30 })
+    .withMessage('Permissions must be an array (max 30 entries)'),
+  body('permissions.*')
+    .optional()
+    .isString()
+    .isLength({ max: 60 })
+    .withMessage('Each permission ID must be at most 60 characters'),
 ];
 
 export const loginValidation = [
@@ -57,6 +87,24 @@ export const updateUserValidation = [
     .trim()
     .isLength({ min: 2, max: 30 })
     .withMessage('Role must be 2-30 characters'),
+  body('phone')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isLength({ max: 30 })
+    .withMessage('Phone must be at most 30 characters'),
+  body('department')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isLength({ max: 60 })
+    .withMessage('Department must be at most 60 characters'),
+  body('team')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isLength({ max: 60 })
+    .withMessage('Team must be at most 60 characters'),
 ];
 
 // Client validation rules - matching main API schema

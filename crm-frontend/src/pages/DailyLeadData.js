@@ -194,6 +194,15 @@ const DailyLeadData = () => {
     return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
   }, [filteredEntries]);
 
+  // Escape helpers — see Leads.js for rationale (HTML-XSS via
+  // clientName, CSV-formula injection via leading =/+/-/@).
+  const escapeHtml = (s) => String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
   // Export to PDF using print
   const handleExportPDF = () => {
     const printStyles = `
@@ -222,9 +231,9 @@ const DailyLeadData = () => {
       ${printStyles}
       <div class="header">
         <h1>Daily Lead Data (Meta)</h1>
-        <p>Client: ${selectedClientName}</p>
-        <p>Date Range: ${dateRangeText}</p>
-        <p>Generated on: ${new Date().toLocaleString()}</p>
+        <p>Client: ${escapeHtml(selectedClientName)}</p>
+        <p>Date Range: ${escapeHtml(dateRangeText)}</p>
+        <p>Generated on: ${escapeHtml(new Date().toLocaleString())}</p>
       </div>
       <table>
         <thead>
@@ -240,8 +249,8 @@ const DailyLeadData = () => {
         <tbody>
           ${filteredEntries.map(entry => `
             <tr>
-              <td>${entry.clientName || 'Unknown'}</td>
-              <td>${new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+              <td>${escapeHtml(entry.clientName || 'Unknown')}</td>
+              <td>${escapeHtml(new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }))}</td>
               <td class="meta-col">${entry.metaForm || 0}</td>
               <td class="meta-col">${entry.metaWhatsapp || 0}</td>
               <td class="meta-col">${entry.metaTotalLeads || 0}</td>
@@ -265,7 +274,7 @@ const DailyLeadData = () => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Daily Lead Data (Meta) - ${dateRangeText}</title>
+          <title>Daily Lead Data (Meta) - ${escapeHtml(dateRangeText)}</title>
         </head>
         <body>
           ${printHTML}

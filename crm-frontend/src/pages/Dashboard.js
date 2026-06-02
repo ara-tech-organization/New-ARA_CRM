@@ -311,14 +311,27 @@ const Dashboard = () => {
   // strip. The two per-client pie charts below carry that breakdown
   // now, so the rollup is unnecessary.
 
+  // `clientsForDisplay` is the subset used by charts / spotlights /
+  // ranked client lists. Dropped clients are EXCLUDED here so they
+  // don't appear as data points anywhere on the page. The headline
+  // KPI cards still count them (via the full `clients` array) so the
+  // Inactive Clients card includes dropped — the team treats
+  // dropped as a flavor of inactive for the count.
+  const clientsForDisplay = useMemo(
+    () => clients.filter((c) => c?.status !== 'dropped'),
+    [clients]
+  );
+
   // Client mix — used to fill the Total/Active KPI cards with the
-  // breakdown of who is connected to which platform.
+  // breakdown of who is connected to which platform. Uses the display
+  // list so dropped clients' platform connections don't inflate the
+  // Meta / Google / Both chip counts.
   const clientMix = useMemo(() => {
-    const metaCount = clients.filter(c => c.metaEnabled).length;
-    const googleCount = clients.filter(c => c.googleAdsEnabled).length;
-    const bothCount = clients.filter(c => c.metaEnabled && c.googleAdsEnabled).length;
+    const metaCount = clientsForDisplay.filter(c => c.metaEnabled).length;
+    const googleCount = clientsForDisplay.filter(c => c.googleAdsEnabled).length;
+    const bothCount = clientsForDisplay.filter(c => c.metaEnabled && c.googleAdsEnabled).length;
     return { metaCount, googleCount, bothCount };
-  }, [clients]);
+  }, [clientsForDisplay]);
 
   // Per-platform pie data — one slice per client whose platform-specific
   // lead count is > 0. Sorted descending so the largest slice anchors
@@ -332,7 +345,7 @@ const Dashboard = () => {
   // this the pies would always show 0 on days no one filled in a
   // DailyEntry, even though Meta itself returned leads.
   const metaPieData = useMemo(() => {
-    return clients.map((c) => {
+    return clientsForDisplay.map((c) => {
       const api = metaDataMap[c._id];
       const d = dateByClient[c._id] || emptyData;
       const value = api?.total_leads != null
@@ -343,10 +356,10 @@ const Dashboard = () => {
       return { name: c.name, value };
     }).filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clients, dateByClient, metaDataMap]);
+  }, [clientsForDisplay, dateByClient, metaDataMap]);
 
   const googlePieData = useMemo(() => {
-    return clients.map((c) => {
+    return clientsForDisplay.map((c) => {
       const ads = adsDataMap[c._id];
       const d = dateByClient[c._id] || emptyData;
       // /analytics/clients returns totalClicks/totalImpressions/totalCost
@@ -367,11 +380,11 @@ const Dashboard = () => {
       return { name: c.name, value };
     }).filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clients, dateByClient, adsDataMap]);
+  }, [clientsForDisplay, dateByClient, adsDataMap]);
 
   // Top clients for table
   const topClients = useMemo(() => {
-    return clients.map(c => {
+    return clientsForDisplay.map(c => {
       const d = dateByClient[c._id] || emptyData;
       const meta = (d.metaForm || 0) + (d.metaWhatsapp || 0);
       const google = (d.googleCall || 0) + (d.googleWebsite || 0);
@@ -379,13 +392,20 @@ const Dashboard = () => {
       const spend = (d.metaFund || 0) + (d.googleFund || 0);
       return { name: c.name, meta, google, total, spend, cpl: total > 0 ? Math.round(spend / total) : 0 };
     }).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
-  }, [clients, dateByClient]);
+  }, [clientsForDisplay, dateByClient]);
 
   if (initialLoading) {
     return <PageLoader message="Loading dashboard..." />;
   }
 
   const activeClients = clients.filter(c => c.status === 'Active' || c.status === 'active').length;
+  // Inactive Clients card bundles together everything that isn't active:
+  // 'inactive' / 'pending' / 'suspended' AND 'dropped'. The team treats
+  // dropped as a flavor of inactive for the headline count — they're
+  // off the active book, the audit trail is the only difference.
+  // `clientsForDisplay` (defined above) is the dropped-excluded subset
+  // used by charts / spotlights / per-client lists below.
+  const inactiveClients = clients.length - activeClients;
   const selDateObj = new Date(selectedDate + 'T00:00:00');
   const dateStr = selDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const dateLong = selDateObj.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
@@ -596,7 +616,7 @@ const Dashboard = () => {
           "Meta Leads: N / Google Leads: N / Spend ₹" row was just
           repeating the same info less usefully. */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 6 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Tooltip arrow placement="top" title="Every client on your books, with their platform mix">
           <Card variant="outlined" sx={{ borderLeft: `4px solid ${tealAccent}`, height: '100%', cursor: 'help' }}>
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
@@ -620,7 +640,7 @@ const Dashboard = () => {
           </Card>
           </Tooltip>
         </Grid>
-        <Grid size={{ xs: 12, sm: 6 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <Tooltip arrow placement="top" title="Clients currently in an Active status">
           <Card variant="outlined" sx={{ borderLeft: `4px solid #10b981`, height: '100%', cursor: 'help' }}>
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
@@ -635,7 +655,29 @@ const Dashboard = () => {
                   {activeClients}
                 </Typography>
                 <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.5 }}>
-                  {clients.length > 0 ? `${Math.round((activeClients / clients.length) * 100)}% of total · ${clients.length - activeClients} inactive` : 'No clients yet'}
+                  {clients.length > 0 ? `${Math.round((activeClients / clients.length) * 100)}% of total` : 'No clients yet'}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+          </Tooltip>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Tooltip arrow placement="top" title="Clients paused or otherwise not Active (dropped clients are excluded entirely)">
+          <Card variant="outlined" sx={{ borderLeft: `4px solid #C08552`, height: '100%', cursor: 'help' }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+              <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: '#C0855215', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <People sx={{ color: '#C08552', fontSize: 30 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Inactive Clients
+                </Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', color: '#C08552', lineHeight: 1.1 }}>
+                  {inactiveClients}
+                </Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.5 }}>
+                  {clients.length > 0 ? `${Math.round((inactiveClients / clients.length) * 100)}% of total` : 'No inactive clients'}
                 </Typography>
               </Box>
             </CardContent>

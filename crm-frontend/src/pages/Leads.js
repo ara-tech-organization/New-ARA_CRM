@@ -181,6 +181,32 @@ const Leads = () => {
     return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
   };
 
+  // Tiny escape helpers used by the PDF + CSV exports below.
+  //
+  // escapeHtml — prevents stored-XSS via fields like clientName when
+  // we interpolate them into the print-window's HTML. A malicious
+  // client name like `<script>alert(1)</script>` would otherwise
+  // execute in the new window (admin's session context).
+  //
+  // escapeCsv — prevents CSV injection in Excel/Sheets. Cells that
+  // start with `=`, `+`, `-`, `@` (or whitespace then one of those)
+  // get prefixed with a single quote so the spreadsheet engine
+  // treats them as literal text, not formulas. Also doubles up
+  // embedded quotes per RFC 4180.
+  const escapeHtml = (s) => String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  const escapeCsv = (s) => {
+    const v = String(s ?? '');
+    const needsQuoteEscape = /[",\n\r]/.test(v);
+    const escaped = v.replace(/"/g, '""');
+    const safe = /^[=+\-@\t\r]/.test(v) ? `'${escaped}` : escaped;
+    return needsQuoteEscape ? `"${safe}"` : safe;
+  };
+
   // Export to PDF (exports current month's data)
   const handleExportPDF = () => {
     const printStyles = `
@@ -201,14 +227,14 @@ const Leads = () => {
     const printHTML = `
       ${printStyles}
       <div class="header">
-        <h1>Total Leads (Meta) - ${formatMonth(selectedMonth)}</h1>
-        <p>Generated on: ${new Date().toLocaleString()}</p>
+        <h1>Total Leads (Meta) - ${escapeHtml(formatMonth(selectedMonth))}</h1>
+        <p>Generated on: ${escapeHtml(new Date().toLocaleString())}</p>
       </div>
       <table>
         <thead>
           <tr>
             <th>Client</th>
-            ${filteredDates.map(date => `<th>${formatDate(date)}</th>`).join('')}
+            ${filteredDates.map(date => `<th>${escapeHtml(formatDate(date))}</th>`).join('')}
             <th style="background-color: #059669;">Total</th>
           </tr>
         </thead>
@@ -217,7 +243,7 @@ const Leads = () => {
             const rowTotal = filteredDates.reduce((sum, date) => sum + (pivotData[client.id]?.[date] || 0), 0);
             return `
             <tr>
-              <td class="client-cell">${client.name}</td>
+              <td class="client-cell">${escapeHtml(client.name)}</td>
               ${filteredDates.map(date => `<td>${pivotData[client.id]?.[date] || '-'}</td>`).join('')}
               <td style="font-weight: bold; background-color: #ecfdf5;">${rowTotal > 0 ? rowTotal : '-'}</td>
             </tr>
@@ -230,7 +256,7 @@ const Leads = () => {
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
-        <head><title>Total Leads (Meta) - ${formatMonth(selectedMonth)}</title></head>
+        <head><title>Total Leads (Meta) - ${escapeHtml(formatMonth(selectedMonth))}</title></head>
         <body>${printHTML}</body>
       </html>
     `);
@@ -249,11 +275,11 @@ const Leads = () => {
     });
 
     const csvContent = [
-      `Total Leads (Meta) - ${formatMonth(selectedMonth)}`,
-      `Generated on: ${new Date().toLocaleString()}`,
+      escapeCsv(`Total Leads (Meta) - ${formatMonth(selectedMonth)}`),
+      escapeCsv(`Generated on: ${new Date().toLocaleString()}`),
       '',
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+      headers.map(escapeCsv).join(','),
+      ...rows.map(row => row.map(escapeCsv).join(',')),
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

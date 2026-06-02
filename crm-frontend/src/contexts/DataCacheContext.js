@@ -140,8 +140,15 @@ export const DataCacheProvider = ({ children }) => {
       }
 
       setClientsLoading(true);
+      // The cache fetches the FULL roster including dropped clients so
+      // counts can include them (the Dashboard's Inactive Clients card
+      // rolls dropped + paused together). Pages that shouldn't show
+      // dropped clients in their charts / lists / dropdowns filter them
+      // out per-feature. The Clients management page additionally
+      // bypasses this cache and fetches with `?includeDropped=true`
+      // for explicit re-onboard support.
       clientsPromise.current = api
-        .get(`/clients?limit=10000`)
+        .get(`/clients?includeDropped=true&limit=10000`)
         .then((res) => {
           const data = res.data?.data || res.data || [];
           if (Array.isArray(data)) {

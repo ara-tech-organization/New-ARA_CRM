@@ -394,7 +394,13 @@ const DashboardPro = () => {
         api.get("/leads?limit=10"),
       ]);
 
-      const clientsData = clientsRes.data.data || clientsRes.data;
+      const rawClients = clientsRes.data.data || clientsRes.data || [];
+      // Filter dropped clients out of the dashboard view. Backend
+      // already does this on its default `/clients` route; we redo
+      // it here defensively for the same reason as the other pages.
+      const clientsData = Array.isArray(rawClients)
+        ? rawClients.filter((c) => c?.status !== 'dropped')
+        : [];
       const leadsData = leadsRes.data.data || leadsRes.data;
 
       // Transform clients data

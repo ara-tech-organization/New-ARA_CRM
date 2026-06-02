@@ -26,18 +26,31 @@ const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
  * @desc    Get all clients
  * @route   GET /api/clients
  * @access  Private
+ *
+ * Dropped clients are HIDDEN BY DEFAULT — the team's mental model is
+ * "a dropped client is no longer on our books." That removes them from
+ * every page (Dashboard, Leads, Ads Comparison, Analytics, etc.) with a
+ * single change here, no per-page filter needed.
+ *
+ * The Clients management page (and any other surface that needs the full
+ * roster to allow re-onboarding) opts back in with `?includeDropped=true`.
+ * Re-onboarding flips status back to 'active', so dropped clients
+ * automatically reappear everywhere once re-onboarded.
  */
 export const getClients = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 100;
   const skip = (page - 1) * limit;
 
-  const clients = await Client.find()
+  const includeDropped = req.query.includeDropped === 'true';
+  const filter = includeDropped ? {} : { status: { $ne: 'dropped' } };
+
+  const clients = await Client.find(filter)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
-  const total = await Client.countDocuments();
+  const total = await Client.countDocuments(filter);
 
   res.status(200).json({
     success: true,
@@ -91,10 +104,6 @@ export const createClient = asyncHandler(async (req, res) => {
     team,
     assignedSMM,
     assignedSME,
-    creativeCommitment,
-    staticCommitment,
-    motionCreative,
-    notes,
   } = req.body;
 
   // Validate required field
@@ -120,10 +129,6 @@ export const createClient = asyncHandler(async (req, res) => {
     team: team || '',
     assignedSMM: assignedSMM || '',
     assignedSME: assignedSME || '',
-    creativeCommitment: creativeCommitment || '',
-    staticCommitment: staticCommitment || '',
-    motionCreative: motionCreative || '',
-    notes: notes || '',
   });
 
   res.status(201).json({
@@ -363,13 +368,22 @@ export const updateClientStatus = asyncHandler(async (req, res) => {
  * @desc    Get client stats
  * @route   GET /api/clients/stats
  * @access  Private
+ *
+ * Same default as getClients — dropped clients are excluded unless
+ * `?includeDropped=true`. So `totalClients` is "active book size",
+ * not "every row in the collection". The Clients management page can
+ * still get the full breakdown for its summary cards.
  */
 export const getClientStats = asyncHandler(async (req, res) => {
-  const totalClients = await Client.countDocuments();
-  const activeClients = await Client.countDocuments({ status: 'active' });
-  const inactiveClients = await Client.countDocuments({ status: 'inactive' });
+  const includeDropped = req.query.includeDropped === 'true';
+  const baseFilter = includeDropped ? {} : { status: { $ne: 'dropped' } };
+
+  const totalClients = await Client.countDocuments(baseFilter);
+  const activeClients = await Client.countDocuments({ ...baseFilter, status: 'active' });
+  const inactiveClients = await Client.countDocuments({ ...baseFilter, status: 'inactive' });
 
   const clientsByStatus = await Client.aggregate([
+    { $match: baseFilter },
     {
       $group: {
         _id: '$status',

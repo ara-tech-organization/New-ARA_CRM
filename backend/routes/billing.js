@@ -5,8 +5,16 @@ import Metric from '../models/Metric.js';
 import BillingTransaction from '../models/BillingTransaction.js';
 import DailyDebitSnapshot from '../models/DailyDebitSnapshot.js';
 import syncService from '../sync/syncService.js';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Billing operations are admin-side only — reconcile / reset / deep-sync
+// can move money totals around and must never be reachable by portal
+// users or anonymous callers. Require a valid agency token AND a
+// privileged role.
+router.use(protect);
+router.use(authorize('superadmin', 'admin'));
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 

@@ -106,6 +106,16 @@ const leadSchema = new mongoose.Schema(
     // Leads Abstract. Synced Meta-form leads infer their bucket from
     // `platform` + `meta_form_name`; manual entries set this explicitly.
     // 'whatsapp' is the default to preserve the existing manual flow.
+    //
+    // The enum INTENTIONALLY keeps the legacy off-platform values
+    // (google_lead / justdial / walk_in / referral / physical_marketing /
+    // incall_*) even though the Leads-table source dropdown was trimmed
+    // to whatsapp + instagram + facebook only. Old documents in the DB
+    // may still carry those values; widening the enum would mean writes
+    // still work, narrowing it would make Mongoose throw on reads of
+    // historical data. If you ever want to clean these up, plan a
+    // backfill migration that maps old values onto AbstractEntry
+    // manualValues + clears the lead's manual_source_type.
     manual_source_type: {
       type: String,
       enum: ['', 'whatsapp', 'instagram', 'facebook', 'google_lead', 'justdial', 'walk_in', 'referral', 'physical_marketing', 'incall_google', 'incall_fb', 'incall_insta', 'incall_self'],

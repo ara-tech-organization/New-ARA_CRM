@@ -67,7 +67,12 @@ const ClientPortalAccess = () => {
     try {
       const res = await api.get('/clients?limit=10000');
       const data = res.data?.data || res.data || [];
-      setClients(Array.isArray(data) ? data : []);
+      // Filter out dropped clients defensively — backend already does
+      // this on its default `/clients` route, but the deployed version
+      // may lag, so we also drop them here. Portal access never applies
+      // to a dropped client anyway.
+      const live = Array.isArray(data) ? data.filter((c) => c?.status !== 'dropped') : [];
+      setClients(live);
     } catch {
       setClients([]);
     } finally {

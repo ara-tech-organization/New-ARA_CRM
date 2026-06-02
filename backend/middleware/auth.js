@@ -151,9 +151,15 @@ export const protectClient = asyncHandler(async (req, res, next) => {
       req.portalUser = portalUser;
       req.role = portalUser.role;
     } else {
-      // Legacy token — treat as admin.
+      // Legacy token without a userId payload — issued before per-user
+      // RBAC existed. Previously these got `admin` automatically, which
+      // was a silent privilege escalation: anyone holding an old portal
+      // JWT had full portal-admin power forever. Now we degrade to
+      // `telecaller` (least privilege) so the session still works for
+      // safe reads (Meta leads handling), but admin-only endpoints
+      // (user CRUD, etc.) reject and force a fresh login.
       req.portalUser = null;
-      req.role = 'admin';
+      req.role = 'telecaller';
     }
 
     next();
@@ -175,6 +181,84 @@ export const requireClientPortalRole = (...roles) => (req, res, next) => {
   }
   next();
 };
+
+/**
+ * Combined auth for routes used by BOTH the admin app and the client
+ * portal (the /api/meta tree being the main example). Accepts either
+ * an agency-user JWT (decoded.id → req.user) or a portal-user JWT
+ * (decoded.clientId → req.clientData, req.clientId, req.role).
+ *
+ * Downstream handlers can distinguish via:
+ *   req.user        → admin/agency call
+ *   req.clientId    → client-portal call
+ * `loadClientOr404` (in metaController) reads these to verify tenant
+ * ownership and reject IDOR attempts.
+ */
+export const protectAdminOrClient = asyncHandler(async (req, res, next) => {
+  let token;
+  if (req.headers.authorization?.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.cookies?.token) {
+    token = req.cookies.token;
+  }
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Not authorized — no token' });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'Token invalid or expired' });
+  }
+
+  // ── Portal token: `clientId` payload ────────────────────────
+  if (decoded.clientId) {
+    const client = await Client.findById(decoded.clientId)
+      .select('clientName portalEnabled google_ads_enabled google_ads_customer_id meta_enabled')
+      .lean();
+    if (!client || !client.portalEnabled) {
+      return res.status(401).json({ success: false, message: 'Portal access disabled' });
+    }
+    req.clientId = decoded.clientId;
+    req.clientData = client;
+    if (decoded.userId) {
+      const ClientPortalUser = (await import('../models/ClientPortalUser.js')).default;
+      const portalUser = await ClientPortalUser.findById(decoded.userId).lean();
+      if (!portalUser || !portalUser.isActive) {
+        return res.status(401).json({ success: false, message: 'Portal user not found or deactivated' });
+      }
+      if (String(portalUser.clientId) !== String(decoded.clientId)) {
+        return res.status(403).json({ success: false, message: 'Token does not match portal user' });
+      }
+      req.portalUser = portalUser;
+      req.role = portalUser.role;
+    } else {
+      req.portalUser = null;
+      req.role = 'admin';
+    }
+    return next();
+  }
+
+  // ── Agency token: `id` payload ──────────────────────────────
+  if (decoded.id) {
+    let user = getCachedUser(decoded.id);
+    if (!user) {
+      user = await User.findById(decoded.id).select('-password').lean();
+      if (user) setCachedUser(decoded.id, user);
+    }
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User not found' });
+    }
+    if (!user.isActive) {
+      return res.status(401).json({ success: false, message: 'User account is deactivated' });
+    }
+    req.user = user;
+    return next();
+  }
+
+  return res.status(401).json({ success: false, message: 'Unrecognised token payload' });
+});
 
 /**
  * Grant access to specific roles

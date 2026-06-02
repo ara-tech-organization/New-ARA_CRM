@@ -74,8 +74,23 @@ export const getUser = asyncHandler(async (req, res) => {
  * @route   POST /api/users
  * @access  Private (Admin/Superadmin)
  */
+// Role names that the UI must NEVER be able to grant. Even though the
+// role field is free-form (custom roles supported), this denylist keeps
+// the top-privilege seed role off-limits to anything but a direct DB
+// edit. Comparison is case-insensitive + trim so 'superadmin', ' SuperAdmin ',
+// 'SUPERADMIN' all match.
+const FORBIDDEN_ROLE_NAMES = new Set(['superadmin']);
+const isForbiddenRole = (r) => FORBIDDEN_ROLE_NAMES.has(String(r || '').trim().toLowerCase());
+
 export const createUser = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone, department, permissions, team } = req.body;
+
+  if (isForbiddenRole(role)) {
+    return res.status(403).json({
+      success: false,
+      message: `Role '${role}' cannot be assigned from the UI. Contact a database administrator.`,
+    });
+  }
 
   // Check if user exists
   const userExists = await User.findOne({ email });
@@ -147,12 +162,30 @@ export const createUser = asyncHandler(async (req, res) => {
  * @access  Private (Admin/Superadmin)
  */
 export const updateUser = asyncHandler(async (req, res) => {
+  // Same denylist as createUser — even on update we never allow
+  // promotion to the privileged seed role from the UI.
+  if (Object.prototype.hasOwnProperty.call(req.body, 'role') && isForbiddenRole(req.body.role)) {
+    return res.status(403).json({
+      success: false,
+      message: `Role '${req.body.role}' cannot be assigned from the UI. Contact a database administrator.`,
+    });
+  }
+
   let user = await User.findById(req.params.id);
 
   if (!user) {
     return res.status(404).json({
       success: false,
       message: 'User not found',
+    });
+  }
+
+  // Also block demoting/editing an existing superadmin from the UI —
+  // an admin shouldn't be able to silently neuter the root role.
+  if (String(user.role || '').toLowerCase() === 'superadmin' && req.user?.role !== 'superadmin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Only a superadmin can modify a superadmin account.',
     });
   }
 

@@ -36,6 +36,59 @@ import { ingestLead, enqueueRetry } from '../services/metaLeadService.js';
 import { verifyWebhookSignature } from '../utils/metaSignature.js';
 import { encrypt } from '../utils/encryption.js';
 
+// ────────────────────────────────────────────────────────────────────
+// Manual-override allow-list for the Monthly Abstract / EOD report.
+// Lives at the top of the file (rather than next to saveMonthlyAbstractCell
+// at the bottom) because both `getMonthlyAbstract` and `getTelecallingReport`
+// reach for it during their merge passes — having to scroll past 1700
+// lines to find the definition was a readability trap.
+//
+// EDITABLE_ABSTRACT_FIELDS is the single source of truth for what
+// columns telecallers can override. Adding a new editable field is
+// a one-line change here (plus flipping `editable: true` on the
+// matching column in the frontend's MonthlyAbstract COLUMNS list).
+//
+// `readManualValues` is the gatekeeper — every merge path filters
+// the stored map through this helper so even a hand-edited row in
+// MongoDB can't bleed an unexpected key into the auto-computed cells.
+// ────────────────────────────────────────────────────────────────────
+const EDITABLE_ABSTRACT_FIELDS = new Set([
+  // Source columns the Leads table can't represent anymore (its source
+  // dropdown is limited to WhatsApp / Instagram / Facebook):
+  'google_lead',
+  'justdial',
+  'walk_in',
+  'referral',
+  'physical_marketing',
+  'incall_google',
+  'incall_fb',
+  'incall_insta',
+  'incall_self',
+  // Top-level INCALL override saved from the EOD report's single
+  // INCALL cell. When set, it wins over the sum of the four
+  // incall_* sub-types for that day — useful when the team only
+  // tracks a combined number instead of the breakdown.
+  'incall_total',
+  // Revenue — no field on Lead at all:
+  'convert_value',
+]);
+
+// Defensive read: lean() docs can return manualValues as either a
+// plain object or a Map depending on the Mongoose driver version.
+const readManualValues = (manualValues) => {
+  if (!manualValues) return {};
+  const entries = manualValues instanceof Map
+    ? Array.from(manualValues.entries())
+    : Object.entries(manualValues);
+  const out = {};
+  entries.forEach(([k, v]) => {
+    if (EDITABLE_ABSTRACT_FIELDS.has(k) && v != null && Number.isFinite(Number(v))) {
+      out[k] = Number(v);
+    }
+  });
+  return out;
+};
+
 // POST /api/meta/sync — sync every meta-enabled client, fire-and-forget.
 export const postSyncAll = async (req, res) => {
   const deep = String(req.query.deep || '').toLowerCase() === 'true';
@@ -550,12 +603,36 @@ const sanitizePagesForResponse = (pages = []) =>
     has_token: !!p.encrypted_access_token,
   }));
 
+// Resolve `:clientId` from the URL and enforce tenant ownership so
+// cross-tenant reads / writes can't happen via URL manipulation.
+//   - Portal callers (req.clientId set by protectAdminOrClient): the
+//     URL clientId MUST match their token's clientId. Anything else
+//     returns 403.
+//   - Agency callers (req.user set): admin / superadmin can access any
+//     client; other roles fall back to permission scoping that already
+//     lives on individual endpoints. (We could tighten this further per
+//     team if needed.)
+//   - Unauthenticated callers shouldn't reach this helper now that the
+//     route file is behind `protectAdminOrClient`, but we 401 defensively.
 const loadClientOr404 = async (req, res) => {
   const { clientId } = req.params;
   if (!mongoose.isValidObjectId(clientId)) {
     res.status(400).json({ success: false, message: 'Invalid clientId' });
     return null;
   }
+
+  if (!req.user && !req.clientId) {
+    res.status(401).json({ success: false, message: 'Not authorized' });
+    return null;
+  }
+  if (req.clientId && String(req.clientId) !== String(clientId)) {
+    res.status(403).json({
+      success: false,
+      message: 'Portal token cannot access another client',
+    });
+    return null;
+  }
+
   const client = await Client.findById(clientId);
   if (!client) {
     res.status(404).json({ success: false, message: 'Client not found' });
@@ -2096,55 +2173,8 @@ export const getMonthlyAbstract = async (req, res) => {
 
 // POST /api/meta/client/:clientId/monthly-abstract/cell
 //   body: { date: "YYYY-MM-DD", field: "<editable_key>", value: number }
-// Save (upsert) a single manually-entered abstract cell. The
-// allow-list below is the single source of truth for what columns
-// telecallers can override — every code path that merges manual
-// values consults it before applying anything, so adding a new
-// editable field is a one-line change (plus flipping `editable: true`
-// on the corresponding column in the frontend).
-//
-// Editable set — every column the Lead collection can't populate.
-// The Leads table source dropdown is now limited to WhatsApp /
-// Instagram / Facebook (those flow in via Meta sync + manual adds),
-// so all the OTHER source columns and Convert Value are typed in by
-// telecallers and stored on AbstractEntry.
-const EDITABLE_ABSTRACT_FIELDS = new Set([
-  // Source columns the Leads table can't represent anymore:
-  'google_lead',
-  'justdial',
-  'walk_in',
-  'referral',
-  'physical_marketing',
-  'incall_google',
-  'incall_fb',
-  'incall_insta',
-  'incall_self',
-  // Top-level INCALL override saved from the EOD report's single
-  // INCALL cell. When set, it wins over the sum of the four
-  // incall_* sub-types for that day — useful when the team only
-  // tracks a combined number instead of the breakdown.
-  'incall_total',
-  // Revenue — no field on Lead at all:
-  'convert_value',
-]);
-
-// Pull editable values out of a stored `manualValues` map. Returns a
-// plain object keyed by field name. Defensive — the lean() shape can
-// be either a Map or a plain object depending on driver versions.
-const readManualValues = (manualValues) => {
-  if (!manualValues) return {};
-  const entries = manualValues instanceof Map
-    ? Array.from(manualValues.entries())
-    : Object.entries(manualValues);
-  const out = {};
-  entries.forEach(([k, v]) => {
-    if (EDITABLE_ABSTRACT_FIELDS.has(k) && v != null && Number.isFinite(Number(v))) {
-      out[k] = Number(v);
-    }
-  });
-  return out;
-};
-
+// Upserts a single manually-entered abstract cell. EDITABLE_ABSTRACT_FIELDS
+// (declared near the top of this file) is the allow-list for `field`.
 export const saveMonthlyAbstractCell = async (req, res) => {
   const client = await loadClientOr404(req, res);
   if (!client) return;

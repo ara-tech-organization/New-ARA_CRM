@@ -512,6 +512,11 @@ const MonthlyAbstract = ({ clientId, apiInstance }) => {
                         else if (state === 'saving') cellBg = `${COPPER}22`;
 
                         if (c.editable) {
+                          // Suppress the cream hover-tint while a save
+                          // flash (saving/ok/err) is showing so the
+                          // green/red feedback doesn't get overwritten
+                          // the instant the cursor enters the cell.
+                          const flashing = !!state;
                           return (
                             <TableCell
                               key={`${r.date}-${c.key}`}
@@ -522,7 +527,7 @@ const MonthlyAbstract = ({ clientId, apiInstance }) => {
                                 fontWeight: c.bold ? 800 : 600,
                                 position: 'relative',
                                 transition: 'background-color 0.15s',
-                                '&:hover': { backgroundColor: EDITABLE_BG_HOVER },
+                                ...(flashing ? {} : { '&:hover': { backgroundColor: EDITABLE_BG_HOVER } }),
                               }}
                             >
                               <EditableNumberCell

@@ -90,10 +90,6 @@ const Clients = () => {
     team: '',
     assignedSMM: '',
     assignedSME: '',
-    creativeCommitment: '',
-    staticCommitment: '',
-    motionCreative: '',
-    notes: '',
   });
 
   // Edit Client Dialog state
@@ -134,11 +130,18 @@ const Clients = () => {
   const [googleBusy, setGoogleBusy] = useState(false);
   const [googleError, setGoogleError] = useState('');
 
-  // Fetch clients from main API
+  // Fetch clients from main API.
+  //
+  // `?includeDropped=true` opts this page back into seeing soft-deleted
+  // clients. The backend hides dropped clients by default (so they
+  // disappear from Dashboard, Leads, Ads Comparison, Analytics, etc.),
+  // but this management screen needs the full roster to support the
+  // Re-onboard flow. Re-onboarding flips status back to 'active' and
+  // the dropped client automatically reappears everywhere else.
   const fetchClients = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/clients');
+      const response = await api.get('/clients?includeDropped=true&limit=10000');
       const data = response.data.data || response.data;
       // Transform to match expected format
       const transformedClients = data.map(client => ({
@@ -165,10 +168,6 @@ const Clients = () => {
         team: client.team || '',
         assignedSMM: client.assignedSMM || '',
         assignedSME: client.assignedSME || '',
-        creativeCommitment: client.creativeCommitment || '',
-        staticCommitment: client.staticCommitment || '',
-        motionCreative: client.motionCreative || '',
-        notes: client.notes || '',
       }));
       setClients(transformedClients);
     } catch (error) {
@@ -232,10 +231,6 @@ const Clients = () => {
       team: '',
       assignedSMM: '',
       assignedSME: '',
-      creativeCommitment: '',
-      staticCommitment: '',
-      motionCreative: '',
-      notes: '',
     });
   };
 
@@ -263,10 +258,6 @@ const Clients = () => {
       team: client.team || '',
       assignedSMM: client.assignedSMM || '',
       assignedSME: client.assignedSME || '',
-      creativeCommitment: client.creativeCommitment || '',
-      staticCommitment: client.staticCommitment || '',
-      motionCreative: client.motionCreative || '',
-      notes: client.notes || '',
     });
     setEditClientOpen(true);
   };
@@ -308,10 +299,6 @@ const Clients = () => {
         team: editClient.team || '',
         assignedSMM: editClient.assignedSMM || '',
         assignedSME: editClient.assignedSME || '',
-        creativeCommitment: editClient.creativeCommitment?.trim() || '',
-        staticCommitment: editClient.staticCommitment?.trim() || '',
-        motionCreative: editClient.motionCreative?.trim() || '',
-        notes: editClient.notes?.trim() || '',
       };
 
       // Add optional accountId only if provided (must contain only digits)
@@ -634,10 +621,6 @@ const Clients = () => {
         team: newClient.team || '',
         assignedSMM: newClient.assignedSMM || '',
         assignedSME: newClient.assignedSME || '',
-        creativeCommitment: newClient.creativeCommitment?.trim() || '',
-        staticCommitment: newClient.staticCommitment?.trim() || '',
-        motionCreative: newClient.motionCreative?.trim() || '',
-        notes: newClient.notes?.trim() || '',
       };
 
       // Add optional accountId only if provided (must contain only digits)
@@ -811,7 +794,13 @@ const Clients = () => {
         {[
           { label: 'Total Clients', value: clients.length, color: primaryColor, tip: 'Every client on your books' },
           { label: 'Active Clients', value: clients.filter(c => c.status === 'active').length, color: '#10b981', tip: 'Clients with an Active status' },
-          { label: 'Inactive Clients', value: clients.filter(c => c.status === 'inactive').length, color: '#C08552', tip: 'Clients marked Inactive — paused but not dropped' },
+          // Inactive + Dropped are rolled into one card per the team's
+          // mental model — both mean "this client isn't actively running
+          // with us right now." Keeping them as separate tiles was extra
+          // noise; the underlying status enum still distinguishes them
+          // for audit purposes (drop_reason / drop_history live only on
+          // dropped clients).
+          { label: 'Dropped Clients', value: clients.filter(c => c.status === 'inactive' || c.status === 'dropped').length, color: '#C08552', tip: 'Clients that are no longer active — both Inactive (paused) and Dropped (soft-deleted with audit trail) are counted here' },
         ].map((s, i) => (
           <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
             <Tooltip arrow placement="top" title={s.tip}>
@@ -1072,31 +1061,6 @@ const Clients = () => {
                   <Typography variant="caption" color="text.secondary">Assigned SME</Typography>
                   <Typography variant="body2">{selectedClient.assignedSME || '-'}</Typography>
                 </Grid>
-                {(selectedClient.creativeCommitment || selectedClient.staticCommitment || selectedClient.motionCreative) && (
-                  <>
-                    <Grid size={{xs: 12}}>
-                      <Divider sx={{ my: 0.5 }} />
-                    </Grid>
-                    <Grid size={{xs: 4}}>
-                      <Typography variant="caption" color="text.secondary">Creative Commitment</Typography>
-                      <Typography variant="body2">{selectedClient.creativeCommitment || '-'}</Typography>
-                    </Grid>
-                    <Grid size={{xs: 4}}>
-                      <Typography variant="caption" color="text.secondary">Static Commitment</Typography>
-                      <Typography variant="body2">{selectedClient.staticCommitment || '-'}</Typography>
-                    </Grid>
-                    <Grid size={{xs: 4}}>
-                      <Typography variant="caption" color="text.secondary">Motion Creative</Typography>
-                      <Typography variant="body2">{selectedClient.motionCreative || '-'}</Typography>
-                    </Grid>
-                  </>
-                )}
-                {selectedClient.notes && (
-                  <Grid size={{xs: 12}}>
-                    <Typography variant="caption" color="text.secondary">Notes</Typography>
-                    <Typography variant="body2">{selectedClient.notes}</Typography>
-                  </Grid>
-                )}
               </Grid>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -1125,6 +1089,7 @@ const Clients = () => {
                 value={newClient.clientName}
                 onChange={handleInputChange}
                 placeholder="Enter client name"
+                inputProps={{ maxLength: 200 }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -1135,6 +1100,7 @@ const Clients = () => {
                 value={newClient.place}
                 onChange={handleInputChange}
                 placeholder="City/Location"
+                inputProps={{ maxLength: 100 }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -1145,6 +1111,7 @@ const Clients = () => {
                 value={newClient.organisationType}
                 onChange={handleInputChange}
                 placeholder="e.g., Aesthetic Clinic"
+                inputProps={{ maxLength: 100 }}
               />
             </Grid>
             <Grid size={{ xs: 12 }}>
@@ -1157,6 +1124,7 @@ const Clients = () => {
                 placeholder="Full address"
                 multiline
                 rows={2}
+                inputProps={{ maxLength: 500 }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -1167,6 +1135,7 @@ const Clients = () => {
                 value={newClient.gstNumber}
                 onChange={handleInputChange}
                 placeholder="Optional"
+                inputProps={{ maxLength: 30 }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -1305,6 +1274,7 @@ const Clients = () => {
                   value={editClient.clientName}
                   onChange={handleEditInputChange}
                   placeholder="Enter client name"
+                  inputProps={{ maxLength: 200 }}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -1315,6 +1285,7 @@ const Clients = () => {
                   value={editClient.place}
                   onChange={handleEditInputChange}
                   placeholder="City/Location"
+                  inputProps={{ maxLength: 100 }}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -1325,6 +1296,7 @@ const Clients = () => {
                   value={editClient.organisationType}
                   onChange={handleEditInputChange}
                   placeholder="e.g., Aesthetic Clinic"
+                  inputProps={{ maxLength: 100 }}
                 />
               </Grid>
               <Grid size={{ xs: 12 }}>
@@ -1337,6 +1309,7 @@ const Clients = () => {
                   placeholder="Full address"
                   multiline
                   rows={2}
+                  inputProps={{ maxLength: 500 }}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -1347,6 +1320,7 @@ const Clients = () => {
                   value={editClient.gstNumber}
                   onChange={handleEditInputChange}
                   placeholder="Optional"
+                  inputProps={{ maxLength: 30 }}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -1442,54 +1416,6 @@ const Clients = () => {
                     ))}
                   </Select>
                 </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                  Commitments & Notes
-                </Typography>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField
-                  fullWidth
-                  label="Creative Commitment"
-                  name="creativeCommitment"
-                  value={editClient.creativeCommitment}
-                  onChange={handleEditInputChange}
-                  placeholder="e.g., 10 per month"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField
-                  fullWidth
-                  label="Static Commitment"
-                  name="staticCommitment"
-                  value={editClient.staticCommitment}
-                  onChange={handleEditInputChange}
-                  placeholder="e.g., 5 per month"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField
-                  fullWidth
-                  label="Motion Creative"
-                  name="motionCreative"
-                  value={editClient.motionCreative}
-                  onChange={handleEditInputChange}
-                  placeholder="e.g., 3 per month"
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  label="Notes"
-                  name="notes"
-                  value={editClient.notes}
-                  onChange={handleEditInputChange}
-                  placeholder="Additional notes..."
-                  multiline
-                  rows={2}
-                />
               </Grid>
             </Grid>
           )}
