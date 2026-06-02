@@ -1,7 +1,71 @@
+# Lead Matrix — Apache/LiteSpeed config for SPA hosting on Hostinger.
+#
+# Why this file exists:
+#  1. SPA fallback — /clients, /dashboard, etc. are React routes, not real
+#     files. Without rewrite, hitting them directly returns 404.
+#  2. Service worker — must NEVER be edge-cached. The browser detects new
+#     versions by re-fetching this file on navigation; CDN caching defeats
+#     that and freezes broken deploys (we hit exactly this on 2026-05-29
+#     when a v2 SW was uploaded but Hostinger's cache kept serving the v1
+#     response for hours).
+#  3. Hashed assets — static/js/*.[hash].chunk.js have content-hashed
+#     filenames so they're safe to cache for a year.
+
+# ────────────────────────────────────────────────────────────────────
+# 1. SPA fallback
+# ────────────────────────────────────────────────────────────────────
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule ^ index.html [L]
+
+  # Real files / directories pass through untouched.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Don't rewrite the API surface, service worker, static assets, manifest.
+  RewriteRule ^(api/|static/|service-worker\.js$|manifest\.json$) - [L]
+
+  # Everything else falls through to index.html.
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# ────────────────────────────────────────────────────────────────────
+# 2. Cache headers
+# ────────────────────────────────────────────────────────────────────
+<IfModule mod_headers.c>
+  # Order matters here. Apache applies the broad <FilesMatch> rule first,
+  # then any specific <Files> rule overrides it. If you put the specific
+  # rule BEFORE the broad one, the broad one wins — that's exactly the
+  # trap we hit on 2026-05-29 when service-worker.js kept getting the
+  # year-long immutable header even after the no-store rule was added.
+
+  # /static/ assets are content-hashed — immutable across deploys, safe
+  # to cache for a year. Goes FIRST so the specific overrides below win.
+  <FilesMatch "\.(?:js|css|woff2?|ttf|otf|eot|png|jpg|jpeg|gif|svg|ico|webp)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  # Service worker — always re-validate. MUST come after the FilesMatch
+  # above so this specific rule overrides the broad one.
+  <Files "service-worker.js">
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </Files>
+
+  # index.html — short cache so new deploys roll out promptly. A stale
+  # index.html would point at old asset hashes that no longer exist.
+  <Files "index.html">
+    Header set Cache-Control "no-cache, must-revalidate, max-age=0"
+  </Files>
+</IfModule>
+
+# ────────────────────────────────────────────────────────────────────
+# 3. LiteSpeed cache opt-outs (Hostinger uses LiteSpeed)
+# ────────────────────────────────────────────────────────────────────
+<IfModule LiteSpeed>
+  RewriteRule ^service-worker\.js$ - [E=Cache-Control:no-cache]
+  RewriteRule ^index\.html$ - [E=Cache-Control:no-cache]
+  RewriteRule ^$ - [E=Cache-Control:no-cache]
 </IfModule>

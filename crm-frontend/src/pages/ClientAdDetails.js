@@ -72,7 +72,8 @@ const KpiCard = ({ label, value, color, icon, sublabel }) => (
 const ClientAdDetails = () => {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { clients, clientsLoading } = useDataCache();
+  const { clients, clientsLoading, fetchClients } = useDataCache();
+  useEffect(() => { fetchClients(); }, [fetchClients]);
   const [tab, setTab] = useState(0); // 0 = Google, 1 = Meta, 2 = EOD Report
   // Filter handoff from the EOD tab to the Meta Ads tab's leads table.
   // EOD clicks set this; MetaLeadsTable's onFilterPresetConsumed clears it.

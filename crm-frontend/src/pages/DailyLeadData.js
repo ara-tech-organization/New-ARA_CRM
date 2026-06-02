@@ -73,6 +73,7 @@ const DailyLeadData = () => {
 
   // Clients come from the shared cache (small, slow-changing list shared by other pages).
   const { clients: cachedClients, clientsLoading, fetchClients } = useDataCache();
+  useEffect(() => { fetchClients(); }, [fetchClients]);
 
   // Server-side aggregated entries — pre-shaped, pre-totaled.
   const [entries, setEntries] = useState([]);
