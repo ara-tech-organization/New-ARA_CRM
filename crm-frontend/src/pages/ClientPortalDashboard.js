@@ -1370,17 +1370,25 @@ const EodReportPanel = ({ clientId, clientName, clientApi, onJumpToLeads }) => {
         </Typography>
       </Box>
 
+      {/* Client portal renders both views in `telecallerOnly` mode so
+          only the cells the team fills in are shown — auto-fetched
+          tables (Day/Month Target vs Achieved, Appointment Status, the
+          full Day Summary grid, all the auto-fetched abstract columns)
+          are hidden. Admin /client-ads renderings of these components
+          omit the prop and see the full reports. */}
       {view === 'daily' ? (
         <TelecallingReport
           clientId={clientId}
           clientName={clientName}
           apiInstance={clientApi}
           onJumpToLeads={onJumpToLeads}
+          telecallerOnly
         />
       ) : (
         <MonthlyAbstract
           clientId={clientId}
           apiInstance={clientApi}
+          telecallerOnly
         />
       )}
     </Box>

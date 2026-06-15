@@ -4,6 +4,12 @@ import FundEntry from '../models/FundEntry.js';
 import ContentEntry from '../models/ContentEntry.js';
 import Lead from '../models/Lead.js';
 import Vault from '../models/Vault.js';
+import MetaInsights from '../models/MetaInsights.js';
+import MetaCampaign from '../models/MetaCampaign.js';
+import MetaAdSet from '../models/MetaAdSet.js';
+import MetaAd from '../models/MetaAd.js';
+import MetaLeadForm from '../models/MetaLeadForm.js';
+import MetaLeadRaw from '../models/MetaLeadRaw.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { decrypt } from '../utils/encryption.js';
 
@@ -203,17 +209,60 @@ export const deleteClient = asyncHandler(async (req, res) => {
 
   const clientIdStr = client._id.toString();
   const clientName = client.clientName;
+  const tag = `[deleteClient] ${clientIdStr} "${clientName}"`;
 
-  // Cascade delete all related data
-  await Promise.all([
-    DailyEntry.deleteMany({ clientId: clientIdStr }),
-    FundEntry.deleteMany({ $or: [{ client: client._id }, { clientId: clientIdStr }] }),
-    ContentEntry.deleteMany({ clientName }),
-    Lead.deleteMany({ client: client._id }),
-    Vault.deleteMany({ clientId: clientIdStr }),
-  ]);
+  // Cascade delete all related data. Run each step in its own
+  // try/catch so a single failing collection doesn't abort the whole
+  // operation AND we can log exactly which collection threw. Each
+  // failure is surfaced in the response so the frontend can show
+  // a useful error instead of a generic 500.
+  const cascadeFailures = [];
+  const safeDelete = async (label, promiseFn) => {
+    try {
+      const r = await promiseFn();
+      console.info(`${tag} ${label}: deleted ${r?.deletedCount ?? '?'}`);
+    } catch (err) {
+      console.error(`${tag} ${label} failed:`, err?.message || err);
+      cascadeFailures.push({ collection: label, message: err?.message || String(err) });
+    }
+  };
 
-  await client.deleteOne();
+  await safeDelete('DailyEntry',    () => DailyEntry.deleteMany({ clientId: clientIdStr }));
+  await safeDelete('FundEntry',     () => FundEntry.deleteMany({ $or: [{ client: client._id }, { clientId: clientIdStr }] }));
+  await safeDelete('ContentEntry',  () => ContentEntry.deleteMany({ clientName }));
+  await safeDelete('Lead',          () => Lead.deleteMany({ client: client._id }));
+  await safeDelete('Vault',         () => Vault.deleteMany({ clientId: clientIdStr }));
+  // Meta-side data — keyed by `client_id` on every Meta-* collection.
+  // Without these, deleting a client leaves orphan ad-insights rows
+  // that surface on Leads Check / Ads Comparison as "Unknown Client".
+  await safeDelete('MetaInsights',  () => MetaInsights.deleteMany({ client_id: client._id }));
+  await safeDelete('MetaCampaign',  () => MetaCampaign.deleteMany({ client_id: client._id }));
+  await safeDelete('MetaAdSet',     () => MetaAdSet.deleteMany({ client_id: client._id }));
+  await safeDelete('MetaAd',        () => MetaAd.deleteMany({ client_id: client._id }));
+  await safeDelete('MetaLeadForm',  () => MetaLeadForm.deleteMany({ client_id: client._id }));
+  await safeDelete('MetaLeadRaw',   () => MetaLeadRaw.deleteMany({ client_id: client._id }));
+
+  // Even if one cascade step failed, we still attempt the client
+  // delete itself — the user explicitly asked for the row to be gone.
+  // The failures are reported back so an operator can clean up orphans.
+  try {
+    await client.deleteOne();
+  } catch (err) {
+    console.error(`${tag} Client.deleteOne failed:`, err?.message || err);
+    return res.status(500).json({
+      success: false,
+      message: `Failed to remove the client document: ${err?.message || err}`,
+      cascadeFailures,
+    });
+  }
+
+  if (cascadeFailures.length > 0) {
+    return res.status(200).json({
+      success: true,
+      message: `Client deleted but ${cascadeFailures.length} cascade step(s) failed. Orphaned records may exist.`,
+      cascadeFailures,
+    });
+  }
 
   res.status(200).json({
     success: true,

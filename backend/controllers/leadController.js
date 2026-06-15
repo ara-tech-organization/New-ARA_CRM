@@ -378,6 +378,12 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
 
   // Re-shape into the same row format the controller previously produced from
   // Lead. Sort by clientName + date so the table reads naturally.
+  //
+  // Orphan rows are dropped: if a MetaInsights record references a
+  // client_id whose Client doc has been deleted (or whose name is
+  // somehow empty), we skip it instead of rendering "Unknown Client".
+  // Keeps the table clean even when the cascade missed some
+  // historical insights data.
   const rows = pivotRows
     .map(r => ({
       _id: { clientId: r._id.clientId, date: r._id.date },
@@ -389,6 +395,7 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
       googleWebsite: 0,
       googleFund: 0,
     }))
+    .filter(r => r.clientName && r.clientName.trim() !== '')
     .sort((a, b) => {
       const n = (a.clientName || '').localeCompare(b.clientName || '');
       if (n !== 0) return n;

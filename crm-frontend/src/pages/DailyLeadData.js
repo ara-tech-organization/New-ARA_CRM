@@ -107,7 +107,13 @@ const DailyLeadData = () => {
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
   // Filter helpers — selectedClient already enforced server-side.
-  const filteredEntries = entries;
+  // Drop any entry that has no clientName (orphan rows whose Client doc
+  // was deleted but whose MetaInsights data remained). Backend already
+  // filters these but we re-check here in case an older cached payload
+  // sneaks through.
+  const filteredEntries = entries.filter(
+    (e) => e && e.clientName && String(e.clientName).trim() !== ''
+  );
 
   // Tiny URL writers — replace=true to keep the back button clean.
   const updateUrl = useCallback((next) => {

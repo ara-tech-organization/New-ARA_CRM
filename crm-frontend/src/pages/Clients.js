@@ -43,6 +43,7 @@ import {
   Facebook as FacebookIcon,
   Link as LinkIcon,
   Delete as DeleteIcon,
+  DeleteForever as DeleteForeverIcon,
   CheckCircle as CheckCircleIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
@@ -51,6 +52,7 @@ import {
 } from '@mui/icons-material';
 import { MenuItem, Select, InputLabel, FormControl, Radio, RadioGroup, FormControlLabel, FormLabel, Stepper, Step, StepLabel, InputAdornment } from '@mui/material';
 import { TableLoader, PageLoader } from '../components/Loading';
+import { useDataCache } from '../contexts/DataCacheContext';
 import userApi from '../api/userApi';
 
 const Clients = () => {
@@ -108,6 +110,20 @@ const Clients = () => {
   const [reonboardDialogOpen, setReonboardDialogOpen] = useState(false);
   const [clientToReonboard, setClientToReonboard] = useState(null);
   const [reonboarding, setReonboarding] = useState(false);
+
+  // Hard-delete confirmation. Distinct from Drop — this REMOVES the
+  // client document plus every linked record (DailyEntry, FundEntry,
+  // ContentEntry, Lead, Vault) via the backend cascade. No
+  // re-onboard path; once confirmed the client is gone everywhere.
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  // Shared cache invalidator. After a successful delete we clear the
+  // global clients cache so Dashboard / Leads / Ads pages refetch on
+  // their next render and never show the deleted client.
+  const { invalidateClients } = useDataCache();
 
   // Meta Setup Dialog state
   const [metaSetupOpen, setMetaSetupOpen] = useState(false);
@@ -585,6 +601,55 @@ const Clients = () => {
     }
   };
 
+  // Open the hard-delete confirmation. Available on every row,
+  // including already-dropped clients — Drop is a soft pause, Delete
+  // is the irreversible escape hatch when an entry was created by
+  // mistake or the relationship has genuinely ended forever.
+  const handleOpenDelete = (client) => {
+    setClientToDelete(client);
+    setDeleteError('');
+    setDeleteDialogOpen(true);
+  };
+
+  const handleCloseDelete = () => {
+    if (deleting) return; // prevent close mid-request
+    setDeleteDialogOpen(false);
+    setClientToDelete(null);
+    setDeleteError('');
+  };
+
+  // Hard-delete a client — DELETE /api/clients/:id cascades to every
+  // linked collection (DailyEntry, FundEntry, ContentEntry, Lead,
+  // Vault) on the backend. After success we strip the row from local
+  // state AND invalidate the shared clients cache so Dashboard / Leads
+  // / Ads pages refetch on their next render.
+  const handleDeleteClient = async () => {
+    if (!clientToDelete) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.delete(`/clients/${clientToDelete._id}`);
+      // Remove from the page's local list immediately so the UI
+      // updates without waiting for the refetch.
+      setClients((prev) => prev.filter((c) => c._id !== clientToDelete._id));
+      // Wipe the shared cache so every other page picks up the change.
+      invalidateClients();
+      setSnackbar({
+        open: true,
+        message: `${clientToDelete.clientName} deleted permanently.`,
+        severity: 'success',
+      });
+      setDeleteDialogOpen(false);
+      setClientToDelete(null);
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Failed to delete client';
+      setDeleteError(msg);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Handle add client submit
   const handleAddClient = async () => {
     // Validate all required fields
@@ -971,6 +1036,20 @@ const Clients = () => {
                               </IconButton>
                             </Tooltip>
                           )}
+                          {/* Hard delete — irreversible. Distinct icon
+                              + dark-red colour so it can't be confused
+                              with the Drop action above it. Available
+                              regardless of status because mistakes can
+                              also be made on dropped clients. */}
+                          <Tooltip title="Delete Client (permanent)">
+                            <IconButton
+                              size="small"
+                              sx={{ color: '#991b1b' }}
+                              onClick={() => handleOpenDelete(client)}
+                            >
+                              <DeleteForeverIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -1548,6 +1627,59 @@ const Clients = () => {
             }}
           >
             {reonboarding ? 'Re-onboarding…' : 'Re-onboard'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Hard Delete Confirmation ───────────────────────────────
+          Simple yes/no on a destructive irreversible action. Wipes
+          the client doc + every linked record via the backend cascade,
+          then invalidates the shared clients cache so they vanish
+          from every page. */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleCloseDelete}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.2, fontWeight: 700, color: '#991b1b' }}>
+          <DeleteForeverIcon sx={{ color: '#991b1b' }} />
+          Delete Client Permanently
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="error" sx={{ mb: 2, borderRadius: 1.5 }}>
+            This cannot be undone. Every lead, daily entry, fund entry,
+            content entry, and vault record linked to this client will
+            be deleted along with the client itself. Use{' '}
+            <strong>Drop</strong> instead if there's any chance you'll
+            re-onboard them later.
+          </Alert>
+          <Typography sx={{ fontSize: '0.92rem' }}>
+            Delete{' '}
+            <Box component="span" sx={{ fontWeight: 700 }}>
+              {clientToDelete?.clientName}
+            </Box>
+            ?
+          </Typography>
+          {deleteError && <Alert severity="error" sx={{ mt: 2, borderRadius: 1.5 }}>{deleteError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleCloseDelete} disabled={deleting} sx={{ color: 'text.secondary', fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleDeleteClient}
+            disabled={deleting || !clientToDelete}
+            startIcon={deleting ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <DeleteForeverIcon />}
+            sx={{
+              bgcolor: '#991b1b', color: '#fff', fontWeight: 700,
+              '&:hover': { bgcolor: '#991b1b', filter: 'brightness(1.1)' },
+              '&.Mui-disabled': { color: 'rgba(255,255,255,0.7)' },
+            }}
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -77,7 +77,16 @@ const EditableNumberInput = ({ initialValue, onCommit }) => {
   );
 };
 
-const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads }) => {
+// `telecallerOnly` (defaults false) is passed by the client portal —
+// when true we drop every AbstractEntry manual input (the four targets,
+// the manual source counts, INCALL combined, Converted Value) because
+// those aren't filled in the Leads tab. What stays is everything that
+// rolls up from per-lead entries the team makes in the Leads tab:
+// the Appointment Status table, plus the Day Summary's auto-fetched
+// rows (WhatsApp / Instagram / Facebook source counts, call activity,
+// connected counts, consultation + conversion). Admin pages don't
+// pass the prop so they see the full report as before.
+const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads, telecallerOnly = false }) => {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [report, setReport] = useState(null);
@@ -587,7 +596,289 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
         </Table>
       </Paper>
 
+      {/* ── Telecaller-only simplified view ─────────────────────────
+          Client portal mode: render ONLY the values that aggregate
+          from per-lead entries telecallers make in the Leads tab.
+          Hidden: the four AbstractEntry targets, the manual source
+          counts (Google Lead / JustDial / Walk-In / Referral /
+          Physical Marketing), the combined INCALL cell, and
+          Converted Value — none of those are entered against an
+          individual lead.
+          Shown: WhatsApp / Instagram / Facebook lead counts (derived
+          from Lead.platform), call activity (first_call_date +
+          follow_ups), connected breakdown (call labels), totals,
+          consultation + conversion (response_label), and the
+          Appointment Status table further below. */}
+      {telecallerOnly && (
+        <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1 }}>
+          <Table size="small" sx={{ borderCollapse: 'collapse' }}>
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={6} style={sectionTitleStyle} sx={sectionTitleSx}>
+                  TODAY · {datePretty}
+                </TableCell>
+              </TableRow>
+              <TableHead>
+              </TableHead>
+            </TableHead>
+            <TableBody>
+              {/* Sources (auto from Lead.platform / Lead.manual_source_type) */}
+              <TableRow>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>WhatsApp</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.whatsapp} filter={{ source: ['whatsapp'] }} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Fresh Calls</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.calls.fresh} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Fresh · Connected</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.calls.fresh_connected} /></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Instagram</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.instagram} filter={{ source: ['instagram'] }} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Call Backs</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.calls.callback} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Call Back · Connected</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.calls.callback_connected} /></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Facebook</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.facebook} filter={{ source: ['facebook'] }} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2, fontWeight: 800 }}>Total Calls</TableCell>
+                <TableCell style={valueStyle} sx={{ ...valueSx, fontWeight: 800 }}><Num value={report.day.calls.total} weight={800} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2, fontWeight: 800 }}>Total Connected</TableCell>
+                <TableCell style={valueStyle} sx={{ ...valueSx, fontWeight: 800 }}><Num value={report.day.calls.connected_total} filter={{ callLabel: ['CONNECTED'] }} weight={800} /></TableCell>
+              </TableRow>
+              {/* Lead totals + status (auto from response_label / call labels / is_duplicate) */}
+              <TableRow>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2, fontWeight: 800 }}>Total Leads</TableCell>
+                <TableCell style={valueStyle} sx={{ ...valueSx, fontWeight: 800 }}><Num value={report.day.leads_abstract.total} weight={800} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Connected</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.connected} filter={{ callLabel: ['CONNECTED'] }} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Not Connected</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.not_connected} filter={{ callLabel: ['NOT CONNECTED', 'DISCONNECTED', 'RNR', 'BUSY'] }} /></TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Valid Leads</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.valid} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Connected %</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.connected_pct} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Valid Leads %</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.leads_abstract.valid_pct} /></TableCell>
+              </TableRow>
+              {/* Appointments + Consultation + Conversion (auto from
+                  appointment_booked_date + response_label) */}
+              <TableRow>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2, fontWeight: 800 }}>Total Appointments</TableCell>
+                <TableCell style={{ ...valueStyle, backgroundColor: '#FCE7C8' }} sx={{ ...valueSx, fontWeight: 800 }}>
+                  <Num value={report.day.appointments_booked} filter={{ appointment: ['APPOINTMENT BOOKED', 'RESCHEDULED', 'COMPLETED'] }} weight={800} />
+                </TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Consulted</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.consultation.consulted} filter={{ response: ['CONSULTED'] }} /></TableCell>
+                <TableCell style={labelStyle} sx={{ ...labelSx, textAlign: 'left', pl: 2 }}>Converted</TableCell>
+                <TableCell style={valueStyle} sx={valueSx}><Num value={report.day.consultation.converted} filter={{ response: ['TREATMENT BOOKED', 'CLOSED'] }} /></TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
+
+      {/* ── Appointment Status (also shown in telecallerOnly mode) ──
+          Standalone table that lists booked vs visited vs rescheduled
+          vs not-visited for yesterday + today + the next five days.
+          Auto-fetched from Lead.appointment_status so the whole table
+          reflects telecaller entries. */}
+      {telecallerOnly && (
+        <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1 }}>
+          <Table size="small" sx={{ borderCollapse: 'collapse' }}>
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={3} style={sectionTitleStyle} sx={{ ...sectionTitleSx, textAlign: 'left', pl: 2 }}>
+                  APPOINTMENT STATUS
+                </TableCell>
+                <TableCell colSpan={Math.max((report.appointment_status?.length || 0) - 2, 0)} style={sectionTitleStyle} sx={sectionTitleSx}>
+                  FUTURE APPOINTMENTS
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell style={bannerStyle} sx={{ ...bannerSx, textAlign: 'left', pl: 2, width: 200 }}>Day</TableCell>
+                {report.appointment_status.map((row) => (
+                  <TableCell key={row.date} style={bannerStyle} sx={bannerSx}>
+                    {row.offset === -1 ? 'Yesterday' : row.offset === 0 ? 'Today' : row.day_name}
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell style={bannerStyle} sx={{ ...bannerSx, textAlign: 'left', pl: 2 }}>Date</TableCell>
+                {report.appointment_status.map((row) => {
+                  const [y, m, d] = (row.date || '').split('-');
+                  const dd = (y && m && d) ? `${d}-${m}-${y}` : row.date;
+                  return (
+                    <TableCell key={`d-${row.date}`} style={bannerStyle} sx={bannerSx}>{dd}</TableCell>
+                  );
+                })}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell style={labelStyle} sx={labelSx}>Total Appointment Booked</TableCell>
+                {report.appointment_status.map((row) => (
+                  <TableCell key={`b-${row.date}`} style={valueStyle} sx={valueSx}>
+                    <Num value={row.booked} filter={{ appointment: ['APPOINTMENT BOOKED', 'RESCHEDULED', 'COMPLETED', 'CANCELLED'] }} />
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell style={labelStyle} sx={labelSx}>Visited Appointments</TableCell>
+                {report.appointment_status.map((row) => (
+                  <TableCell key={`v-${row.date}`} style={valueStyle} sx={valueSx}>
+                    <Num value={row.visited ?? 0} filter={{ appointment: ['COMPLETED'] }} color="#0e7c4a" />
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell style={labelStyle} sx={labelSx}>Rescheduled</TableCell>
+                {report.appointment_status.map((row) => (
+                  <TableCell key={`r-${row.date}`} style={valueStyle} sx={valueSx}>
+                    <Num value={row.rescheduled ?? 0} filter={{ appointment: ['RESCHEDULED'] }} />
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell style={labelStyle} sx={labelSx}>Not Visited Appointments</TableCell>
+                {report.appointment_status.map((row) => (
+                  <TableCell key={`nv-${row.date}`} style={valueStyle} sx={valueSx}>
+                    <Num value={row.not_visited ?? 0} color="#b91c1c" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
+
+      {/* ── Response breakdown (telecallerOnly) ─────────────────────
+          One cell per Response dropdown value (HOT / WARM / COLD /
+          CONSULTED / TREATMENT BOOKED / etc.) showing how many leads
+          the telecaller marked at that response today. Anchored to
+          `touchedToday` on the backend so the count reflects work
+          done on this date, not the whole month. Each cell is also
+          a Leads-table jump when onJumpToLeads is provided. */}
+      {telecallerOnly && report?.day?.response_breakdown && (
+        <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1 }}>
+          <Table size="small" sx={{ borderCollapse: 'collapse' }}>
+            <TableHead>
+              <TableRow>
+                <TableCell colSpan={6} style={sectionTitleStyle} sx={sectionTitleSx}>
+                  RESPONSE — WHAT THE TELECALLER PICKED ON EACH LEAD
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {[
+                ['HOT', 'WARM', 'COLD'],
+                ['CONSULTED', 'TREATMENT BOOKED', 'CLOSED'],
+                ['NOT INTERESTED', 'NOT REQUIRED', 'NOT ENQUIRED'],
+                ['CTC', 'WILL CALL', 'DUPLICATE'],
+              ].map((row, rowIdx) => (
+                <TableRow key={`resp-row-${rowIdx}`}>
+                  {row.flatMap((label) => {
+                    const count = report.day.response_breakdown[label] || 0;
+                    return [
+                      <TableCell
+                        key={`l-${label}`}
+                        style={labelStyle}
+                        sx={{ ...labelSx, textAlign: 'left', pl: 2 }}
+                      >
+                        {label}
+                      </TableCell>,
+                      <TableCell key={`v-${label}`} style={valueStyle} sx={valueSx}>
+                        <Num value={count} filter={{ response: [label] }} />
+                      </TableCell>,
+                    ];
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
+
+      {/* ── Today's Leads — full detail per lead (telecallerOnly) ───
+          Mirrors the Leads tab columns so the client/team can see
+          exactly what the telecaller filled in for each lead worked
+          today. Read-only here — editing still happens in the Leads
+          tab. Scrolls horizontally on narrow screens. */}
+      {telecallerOnly && Array.isArray(report?.day?.today_leads) && (
+        <Paper variant="outlined" sx={{ overflow: 'auto', borderRadius: 1 }}>
+          <Box sx={{ minWidth: 1500 }}>
+            <Table size="small" sx={{ borderCollapse: 'collapse' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell colSpan={15} style={sectionTitleStyle} sx={{ ...sectionTitleSx, textAlign: 'left', pl: 2 }}>
+                    TODAY'S LEADS — {report.day.today_leads.length} {report.day.today_leads.length === 1 ? 'entry' : 'entries'}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  {[
+                    'Date', 'Source', 'Name', 'Contact', 'Location',
+                    'Hair / Skin', 'First Call Date', 'Call Label',
+                    'Response', 'Remarks', 'Next Follow-up', 'Status',
+                    'Appt. Date', 'FU #', 'Latest / History',
+                  ].map((h) => (
+                    <TableCell key={h} style={{ ...bannerStyle, backgroundColor: COPPER }} sx={{ ...bannerSx, fontSize: '0.66rem', whiteSpace: 'nowrap' }}>
+                      {h}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {report.day.today_leads.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={15} style={valueStyle} sx={{ ...valueSx, color: 'text.secondary', fontStyle: 'italic', py: 2 }}>
+                      No leads worked on this date yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  report.day.today_leads.map((l) => {
+                    const fmtDate = (d) => {
+                      if (!d) return '—';
+                      try {
+                        return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replaceAll('/', '-');
+                      } catch { return '—'; }
+                    };
+                    const latest = l.latest_followup;
+                    const latestText = latest
+                      ? `${fmtDate(latest.date)} · ${latest.call_label || '—'}${latest.remarks ? ` · ${latest.remarks}` : ''}`
+                      : '—';
+                    return (
+                      <TableRow key={l._id} sx={{ '&:nth-of-type(even)': { backgroundColor: CREAM } }}>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, whiteSpace: 'nowrap' }}>{fmtDate(l.date)}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, textTransform: 'uppercase' }}>{l.source || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, fontWeight: 700 }}>{l.name || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1 }}>{l.lead_location || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1 }}>{l.lead_category || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, whiteSpace: 'nowrap' }}>{fmtDate(l.first_call_date)}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1 }}>{l.first_call_label || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, fontWeight: 700 }}>{l.response_label || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, maxWidth: 220, whiteSpace: 'normal' }}>{l.remarks || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, whiteSpace: 'nowrap' }}>{fmtDate(l.next_followup_date)}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1 }}>{l.appointment_status || '—'}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, whiteSpace: 'nowrap' }}>{fmtDate(l.appointment_date)}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'center', fontWeight: 700 }}>{l.fu_count}</TableCell>
+                        <TableCell style={valueStyle} sx={{ ...valueSx, fontSize: '0.72rem', textAlign: 'left', pl: 1, maxWidth: 260, whiteSpace: 'normal' }}>{latestText}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        </Paper>
+      )}
+
       {/* ── DAY TARGET VS ACHIEVED ───────────────────────────────── */}
+      {!telecallerOnly && (
+      <>
       <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1 }}>
         <Table size="small" sx={{ borderCollapse: 'collapse' }}>
           <TableHead>
@@ -896,8 +1187,10 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads })
           </TableBody>
         </Table>
       </Paper>
+      </>
+      )}
 
-      {onJumpToLeads && (
+      {onJumpToLeads && !telecallerOnly && (
         <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary', fontStyle: 'italic' }}>
           Tip: click any underlined number to jump to the Leads table with that filter pre-applied.
         </Typography>

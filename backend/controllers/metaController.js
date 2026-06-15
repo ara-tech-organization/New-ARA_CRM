@@ -1641,7 +1641,7 @@ export const getTelecallingReport = async (req, res) => {
       { createdAt: { $gte: monthStart, $lte: monthEnd } },
     ],
   })
-    .select('meta_created_time createdAt platform meta_form_name manual_source_type is_duplicate first_call_label response_label appointment_status appointment_date appointment_booked_date follow_ups')
+    .select('meta_created_time createdAt platform meta_form_name manual_source_type is_duplicate first_call_date first_call_label response_label appointment_status appointment_date appointment_booked_date follow_ups name phone email lead_location lead_category telecaller_name remarks next_followup_date')
     .lean();
 
   // ── Helpers ───────────────────────────────────────────────────────
@@ -1751,6 +1751,24 @@ export const getTelecallingReport = async (req, res) => {
   const convertedDay = monthLeads.filter((l) =>
     ['TREATMENT BOOKED', 'CLOSED'].includes(String(l.response_label || '').toUpperCase()) && touchedToday(l)
   ).length;
+
+  // Response breakdown for today — count of leads at each response
+  // label the telecaller has set (HOT / WARM / COLD / etc.). Mirrors
+  // the dropdown values in MetaLeadsTable's RESPONSE_LABEL_OPTIONS.
+  // Powers the client-portal EOD's "Response" panel so the team sees
+  // exactly what they picked on each lead. Anchored to `touchedToday`
+  // so the count reflects leads worked on this date.
+  const RESPONSE_LABELS_FOR_BREAKDOWN = [
+    'TREATMENT BOOKED', 'CONSULTED', 'WARM', 'HOT', 'COLD',
+    'NOT INTERESTED', 'NOT REQUIRED', 'NOT ENQUIRED', 'CTC', 'WILL CALL',
+    'DUPLICATE', 'CLOSED',
+  ];
+  const responseBreakdownDay = RESPONSE_LABELS_FOR_BREAKDOWN.reduce((acc, label) => {
+    acc[label] = monthLeads.filter((l) =>
+      String(l.response_label || '').toUpperCase() === label && touchedToday(l)
+    ).length;
+    return acc;
+  }, {});
   // Pull whatever the telecaller has manually saved for today and
   // apply it the same way the Monthly Abstract does — that's how the
   // two views stay in lockstep. The allow-list inside readManualValues
@@ -1898,6 +1916,50 @@ export const getTelecallingReport = async (req, res) => {
         converted: convertedDay,
         converted_value: convertedValueDay,
       },
+      // Per-label breakdown of `response_label` for leads touched
+      // today. Keys are the exact strings the dropdown shows so the
+      // frontend can render them without re-mapping.
+      response_breakdown: responseBreakdownDay,
+      // Compact projection of every lead touched today. The client
+      // portal's EOD renders this as a "Today's Leads" table showing
+      // exactly what the telecaller filled in for each lead — Date,
+      // Source, Name, Contact, Location, Hair/Skin, First Call Date,
+      // Call Label, Response, Remarks, Next Follow-up, Appointment
+      // Status, Appt. Date, FU#, and the latest follow-up summary.
+      // Limited to leads with same-day activity so the list stays
+      // focused on today's work.
+      today_leads: dayLeads.map((l) => {
+        const followUps = Array.isArray(l.follow_ups) ? l.follow_ups : [];
+        const latestFu = followUps.length ? followUps[followUps.length - 1] : null;
+        return {
+          _id: l._id,
+          date: (l.meta_created_time || l.createdAt || null),
+          source: l.manual_source_type || l.platform || '',
+          form_name: l.meta_form_name || '',
+          name: l.name || '',
+          phone: l.phone || '',
+          email: l.email || '',
+          lead_location: l.lead_location || '',
+          lead_category: l.lead_category || '',
+          first_call_date: l.first_call_date || null,
+          first_call_label: l.first_call_label || '',
+          response_label: l.response_label || '',
+          remarks: l.remarks || '',
+          next_followup_date: l.next_followup_date || null,
+          appointment_status: l.appointment_status || '',
+          appointment_date: l.appointment_date || null,
+          fu_count: followUps.length,
+          latest_followup: latestFu
+            ? {
+                date: latestFu.date || null,
+                call_label: latestFu.call_label || '',
+                remarks: latestFu.remarks || '',
+                connected: !!latestFu.connected,
+              }
+            : null,
+          is_duplicate: !!l.is_duplicate,
+        };
+      }),
     },
     month_target: {
       consulted: {
@@ -2001,7 +2063,7 @@ export const getMonthlyAbstract = async (req, res) => {
       { createdAt: { $gte: monthStart, $lte: monthEnd } },
     ],
   })
-    .select('meta_created_time createdAt platform manual_source_type is_duplicate first_call_date first_call_label response_label appointment_booked_date follow_ups')
+    .select('meta_created_time createdAt platform manual_source_type is_duplicate first_call_date first_call_label response_label appointment_booked_date follow_ups name phone email lead_location lead_category telecaller_name remarks next_followup_date appointment_status appointment_date')
     .lean();
 
   // We also need leads whose first_call_date / follow_up.date fall
@@ -2017,7 +2079,7 @@ export const getMonthlyAbstract = async (req, res) => {
     ],
     _id: { $nin: leads.map((l) => l._id) },
   })
-    .select('meta_created_time createdAt platform manual_source_type is_duplicate first_call_date first_call_label response_label appointment_booked_date follow_ups')
+    .select('meta_created_time createdAt platform manual_source_type is_duplicate first_call_date first_call_label response_label appointment_booked_date follow_ups name phone email lead_location lead_category telecaller_name remarks next_followup_date appointment_status appointment_date')
     .lean();
 
   const allLeads = leads.concat(olderActivity);
@@ -2202,6 +2264,43 @@ export const getMonthlyAbstract = async (req, res) => {
     total[k] = rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
   });
 
+  // Compact projection of every lead in the window — mirrors the
+  // `today_leads` shape on the EOD report so the client portal's
+  // Monthly Abstract can render the same 15-column table. Limited to
+  // leads with `meta_created_time` inside the window (or createdAt
+  // fallback) — i.e. the exact same scope as /client-portal/leads.
+  const monthLeadsList = allLeads.map((l) => {
+    const followUps = Array.isArray(l.follow_ups) ? l.follow_ups : [];
+    const latestFu = followUps.length ? followUps[followUps.length - 1] : null;
+    return {
+      _id: l._id,
+      date: (l.meta_created_time || l.createdAt || null),
+      source: l.manual_source_type || l.platform || '',
+      name: l.name || '',
+      phone: l.phone || '',
+      email: l.email || '',
+      lead_location: l.lead_location || '',
+      lead_category: l.lead_category || '',
+      first_call_date: l.first_call_date || null,
+      first_call_label: l.first_call_label || '',
+      response_label: l.response_label || '',
+      remarks: l.remarks || '',
+      next_followup_date: l.next_followup_date || null,
+      appointment_status: l.appointment_status || '',
+      appointment_date: l.appointment_date || null,
+      fu_count: followUps.length,
+      latest_followup: latestFu
+        ? {
+            date: latestFu.date || null,
+            call_label: latestFu.call_label || '',
+            remarks: latestFu.remarks || '',
+            connected: !!latestFu.connected,
+          }
+        : null,
+      is_duplicate: !!l.is_duplicate,
+    };
+  });
+
   res.json({
     // `month` is preserved for backward compat with the Monthly Abstract
     // view (it reads YYYY-MM from the range start).
@@ -2212,6 +2311,10 @@ export const getMonthlyAbstract = async (req, res) => {
     days_in_month: daysInMonth,
     rows,
     total,
+    // Per-lead detail for the whole window — used by the client-portal
+    // Monthly Abstract's "Leads this month" table. Same shape as EOD's
+    // today_leads so the frontend renders both with one component.
+    leads: monthLeadsList,
   });
 };
 

@@ -49,6 +49,19 @@ const monthOptions = () => {
   return opts;
 };
 
+// Columns whose values are typed in by telecallers via AbstractEntry
+// manual inputs (in the EOD report or directly in this grid). These
+// are EXCLUDED in `telecallerOnly` mode because the client-portal
+// telecaller view should reflect what telecallers fill in the LEADS
+// tab — call labels, response labels, appointments, follow-ups —
+// not the AbstractEntry manual aggregates. Whatever lands in the
+// Lead table flows into the auto-computed columns we keep visible.
+const MANUAL_ABSTRACT_KEYS = new Set([
+  'google_lead', 'justdial', 'walk_in', 'referral', 'physical_marketing',
+  'incall_google', 'incall_fb', 'incall_insta', 'incall_self',
+  'convert_value',
+]);
+
 // All columns the grid *could* show. The displayed set is filtered at
 // render time from the month TOTAL — any column the whole month has
 // zero of is hidden so admins/clients aren't scanning past dead cells.
@@ -165,7 +178,13 @@ const EditableNumberCell = ({ initialValue, onCommit }) => {
   );
 };
 
-const MonthlyAbstract = ({ clientId, apiInstance }) => {
+// `telecallerOnly` (defaults false) is passed by the client portal — it
+// strips the grid down to only the columns the team manually fills in
+// (Google Lead / JustDial / Walk-In / Referral / Physical Marketing /
+// Incall ×4) plus the date. The auto-fetched columns (WhatsApp, Insta,
+// Facebook, Total Leads, calls / appointments / conversions) are hidden
+// so clients only see what telecallers actually typed.
+const MonthlyAbstract = ({ clientId, apiInstance, telecallerOnly = false }) => {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [month, setMonth] = useState(currentMonth);
   const [data, setData] = useState(null);
@@ -217,7 +236,19 @@ const MonthlyAbstract = ({ clientId, apiInstance }) => {
   // into. `useMemo` is still helpful to keep the column array reference
   // stable across renders so the cells below don't keep their refs in
   // dependency arrays.
-  const visibleColumns = useMemo(() => COLUMNS, []);
+  // In `telecallerOnly` mode (client portal) we drop AbstractEntry
+  // manual columns and keep only Lead-derived ones — i.e. the columns
+  // populated by what the team enters on individual leads in the Leads
+  // tab (response_label, appointment_status, follow_ups, etc.). Admin
+  // views see the full grid.
+  const visibleColumns = useMemo(
+    () => (
+      telecallerOnly
+        ? COLUMNS.filter((c) => !MANUAL_ABSTRACT_KEYS.has(c.key))
+        : COLUMNS
+    ),
+    [telecallerOnly]
+  );
 
   // Local optimistic overrides — when the telecaller saves a cell, we
   // patch the value here so the table reflects it before the next
@@ -330,13 +361,19 @@ const MonthlyAbstract = ({ clientId, apiInstance }) => {
                   {bgRefreshing && <CircularProgress size={12} sx={{ color: BROWN, opacity: 0.6 }} />}
                 </Typography>
                 <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary' }}>
-                  Report view — one row per day, auto-refreshes every 30s.
-                  Edit source counts and Convert Value in the EOD report;
-                  only{' '}
-                  <Box component="span" sx={{ color: COPPER, fontWeight: 700 }}>
-                    INCALL GOOGLE / FB / INSTA / SELF
-                  </Box>{' '}
-                  are editable here.
+                  {telecallerOnly
+                    ? 'Daily roll-up of what the telecallers entered on each lead in the Leads tab — call status, response, appointment, and follow-up activity.'
+                    : (
+                      <>
+                        Report view — one row per day, auto-refreshes every 30s.
+                        Edit source counts and Convert Value in the EOD report;
+                        only{' '}
+                        <Box component="span" sx={{ color: COPPER, fontWeight: 700 }}>
+                          INCALL GOOGLE / FB / INSTA / SELF
+                        </Box>{' '}
+                        are editable here.
+                      </>
+                    )}
                 </Typography>
               </Box>
             </Box>
@@ -564,6 +601,91 @@ const MonthlyAbstract = ({ clientId, apiInstance }) => {
                     </TableRow>
                   );
                 })}
+              </TableBody>
+            </Table>
+          </Box>
+        </Paper>
+      )}
+
+      {/* ── Leads this month — full detail per lead (telecallerOnly) ──
+          Same 15-column layout as the EOD's TODAY'S LEADS table, but
+          spanning every lead in the selected month. Mirrors what
+          /client-portal/leads shows — same scope (client + source =
+          'meta'), same fields the telecaller filled in. Scrolls
+          horizontally on narrow screens. */}
+      {telecallerOnly && data && Array.isArray(data.leads) && (
+        <Paper variant="outlined" sx={{ overflow: 'auto', borderRadius: 2, borderColor: BORDER }}>
+          <Box sx={{ minWidth: 1500 }}>
+            <Table size="small" sx={{ borderCollapse: 'collapse' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell
+                    colSpan={15}
+                    style={{ backgroundColor: BROWN, color: '#fff', border: '1px solid #fff' }}
+                    sx={{ fontWeight: 800, fontSize: '0.78rem', textAlign: 'left', pl: 2, py: 0.9, textTransform: 'uppercase' }}
+                  >
+                    LEADS THIS MONTH — {data.leads.length} {data.leads.length === 1 ? 'entry' : 'entries'}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  {[
+                    'Date', 'Source', 'Name', 'Contact', 'Location',
+                    'Hair / Skin', 'First Call Date', 'Call Label',
+                    'Response', 'Remarks', 'Next Follow-up', 'Status',
+                    'Appt. Date', 'FU #', 'Latest / History',
+                  ].map((h) => (
+                    <TableCell
+                      key={h}
+                      style={{ backgroundColor: COPPER, color: '#fff', border: '1px solid #fff' }}
+                      sx={{ fontWeight: 700, fontSize: '0.66rem', textAlign: 'center', py: 0.7, px: 0.6, whiteSpace: 'nowrap', textTransform: 'uppercase' }}
+                    >
+                      {h}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.leads.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={15} style={bodyCellStyle} sx={{ ...bodyCellSx, color: 'text.secondary', fontStyle: 'italic', py: 2 }}>
+                      No leads in this window yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data.leads.map((l, idx) => {
+                    const fmtDate = (d) => {
+                      if (!d) return '—';
+                      try {
+                        return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replaceAll('/', '-');
+                      } catch { return '—'; }
+                    };
+                    const latest = l.latest_followup;
+                    const latestText = latest
+                      ? `${fmtDate(latest.date)} · ${latest.call_label || '—'}${latest.remarks ? ` · ${latest.remarks}` : ''}`
+                      : '—';
+                    const rowBg = idx % 2 === 0 ? '#fff' : CREAM;
+                    const cellSx = { ...bodyCellSx, fontSize: '0.7rem', textAlign: 'left', pl: 1 };
+                    return (
+                      <TableRow key={l._id}>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmtDate(l.date)}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, textTransform: 'uppercase' }}>{l.source || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, fontWeight: 700 }}>{l.name || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={cellSx}>{l.lead_location || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={cellSx}>{l.lead_category || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmtDate(l.first_call_date)}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={cellSx}>{l.first_call_label || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, fontWeight: 700 }}>{l.response_label || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, maxWidth: 220, whiteSpace: 'normal' }}>{l.remarks || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmtDate(l.next_followup_date)}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={cellSx}>{l.appointment_status || '—'}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmtDate(l.appointment_date)}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...bodyCellSx, fontSize: '0.7rem', textAlign: 'center', fontWeight: 700 }}>{l.fu_count}</TableCell>
+                        <TableCell style={{ ...bodyCellStyle, backgroundColor: rowBg }} sx={{ ...cellSx, maxWidth: 260, whiteSpace: 'normal' }}>{latestText}</TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </Box>
