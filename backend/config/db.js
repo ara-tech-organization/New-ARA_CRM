@@ -126,10 +126,15 @@ const healClientPortalUsers = async () => {
 
 const connectDB = async () => {
   try {
+    // Pool sizing is env-driven so each deploy (local, Azure) can be capped
+    // independently. Cosmos for MongoDB vCore has a hard per-cluster
+    // connection ceiling shared across every backend process; opening 50
+    // per process exhausts it. Keep these small and let DB_MAX_POOL override.
+    const maxPool = Number(process.env.DB_MAX_POOL) || 5;
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       // Connection pool settings for better performance
-      maxPoolSize: 50,
-      minPoolSize: 10,
+      maxPoolSize: maxPool,
+      minPoolSize: 0,
       maxIdleTimeMS: 120000,
       serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
