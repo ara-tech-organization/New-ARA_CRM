@@ -20,13 +20,20 @@ const lightOptions = {
   disableConsoleOutput: false,
   identifierNamesGenerator: 'hexadecimal',
   renameGlobals: false,
-  rotateStringArray: true,
+  // String array encoding disabled — the base64-encoded string array +
+  // rotate/shuffle combination was causing "Cannot read properties of
+  // undefined (reading 'charAt')" at runtime in lazy-loaded chunks.
+  // The obfuscator's array accessor function returns undefined when the
+  // rotation/shuffle index calculation produces an out-of-bounds lookup,
+  // turning safe optional-chained calls into hard crashes.
+  // Identifier renaming alone is sufficient to make the code unreadable.
+  rotateStringArray: false,
   selfDefending: false,
-  shuffleStringArray: true,
+  shuffleStringArray: false,
   splitStrings: false,
-  stringArray: true,
-  stringArrayEncoding: ['base64'],
-  stringArrayThreshold: 0.75,
+  stringArray: false,
+  stringArrayEncoding: [],
+  stringArrayThreshold: 0,
   transformObjectKeys: false,
   unicodeEscapeSequence: false,
 };
