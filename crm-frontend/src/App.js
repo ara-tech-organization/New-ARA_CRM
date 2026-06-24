@@ -83,8 +83,10 @@ function App() {
       () => import('./pages/EmailCampaigns'),
       () => import('./pages/ContentManagement'),
     ];
-    // Stagger 150ms apart so prefetch never competes with the first render
-    pages.forEach((load, i) => setTimeout(load, 300 + i * 150));
+    // Fire all prefetches in parallel immediately after boot — HTTP/2
+    // handles concurrency fine and this minimises the window where a
+    // chunk isn't cached yet (relevant after hard-reload cache clears).
+    pages.forEach((load) => load());
   }, [booting]);
 
   useEffect(() => {
