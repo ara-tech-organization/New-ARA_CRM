@@ -988,13 +988,11 @@ const ClientAdDetails = () => {
             const metaLeadsInRange = metaData?.leads_in_range || [];
             const metaEntityCounts = metaData?.entity_counts || {};
             const metaRange = metaData?.range;
+            const todaySpend = metaData?.today_spend ?? null;
             const metaCurrency = metaAccount?.currency || client?.meta_ad_account_currency || 'INR';
             const accountStatusMap = { 1: 'ACTIVE', 2: 'DISABLED', 3: 'UNSETTLED', 7: 'PENDING_RISK_REVIEW', 8: 'PENDING_SETTLEMENT', 9: 'IN_GRACE_PERIOD', 100: 'PENDING_CLOSURE', 101: 'CLOSED' };
             const accountStatusLabel = accountStatusMap[metaAccount?.account_status] || (metaAccount?.account_status != null ? `STATUS ${metaAccount.account_status}` : null);
             const isAccountActive = metaAccount?.account_status === 1;
-            const isLowAccountBalance = metaAccount?.balance != null
-              && metaBilling?.low_balance_threshold != null
-              && metaAccount.balance < metaBilling.low_balance_threshold;
 
             return (
               <>
@@ -1102,10 +1100,9 @@ const ClientAdDetails = () => {
                       ) : (
                         <Grid container spacing={1.5}>
                           <Grid size={{ xs: 6, md: 2 }}>
-                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account Balance</Typography>
-                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: isLowAccountBalance ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              {metaAccount?.balance != null ? fmtINR(metaAccount.balance) : '—'}
-                              {isLowAccountBalance && <WarningIcon sx={{ fontSize: 14 }} />}
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Today's Spend</Typography>
+                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#10b981' }}>
+                              {todaySpend != null ? fmtINR(todaySpend) : '—'}
                             </Typography>
                           </Grid>
                           <Grid size={{ xs: 6, md: 2 }}>

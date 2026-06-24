@@ -1183,6 +1183,26 @@ export const getClientAnalytics = async (req, res) => {
     }
   }
 
+  // ---- Today's spend (always today, independent of selected date range) ----
+  // Meta's account.balance field is the billing-cycle outstanding for postpaid
+  // accounts — not a "remaining prepaid balance". We query our own synced
+  // MetaInsights for today's date to give a reliable "today's spend" figure.
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setUTCHours(23, 59, 59, 999);
+  const [todaySummaryAgg] = await MetaInsights.aggregate([
+    {
+      $match: {
+        client_id: clientId,
+        level: 'campaign',
+        date: { $gte: todayStart, $lte: todayEnd },
+      },
+    },
+    { $group: { _id: null, spend: { $sum: '$spend' } } },
+  ]);
+  const today_spend = round2((todaySummaryAgg || {}).spend || 0);
+
   res.json({
     client_id: clientId,
     client_name: client.clientName,
@@ -1196,6 +1216,7 @@ export const getClientAnalytics = async (req, res) => {
     lead_forms,
     leads_in_range,
     meta_account,
+    today_spend,
     entity_counts: {
       campaigns: await MetaCampaign.countDocuments({ client_id: clientId }),
       adsets: await MetaAdSet.countDocuments({ client_id: clientId }),
