@@ -57,6 +57,36 @@ function App() {
     return () => clearTimeout(t);
   }, [dispatch]);
 
+  // After boot, silently prefetch all page chunks in the background so
+  // every navigation is instant — no loader flash on subsequent clicks.
+  useEffect(() => {
+    if (booting) return;
+    const pages = [
+      () => import('./layouts/MainLayout'),
+      () => import('./pages/Dashboard'),
+      () => import('./pages/DailyLeadData'),
+      () => import('./pages/Clients'),
+      () => import('./pages/Leads'),
+      () => import('./pages/DailyEntry'),
+      () => import('./pages/FundEntry'),
+      () => import('./pages/Reports'),
+      () => import('./pages/Settings'),
+      () => import('./pages/MetaAds'),
+      () => import('./pages/GoogleAds'),
+      () => import('./pages/AdsDashboard'),
+      () => import('./pages/ClientAdDetails'),
+      () => import('./pages/AccessManagement'),
+      () => import('./pages/ClientVault'),
+      () => import('./pages/PersonalVault'),
+      () => import('./pages/ClientPortalAccess'),
+      () => import('./pages/DashboardEnhanced'),
+      () => import('./pages/EmailCampaigns'),
+      () => import('./pages/ContentManagement'),
+    ];
+    // Stagger 150ms apart so prefetch never competes with the first render
+    pages.forEach((load, i) => setTimeout(load, 300 + i * 150));
+  }, [booting]);
+
   useEffect(() => {
     const goOnline = () => setOnline(true);
     const goOffline = () => setOnline(false);
