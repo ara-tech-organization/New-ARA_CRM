@@ -81,17 +81,11 @@ const CLIENTS = [
     ],
   },
   {
-    // Nellore has two separate brands (GroHair + GloSkin) with different ad accounts
+    // Nellore — single client, both pages under the GroHair ad account
     clientName: 'Advanced GroHair Nellore',
     meta_ad_account_id: 'act_1663450124176309',
     meta_pages: [
       { page_id: '156662764188249', page_name: 'Advanced GroHair Clinic Nellore' },
-    ],
-  },
-  {
-    clientName: 'Advanced GloSkin Nellore',
-    meta_ad_account_id: 'act_1350378379699096',
-    meta_pages: [
       { page_id: '161892617008749', page_name: 'Advanced Gloskin Clinic Nellore' },
     ],
   },
