@@ -1162,16 +1162,16 @@ export const getClientAnalytics = async (req, res) => {
     try {
       const { account } = await verifyAdAccountAccess(client.meta_ad_account_id);
 
-      // True available balance: funding_source_details.display_string contains
-      // a human-readable string like "Available balance (₹22,509.40 INR)".
-      // This reflects the actual credit/prepaid balance as shown in Ads Manager,
-      // unlike account.balance which is the billing-cycle outstanding (≈ today's
-      // spend) for postpaid auto-pay accounts.
+      // True available balance: funding_source_details.display_string for
+      // PREPAID accounts contains "Available balance (₹22,509.40 INR)".
+      // For POSTPAID (credit card) accounts the string shows card details like
+      // "Visa •••• 1234 (₹802.13)" where the number is the billing-cycle charge,
+      // not a remaining balance. Only extract when "Available balance" is present.
       let available_balance = null;
       const ds = account.funding_source_details?.display_string || '';
-      const m = ds.match(/[\d,]+(?:\.\d+)?/);
-      if (m) {
-        available_balance = round2(Number(m[0].replace(/,/g, '')));
+      if (/available\s+balance/i.test(ds)) {
+        const m = ds.match(/[\d,]+(?:\.\d+)?/);
+        if (m) available_balance = round2(Number(m[0].replace(/,/g, '')));
       }
 
       meta_account = {
