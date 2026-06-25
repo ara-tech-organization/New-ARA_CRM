@@ -449,10 +449,11 @@ export const syncAllMetaClients = async ({ deep = false } = {}) => {
   });
 
   try {
-    const clients = await Client.find({
-      meta_enabled: true,
-      meta_ad_account_id: { $ne: '', $exists: true },
-    });
+    // Include ALL meta_enabled clients — syncMetaClient already skips the
+    // ad-account stages (campaigns/insights) when meta_ad_account_id is absent
+    // and still runs form sync + lead polling for page-only clients (Tirupur,
+    // Avinashi Road, etc.).
+    const clients = await Client.find({ meta_enabled: true });
     console.log(`[meta-sync] run=${runId} clients=${clients.length} deep=${deep}`);
 
     for (const client of clients) {
@@ -555,10 +556,7 @@ export const syncAllMetaClientsHistorical = async ({ since, until }) => {
   });
 
   try {
-    const clients = await Client.find({
-      meta_enabled: true,
-      meta_ad_account_id: { $ne: '', $exists: true },
-    });
+    const clients = await Client.find({ meta_enabled: true });
     console.log(
       `[meta-sync] run=${runId} historical clients=${clients.length} window=${since}..${until}`
     );
