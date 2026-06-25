@@ -13,6 +13,7 @@ export const FIELD_SETS = {
     'business',
     'amount_spent',
     'balance',
+    'funding_source_details',
     'disable_reason',
   ],
 

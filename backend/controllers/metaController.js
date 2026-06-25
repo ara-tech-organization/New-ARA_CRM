@@ -1161,12 +1161,26 @@ export const getClientAnalytics = async (req, res) => {
     };
     try {
       const { account } = await verifyAdAccountAccess(client.meta_ad_account_id);
+
+      // True available balance: funding_source_details.display_string contains
+      // a human-readable string like "Available balance (₹22,509.40 INR)".
+      // This reflects the actual credit/prepaid balance as shown in Ads Manager,
+      // unlike account.balance which is the billing-cycle outstanding (≈ today's
+      // spend) for postpaid auto-pay accounts.
+      let available_balance = null;
+      const ds = account.funding_source_details?.display_string || '';
+      const m = ds.match(/[\d,]+(?:\.\d+)?/);
+      if (m) {
+        available_balance = round2(Number(m[0].replace(/,/g, '')));
+      }
+
       meta_account = {
         id: account.id || persisted.id,
         name: account.name || persisted.name,
         currency: account.currency || persisted.currency,
         timezone_name: account.timezone_name || persisted.timezone_name,
         account_status: account.account_status,
+        available_balance,
         balance: round2(Number(account.balance || 0) / 100),
         amount_spent: round2(Number(account.amount_spent || 0) / 100),
         disable_reason: account.disable_reason ?? 0,

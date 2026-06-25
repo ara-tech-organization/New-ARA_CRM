@@ -1108,7 +1108,7 @@ const ClientAdDetails = () => {
                           <Grid size={{ xs: 6, md: 2 }}>
                             <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Account Balance</Typography>
                             <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#f59e0b' }}>
-                              {metaAccount?.balance != null ? fmtINR(metaAccount.balance) : '—'}
+                              {metaAccount?.available_balance != null ? fmtINR(metaAccount.available_balance) : '—'}
                             </Typography>
                           </Grid>
                           <Grid size={{ xs: 6, md: 2 }}>
