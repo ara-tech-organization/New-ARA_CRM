@@ -335,29 +335,31 @@ export const syncByAdAccount = async ({
 
 /**
  * High-level sync: takes a populated Client doc and routes into syncByAdAccount.
+ * For page-only clients (no meta_ad_account_id), skips ad-account stages but
+ * still runs form discovery + lead polling for all configured pages.
  */
 export const syncMetaClient = async (client, { deep = false, run, insightsWindow = null } = {}) => {
-  if (!client?.meta_ad_account_id) {
-    return {
-      ok: false,
-      stages: [{ stage: 'precheck', status: 'skipped', message: 'meta_ad_account_id missing' }],
-    };
+  let result;
+  if (client?.meta_ad_account_id) {
+    result = await syncByAdAccount({
+      adAccountId: client.meta_ad_account_id,
+      clientId: client._id,
+      // Use CRM onboardDate (usually months/years old) as the floor — not
+      // meta_onboarded_at, which gets auto-stamped to *today* on first enable
+      // and would shrink the backfill window to zero. meta_onboarded_at
+      // remains useful as a "when did we turn on Meta integration" timestamp
+      // for operators; it just shouldn't constrain the sync window.
+      onboardedAt: client.onboardDate,
+      deep,
+      run,
+      label: `${client.clientName || 'client'} (${client.meta_ad_account_id})`,
+      insightsWindow,
+    });
+  } else {
+    // Page-only client — no ad account sync, but forms + leads still run below.
+    result = { ok: true, stages: [{ stage: 'adaccount', status: 'skipped', message: 'page-only client' }] };
+    console.log(`[meta-sync] ${client.clientName || client._id}: page-only client, skipping ad-account sync`);
   }
-
-  const result = await syncByAdAccount({
-    adAccountId: client.meta_ad_account_id,
-    clientId: client._id,
-    // Use CRM onboardDate (usually months/years old) as the floor — not
-    // meta_onboarded_at, which gets auto-stamped to *today* on first enable
-    // and would shrink the backfill window to zero. meta_onboarded_at
-    // remains useful as a "when did we turn on Meta integration" timestamp
-    // for operators; it just shouldn't constrain the sync window.
-    onboardedAt: client.onboardDate,
-    deep,
-    run,
-    label: `${client.clientName || 'client'} (${client.meta_ad_account_id})`,
-    insightsWindow,
-  });
 
   // Lead forms + lead polling — only runs when Pages are configured.
   if (client?.meta_pages?.length) {
