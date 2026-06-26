@@ -1158,25 +1158,27 @@ export const getClientAnalytics = async (req, res) => {
     .sort({ meta_created_time: -1, createdAt: -1 })
     .lean();
 
-  // ---- Override summary.form_leads with actual CRM count ------------------
-  // MetaInsights only counts campaign-attributed leads (action = "lead").
-  // Organic submissions (no campaign, or is_organic=true) land in the Lead
-  // collection but never increment the MetaInsights counter, causing a
-  // mismatch between Performance Summary and the Leads table below.
-  // Use leads_in_range (actual CRM records) as the source of truth.
+  // ---- Override Leads + Messages with actual CRM records ------------------
+  // MetaInsights campaign attribution misses organic form leads and counts
+  // messaging_conversations_started (ad click → chat opened) rather than
+  // actual WhatsApp leads that became CRM records.
+  // Use leads_in_range as source of truth for both buckets.
   const actualFormLeads = leads_in_range.filter(
     (l) => (l.platform || '').toLowerCase() !== 'whatsapp'
   ).length;
-  if (leads_in_range.length > 0) {
-    summary.form_leads = actualFormLeads;
-    const newTotalLeads = actualFormLeads + summary.whatsapp_leads;
-    summary.total_leads = newTotalLeads;
-    summary.leads = newTotalLeads;
-    summary.cpl_form = actualFormLeads > 0 ? round2(summary.spend / actualFormLeads) : 0;
-    summary.cpl = newTotalLeads > 0 ? round2(summary.spend / newTotalLeads) : 0;
-    const totalConvActual = newTotalLeads + summary.calls;
-    summary.avg_cost_per_conv = totalConvActual > 0 ? round2(summary.spend / totalConvActual) : 0;
-  }
+  const actualWALeads = leads_in_range.filter(
+    (l) => (l.platform || '').toLowerCase() === 'whatsapp'
+  ).length;
+  summary.form_leads = actualFormLeads;
+  summary.whatsapp_leads = actualWALeads;
+  summary.messaging_conversations_started = actualWALeads;
+  const newTotalLeads = actualFormLeads + actualWALeads;
+  summary.total_leads = newTotalLeads;
+  summary.leads = newTotalLeads;
+  summary.cpl_form = actualFormLeads > 0 ? round2(summary.spend / actualFormLeads) : 0;
+  summary.cpl = newTotalLeads > 0 ? round2(summary.spend / newTotalLeads) : 0;
+  const totalConvActual = newTotalLeads + summary.calls;
+  summary.avg_cost_per_conv = totalConvActual > 0 ? round2(summary.spend / totalConvActual) : 0;
 
   // ---- Live Meta-side figures ------------------------------------------
   // Meta exposes the prepaid balance + lifetime spend directly, unlike
