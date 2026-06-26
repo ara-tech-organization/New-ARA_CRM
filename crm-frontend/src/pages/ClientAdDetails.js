@@ -1321,7 +1321,7 @@ const ClientAdDetails = () => {
                 {metaLeadForms.length > 0 && (
                   <>
                     <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                      Lead Forms ({metaLeadForms.length})
+                      Lead Forms ({metaLeadForms.filter(f => (f.leads_in_range || 0) > 0).length} of {metaLeadForms.length})
                     </Typography>
                     <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
                       <Table size="small">
@@ -1334,7 +1334,7 @@ const ClientAdDetails = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {[...metaLeadForms].sort((a, b) => (Number(b.leads_in_range) || 0) - (Number(a.leads_in_range) || 0)).map(f => {
+                          {[...metaLeadForms].filter(f => (f.leads_in_range || 0) > 0).sort((a, b) => (Number(b.leads_in_range) || 0) - (Number(a.leads_in_range) || 0)).map(f => {
                             const isActive = f.status === 'ACTIVE';
                             return (
                               <TableRow key={f.form_id} hover>
