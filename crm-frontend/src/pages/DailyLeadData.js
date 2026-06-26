@@ -564,9 +564,9 @@ const DailyLeadData = () => {
                       <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                         <Tooltip arrow title="Calendar date (DD MMM YYYY)"><TableCell sx={{ fontWeight: 700, cursor: 'help' }}>Date</TableCell></Tooltip>
                         <Tooltip arrow title="Day of week (Mon, Tue, …)"><TableCell sx={{ fontWeight: 700, cursor: 'help' }} align="center">Day</TableCell></Tooltip>
-                        <Tooltip arrow title="Meta lead-form submissions on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">📋 Leads</TableCell></Tooltip>
-                        <Tooltip arrow title="Meta click-to-WhatsApp conversations on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">💬 Messages</TableCell></Tooltip>
-                        <Tooltip arrow title="Meta click-to-call button taps on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#2e7d3215', cursor: 'help' }} align="center">📞 Calls</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta lead-form submissions on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Leads</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta click-to-WhatsApp conversations on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Messages</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta click-to-call button taps on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#2e7d3215', cursor: 'help' }} align="center">Calls</TableCell></Tooltip>
                         <Tooltip arrow title="Meta Form + Meta WhatsApp total for this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Meta Total</TableCell></Tooltip>
                         <Tooltip arrow title="Total Meta ad spend on this day (₹)"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="right">Meta Fund</TableCell></Tooltip>
                       </TableRow>

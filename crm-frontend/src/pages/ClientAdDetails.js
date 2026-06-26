@@ -1132,9 +1132,9 @@ const ClientAdDetails = () => {
                     {/* Row 1 — Outcomes: Spend + Leads + Messages + Calls + Avg Cost/Conv */}
                     <Grid container spacing={1.5} sx={{ mb: 2 }}>
                       {metaSummary.spend != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Spend" value={fmtINR(metaSummary.spend)} color={META_BLUE} icon={<WalletIcon />} /></Grid>}
-                      {metaSummary.form_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="📋 Leads" value={fmtNum(metaSummary.form_leads)} color={COPPER} icon={<GroupsIcon />} /></Grid>}
-                      {metaSummary.whatsapp_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="💬 Messages" value={fmtNum(metaSummary.whatsapp_leads)} color={BROWN} icon={<ChatIcon />} /></Grid>}
-                      {metaSummary.calls != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="📞 Calls" value={fmtNum(metaSummary.calls)} color="#2e7d32" icon={<PeopleIcon />} /></Grid>}
+                      {metaSummary.form_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Leads" value={fmtNum(metaSummary.form_leads)} color={COPPER} icon={<GroupsIcon />} /></Grid>}
+                      {metaSummary.whatsapp_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Messages" value={fmtNum(metaSummary.whatsapp_leads)} color={BROWN} icon={<ChatIcon />} /></Grid>}
+                      {metaSummary.calls != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Calls" value={fmtNum(metaSummary.calls)} color="#2e7d32" icon={<PeopleIcon />} /></Grid>}
                       {metaSummary.avg_cost_per_conv != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Avg Cost/Conv" value={metaSummary.avg_cost_per_conv > 0 ? fmtINR(metaSummary.avg_cost_per_conv) : '—'} color={META_BLUE} icon={<MoneyIcon />} sublabel="per (Lead+Msg+Call)" /></Grid>}
                       {metaSummary.reach != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Reach" value={fmtNum(metaSummary.reach)} color={COPPER} icon={<PeopleIcon />} /></Grid>}
                     </Grid>
@@ -1166,9 +1166,9 @@ const ClientAdDetails = () => {
                         <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impr.</TableCell>
                         <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
                         <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">📋 Leads</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">💬 Messages</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">📞 Calls</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Messages</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Calls</TableCell>
                         <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Avg Cost/Conv</TableCell>
                       </TableRow>
                     </TableHead>
