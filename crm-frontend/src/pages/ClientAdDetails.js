@@ -1020,7 +1020,7 @@ const ClientAdDetails = () => {
                     </Grid>
                     <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                       <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account</Typography>
-                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{client?.meta_ad_account_name || '—'}</Typography>
+                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.name || client?.meta_ad_account_name || '—'}</Typography>
                       {client?.meta_ad_account_id && (
                         <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', fontFamily: 'monospace' }}>{client.meta_ad_account_id}</Typography>
                       )}
@@ -1028,7 +1028,7 @@ const ClientAdDetails = () => {
                     <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                       <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency / Time Zone</Typography>
                       <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                        {client?.meta_ad_account_currency || '—'} · {client?.meta_ad_account_timezone || '—'}
+                        {metaAccount?.currency || client?.meta_ad_account_currency || '—'} · {metaAccount?.timezone_name || client?.meta_ad_account_timezone || '—'}
                       </Typography>
                     </Grid>
                     {metaRange && (

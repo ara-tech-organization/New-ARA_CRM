@@ -1158,6 +1158,26 @@ export const getClientAnalytics = async (req, res) => {
     .sort({ meta_created_time: -1, createdAt: -1 })
     .lean();
 
+  // ---- Override summary.form_leads with actual CRM count ------------------
+  // MetaInsights only counts campaign-attributed leads (action = "lead").
+  // Organic submissions (no campaign, or is_organic=true) land in the Lead
+  // collection but never increment the MetaInsights counter, causing a
+  // mismatch between Performance Summary and the Leads table below.
+  // Use leads_in_range (actual CRM records) as the source of truth.
+  const actualFormLeads = leads_in_range.filter(
+    (l) => (l.platform || '').toLowerCase() !== 'whatsapp'
+  ).length;
+  if (leads_in_range.length > 0) {
+    summary.form_leads = actualFormLeads;
+    const newTotalLeads = actualFormLeads + summary.whatsapp_leads;
+    summary.total_leads = newTotalLeads;
+    summary.leads = newTotalLeads;
+    summary.cpl_form = actualFormLeads > 0 ? round2(summary.spend / actualFormLeads) : 0;
+    summary.cpl = newTotalLeads > 0 ? round2(summary.spend / newTotalLeads) : 0;
+    const totalConvActual = newTotalLeads + summary.calls;
+    summary.avg_cost_per_conv = totalConvActual > 0 ? round2(summary.spend / totalConvActual) : 0;
+  }
+
   // ---- Live Meta-side figures ------------------------------------------
   // Meta exposes the prepaid balance + lifetime spend directly, unlike
   // Google Ads. Pull them on every analytics fetch so the frontend always
