@@ -905,6 +905,8 @@ export const getClientAnalytics = async (req, res) => {
   const { since, until } = parseDateRange(req.query);
   const clientId = client._id;
   const dateRange = { $gte: since, $lte: until };
+  const _t0 = Date.now();
+  const _tag = `[analytics] ${client.clientName || clientId} ${since.toISOString().slice(0,10)}→${until.toISOString().slice(0,10)}`;
 
   // IST date boundaries for lead queries
   const IST_MS = 5.5 * 60 * 60 * 1000;
@@ -919,6 +921,7 @@ export const getClientAnalytics = async (req, res) => {
   };
 
   // ---- Batch 1: all independent DB queries in parallel ----
+  const _t1 = Date.now();
   const [
     summaryAggResult,
     dailyTrend,
@@ -1003,6 +1006,7 @@ export const getClientAnalytics = async (req, res) => {
       .lean(),
   ]);
 
+  console.log(`${_tag} batch1(DB) ${Date.now()-_t1}ms`);
   // ---- Build summary from aggregation result ----
   const [summaryAgg] = summaryAggResult;
   const sum = summaryAgg || {
@@ -1152,6 +1156,7 @@ export const getClientAnalytics = async (req, res) => {
   }
 
   // ---- Batch 2: Meta API + today's spend + entity counts in parallel -------
+  const _t2 = Date.now();
   const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
   const todayEnd   = new Date(); todayEnd.setUTCHours(23, 59, 59, 999);
 
@@ -1200,6 +1205,7 @@ export const getClientAnalytics = async (req, res) => {
   ]);
 
   const today_spend = round2((todaySummaryResult[0] || {}).spend || 0);
+  console.log(`${_tag} batch2(Meta+counts) ${Date.now()-_t2}ms | total ${Date.now()-_t0}ms`);
 
   res.json({
     client_id: clientId,
