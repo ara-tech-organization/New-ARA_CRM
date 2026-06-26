@@ -29,8 +29,8 @@ import TelecallingReport from '../components/TelecallingReport';
 import MonthlyAbstract from '../components/MonthlyAbstract';
 import LeadCheckPanel from '../components/LeadCheckPanel';
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
 
 const COPPER = '#C08552';
@@ -1228,19 +1228,19 @@ const ClientAdDetails = () => {
 
                   if (!useHourly && metaDaily.length === 0) return null;
 
-                  // ---- Hourly leads bar chart (single day) ----
+                  // ---- Hourly leads area chart (single day) ----
                   if (useHourly) {
                     const HourlyTooltip = ({ active, payload }) => {
                       if (!active || !payload?.length) return null;
                       const d = payload[0]?.payload;
                       return (
-                        <Paper sx={{ p: 1.5, minWidth: 140, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                        <Paper sx={{ p: 1.5, minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                           <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', mb: 0.8, borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
                             {d.hourPart} IST
                           </Typography>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 3 }}>
                             <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Leads</Typography>
-                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: COPPER }}>{d.leads}</Typography>
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: META_BLUE }}>{d.leads}</Typography>
                           </Box>
                         </Paper>
                       );
@@ -1248,24 +1248,40 @@ const ClientAdDetails = () => {
                     return (
                       <>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', borderLeft: `3px solid ${COPPER}`, pl: 1.5 }}>
-                            Leads by Hour
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                            Campaign Performance
                           </Typography>
-                          <Chip label="Today · IST" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600, bgcolor: `${COPPER}15`, color: COPPER }} />
+                          <Chip label="Hourly · IST" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600, bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
                         </Box>
                         <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
-                          <ResponsiveContainer width="100%" height={260}>
-                            <BarChart data={hourlyLeads} margin={{ top: 5, right: 10, left: 0, bottom: 10 }}>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <AreaChart data={hourlyLeads} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                              <defs>
+                                <linearGradient id="metaSpikeGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor={META_BLUE} stopOpacity={0.35} />
+                                  <stop offset="95%" stopColor={META_BLUE} stopOpacity={0.02} />
+                                </linearGradient>
+                              </defs>
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
-                              <XAxis dataKey="hourPart" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#555' }} interval={1} />
-                              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10 }} width={30} allowDecimals={false} />
-                              <RechartsTooltip content={<HourlyTooltip />} cursor={{ fill: `${COPPER}10` }} />
-                              <Bar dataKey="leads" radius={[4, 4, 0, 0]}>
-                                {hourlyLeads.map((entry, index) => (
-                                  <Cell key={index} fill={entry.leads > 0 ? COPPER : `${COPPER}30`} />
-                                ))}
-                              </Bar>
-                            </BarChart>
+                              <XAxis
+                                dataKey="hourPart"
+                                tickLine={false}
+                                axisLine={false}
+                                height={35}
+                                interval={1}
+                                tick={({ x, y, index }) => {
+                                  const row = hourlyLeads[index];
+                                  return (
+                                    <g transform={`translate(${x},${y})`}>
+                                      <text x={0} y={0} dy={14} textAnchor="middle" fontSize={10} fill="#555">{row?.hourPart}</text>
+                                    </g>
+                                  );
+                                }}
+                              />
+                              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                              <RechartsTooltip content={<HourlyTooltip />} />
+                              <Area type="monotone" dataKey="leads" stroke={META_BLUE} fill="url(#metaSpikeGrad)" strokeWidth={2.5} dot={{ r: 5, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} />
+                            </AreaChart>
                           </ResponsiveContainer>
                         </Paper>
                       </>
