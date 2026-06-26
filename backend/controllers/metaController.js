@@ -1286,6 +1286,26 @@ export const getClientAnalytics = async (req, res) => {
   ]);
   const today_spend = round2((todaySummaryAgg || {}).spend || 0);
 
+  // ---- Hourly leads (single-day only) ------------------------------------
+  // MetaInsights is daily-only so hourly spend isn't available. When the
+  // selected range is a single day, build per-IST-hour lead counts from the
+  // individual lead timestamps (meta_created_time / createdAt).
+  const IST_OFFSET_HOURLY = 5.5 * 60 * 60 * 1000;
+  const isSingleDay = since.toISOString().slice(0, 10) === until.toISOString().slice(0, 10);
+  let hourly_leads = null;
+  if (isSingleDay && leads_in_range.length > 0) {
+    const hourCounts = new Array(24).fill(0);
+    for (const l of leads_in_range) {
+      const ts = l.meta_created_time || l.createdAt;
+      if (!ts) continue;
+      const istHour = new Date(new Date(ts).getTime() + IST_OFFSET_HOURLY).getUTCHours();
+      hourCounts[istHour]++;
+    }
+    hourly_leads = hourCounts
+      .map((leads, h) => ({ hour: h, hourPart: `${String(h).padStart(2, '0')}:00`, leads }))
+      .filter((_, h) => h >= 7 && h <= 23);
+  }
+
   res.json({
     client_id: clientId,
     client_name: client.clientName,
@@ -1296,6 +1316,7 @@ export const getClientAnalytics = async (req, res) => {
     summary,
     campaigns,
     daily_trend: dailyTrend,
+    hourly_leads,
     lead_forms,
     leads_in_range,
     meta_account,

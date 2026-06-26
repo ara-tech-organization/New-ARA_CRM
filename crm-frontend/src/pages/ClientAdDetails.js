@@ -29,8 +29,8 @@ import TelecallingReport from '../components/TelecallingReport';
 import MonthlyAbstract from '../components/MonthlyAbstract';
 import LeadCheckPanel from '../components/LeadCheckPanel';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartsTooltip, ResponsiveContainer,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 
 const COPPER = '#C08552';
@@ -1221,33 +1221,75 @@ const ClientAdDetails = () => {
                   </Table>
                 </TableContainer>}
 
-                {/* Daily / Hourly Trend Chart */}
-                {metaDaily.length > 0 && (() => {
-                  // Detect hourly data: either multiple rows sharing the same YYYY-MM-DD, or an `hour` field present, or ISO timestamps with time component.
-                  const datesSeen = new Set(metaDaily.map(d => String(d.date).slice(0, 10)));
-                  const hasHourField = metaDaily.some(d => d.hour != null);
-                  const hasTimeComponent = metaDaily.some(d => String(d.date).includes('T') || String(d.date).includes(':'));
-                  const isHourly = hasHourField || (metaDaily.length > 1 && datesSeen.size === 1) || hasTimeComponent;
+                {/* Campaign Performance Chart — hourly leads (single day) or daily spend (multi-day) */}
+                {(() => {
+                  const hourlyLeads = metaData?.hourly_leads || [];
+                  const useHourly = hourlyLeads.length > 0;
 
+                  if (!useHourly && metaDaily.length === 0) return null;
+
+                  // ---- Hourly leads bar chart (single day) ----
+                  if (useHourly) {
+                    const HourlyTooltip = ({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload;
+                      return (
+                        <Paper sx={{ p: 1.5, minWidth: 140, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                          <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', mb: 0.8, borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
+                            {d.hourPart} IST
+                          </Typography>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 3 }}>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Leads</Typography>
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: COPPER }}>{d.leads}</Typography>
+                          </Box>
+                        </Paper>
+                      );
+                    };
+                    return (
+                      <>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', borderLeft: `3px solid ${COPPER}`, pl: 1.5 }}>
+                            Leads by Hour
+                          </Typography>
+                          <Chip label="Today · IST" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600, bgcolor: `${COPPER}15`, color: COPPER }} />
+                        </Box>
+                        <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+                          <ResponsiveContainer width="100%" height={260}>
+                            <BarChart data={hourlyLeads} margin={{ top: 5, right: 10, left: 0, bottom: 10 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                              <XAxis dataKey="hourPart" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#555' }} interval={1} />
+                              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10 }} width={30} allowDecimals={false} />
+                              <RechartsTooltip content={<HourlyTooltip />} cursor={{ fill: `${COPPER}10` }} />
+                              <Bar dataKey="leads" radius={[4, 4, 0, 0]}>
+                                {hourlyLeads.map((entry, index) => (
+                                  <Cell key={index} fill={entry.leads > 0 ? COPPER : `${COPPER}30`} />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </Paper>
+                      </>
+                    );
+                  }
+
+                  // ---- Daily spend area chart (multi-day) ----
                   const chartRows = metaDaily.map(d => {
                     const dt = new Date(d.date);
-                    const hour = d.hour != null ? Number(d.hour) : dt.getHours();
                     return {
                       ...d,
                       day: dt.toLocaleDateString('en-GB', { weekday: 'short' }),
                       datePart: dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
-                      hourPart: `${String(hour).padStart(2, '0')}:00`,
                       cpl: (Number(d.leads) || 0) > 0 ? (Number(d.spend) || 0) / Number(d.leads) : 0,
                     };
                   });
-                  const MetaSpikeTooltip = ({ active, payload }) => {
+                  const DailyTooltip = ({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const d = payload[0]?.payload;
                     if (!d) return null;
                     return (
                       <Paper sx={{ p: 1.5, minWidth: 200, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                         <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', mb: 1, borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
-                          {isHourly ? `${d.hourPart} · ${fmtDate(d.date)}` : `${d.day}, ${fmtDate(d.date)}`}
+                          {d.day}, {fmtDate(d.date)}
                         </Typography>
                         {[
                           { label: 'Spend', value: fmtINR(d.spend), color: META_BLUE },
@@ -1266,14 +1308,9 @@ const ClientAdDetails = () => {
                   };
                   return (
                     <>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
-                          Campaign Performance
-                        </Typography>
-                        {isHourly && (
-                          <Chip label="Hourly" size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 600, bgcolor: `${META_BLUE}15`, color: META_BLUE }} />
-                        )}
-                      </Box>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                        Campaign Performance
+                      </Typography>
                       <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
                         <ResponsiveContainer width="100%" height={300}>
                           <AreaChart data={chartRows} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
@@ -1285,20 +1322,13 @@ const ClientAdDetails = () => {
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
                             <XAxis
-                              dataKey={isHourly ? 'hourPart' : 'datePart'}
+                              dataKey="datePart"
                               tickLine={false}
                               axisLine={false}
                               height={45}
-                              interval={isHourly ? Math.max(0, Math.floor(chartRows.length / 12) - 1) : 0}
+                              interval={0}
                               tick={({ x, y, index }) => {
                                 const row = chartRows[index];
-                                if (isHourly) {
-                                  return (
-                                    <g transform={`translate(${x},${y})`}>
-                                      <text x={0} y={0} dy={14} textAnchor="middle" fontSize={10.5} fill="#555">{row?.hourPart}</text>
-                                    </g>
-                                  );
-                                }
                                 return (
                                   <g transform={`translate(${x},${y})`}>
                                     <text x={0} y={0} dy={12} textAnchor="middle" fontSize={10.5} fill="#555">{row?.datePart}</text>
@@ -1308,7 +1338,7 @@ const ClientAdDetails = () => {
                               }}
                             />
                             <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={50} tickFormatter={(v) => `₹${v}`} />
-                            <RechartsTooltip content={<MetaSpikeTooltip />} />
+                            <RechartsTooltip content={<DailyTooltip />} />
                             <Area type="linear" dataKey="spend" stroke={META_BLUE} fill="url(#metaSpikeGrad)" strokeWidth={2.5} dot={{ r: 5, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, fill: META_BLUE, stroke: '#fff', strokeWidth: 2 }} />
                           </AreaChart>
                         </ResponsiveContainer>
