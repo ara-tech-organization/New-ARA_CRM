@@ -906,64 +906,125 @@ export const getClientAnalytics = async (req, res) => {
   const clientId = client._id;
   const dateRange = { $gte: since, $lte: until };
 
-  // ---- Summary (campaign-level only — avoids double-counting adset/ad) ----
-  // We break leads into two buckets:
-  //   form_leads  = Meta "lead" action (Lead Ads form submissions)
-  //   whatsapp_leads = "onsite_conversion.messaging_conversation_started_7d"
-  //                    (CTWA conversations; includes Messenger too since Meta
-  //                    doesn't separate them without a breakdown parameter)
-  //   total_leads = form_leads + whatsapp_leads
-  const [summaryAgg] = await MetaInsights.aggregate([
-    {
-      $match: {
-        client_id: clientId,
-        level: 'campaign',
-        date: dateRange,
+  // IST date boundaries for lead queries
+  const IST_MS = 5.5 * 60 * 60 * 1000;
+  const leadSince = new Date(since.getTime() - IST_MS);
+  const leadUntil = new Date(until.getTime() - IST_MS);
+  const leadDateRange = { $gte: leadSince, $lte: leadUntil };
+  const leadDateFilter = {
+    $or: [
+      { meta_created_time: leadDateRange },
+      { meta_created_time: null, createdAt: leadDateRange },
+    ],
+  };
+
+  // ---- Batch 1: all independent DB queries in parallel ----
+  const [
+    summaryAggResult,
+    dailyTrend,
+    campaignAgg,
+    leadForms,
+    formLeadCounts,
+    leads_in_range,
+  ] = await Promise.all([
+    MetaInsights.aggregate([
+      { $match: { client_id: clientId, level: 'campaign', date: dateRange } },
+      {
+        $group: {
+          _id: null,
+          spend: { $sum: '$spend' },
+          impressions: { $sum: '$impressions' },
+          reach: { $sum: '$reach' },
+          clicks: { $sum: '$clicks' },
+          inline_link_clicks: { $sum: '$inline_link_clicks' },
+          form_leads: { $sum: '$leads' },
+          whatsapp_leads: { $sum: '$messaging_conversations_started' },
+          calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
+          conversions: { $sum: '$conversions' },
+          video_thruplay: { $sum: '$video_thruplay' },
+          rows: { $sum: 1 },
+        },
       },
-    },
-    {
-      $group: {
-        _id: null,
-        spend: { $sum: '$spend' },
-        impressions: { $sum: '$impressions' },
-        reach: { $sum: '$reach' },
-        clicks: { $sum: '$clicks' },
-        inline_link_clicks: { $sum: '$inline_link_clicks' },
-        form_leads: { $sum: '$leads' },
-        whatsapp_leads: { $sum: '$messaging_conversations_started' },
-        calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
-        conversions: { $sum: '$conversions' },
-        video_thruplay: { $sum: '$video_thruplay' },
-        rows: { $sum: 1 },
+    ]),
+    MetaInsights.aggregate([
+      { $match: { client_id: clientId, level: 'campaign', date: dateRange } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          spend: { $sum: '$spend' },
+          impressions: { $sum: '$impressions' },
+          clicks: { $sum: '$clicks' },
+          reach: { $sum: '$reach' },
+          form_leads: { $sum: '$leads' },
+          whatsapp_leads: { $sum: '$messaging_conversations_started' },
+        },
       },
-    },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          _id: 0,
+          date: '$_id',
+          spend: { $round: ['$spend', 2] },
+          impressions: 1, clicks: 1, reach: 1, form_leads: 1, whatsapp_leads: 1,
+          total_leads: { $add: ['$form_leads', '$whatsapp_leads'] },
+          ctr: { $cond: [{ $gt: ['$impressions', 0] }, { $round: [{ $multiply: [{ $divide: ['$clicks', '$impressions'] }, 100] }, 2] }, 0] },
+          cpc: { $cond: [{ $gt: ['$clicks', 0] }, { $round: [{ $divide: ['$spend', '$clicks'] }, 2] }, 0] },
+          cpm: { $cond: [{ $gt: ['$impressions', 0] }, { $round: [{ $multiply: [{ $divide: ['$spend', '$impressions'] }, 1000] }, 2] }, 0] },
+          cpl: { $cond: [{ $gt: [{ $add: ['$form_leads', '$whatsapp_leads'] }, 0] }, { $round: [{ $divide: ['$spend', { $add: ['$form_leads', '$whatsapp_leads'] }] }, 2] }, 0] },
+          leads: { $add: ['$form_leads', '$whatsapp_leads'] },
+        },
+      },
+    ]),
+    MetaInsights.aggregate([
+      { $match: { client_id: clientId, level: 'campaign', date: dateRange } },
+      {
+        $group: {
+          _id: '$entity_id',
+          spend: { $sum: '$spend' },
+          impressions: { $sum: '$impressions' },
+          clicks: { $sum: '$clicks' },
+          form_leads: { $sum: '$leads' },
+          whatsapp_leads: { $sum: '$messaging_conversations_started' },
+          calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
+        },
+      },
+      { $sort: { spend: -1 } },
+    ]),
+    MetaLeadForm.find({ client_id: clientId })
+      .select('form_id name status locale page_id last_seen_at')
+      .lean(),
+    Lead.aggregate([
+      { $match: { client: clientId, source: 'meta', ...leadDateFilter } },
+      { $group: { _id: '$meta_form_id', count: { $sum: 1 } } },
+    ]),
+    Lead.find({ client: clientId, source: 'meta', ...leadDateFilter })
+      .select('name email phone status meta_form_id meta_form_name meta_campaign_id meta_adset_id meta_ad_id platform createdAt meta_created_time raw_field_data utm_source utm_medium utm_campaign utm_content utm_term is_duplicate lead_location lead_category telecaller_name first_call_date first_call_label response_label remarks next_followup_date appointment_status appointment_date appointment_booked_date follow_ups')
+      .sort({ meta_created_time: -1, createdAt: -1 })
+      .lean(),
   ]);
+
+  // ---- Build summary from aggregation result ----
+  const [summaryAgg] = summaryAggResult;
   const sum = summaryAgg || {
     spend: 0, impressions: 0, reach: 0, clicks: 0, inline_link_clicks: 0,
     form_leads: 0, whatsapp_leads: 0, calls: 0, conversions: 0, video_thruplay: 0, rows: 0,
   };
   const totalLeads = (sum.form_leads || 0) + (sum.whatsapp_leads || 0);
   const summary = {
-    // Money
     spend: round2(sum.spend),
-    // Audience
     impressions: sum.impressions || 0,
     reach: sum.reach || 0,
-    // Actions
     clicks: sum.clicks || 0,
     inline_link_clicks: sum.inline_link_clicks || 0,
     video_thruplay: sum.video_thruplay || 0,
-    // Lead breakdown
     form_leads: sum.form_leads || 0,
     whatsapp_leads: sum.whatsapp_leads || 0,
     calls: sum.calls || 0,
     total_leads: totalLeads,
     conversions: sum.conversions || 0,
-    // KPIs
     ctr: sum.impressions > 0 ? round2((sum.clicks / sum.impressions) * 100) : 0,
     cpc: sum.clicks > 0 ? round2(sum.spend / sum.clicks) : 0,
     cpm: sum.impressions > 0 ? round2((sum.spend / sum.impressions) * 1000) : 0,
-    // Cost per conversion — denominator = leads + messages + calls
     cpl_form: sum.form_leads > 0 ? round2(sum.spend / sum.form_leads) : 0,
     cpl_whatsapp: sum.whatsapp_leads > 0 ? round2(sum.spend / sum.whatsapp_leads) : 0,
     cpl: totalLeads > 0 ? round2(sum.spend / totalLeads) : 0,
@@ -971,102 +1032,11 @@ export const getClientAnalytics = async (req, res) => {
       const totalConv = totalLeads + (sum.calls || 0);
       return totalConv > 0 ? round2(sum.spend / totalConv) : 0;
     })(),
-    // Legacy aliases (old field names — keep until frontend migrates)
     leads: totalLeads,
     messaging_conversations_started: sum.whatsapp_leads || 0,
   };
 
-  // ---- Daily trend (one row per day) ----
-  const dailyTrend = await MetaInsights.aggregate([
-    {
-      $match: {
-        client_id: clientId,
-        level: 'campaign',
-        date: dateRange,
-      },
-    },
-    {
-      $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-        spend: { $sum: '$spend' },
-        impressions: { $sum: '$impressions' },
-        clicks: { $sum: '$clicks' },
-        reach: { $sum: '$reach' },
-        form_leads: { $sum: '$leads' },
-        whatsapp_leads: { $sum: '$messaging_conversations_started' },
-      },
-    },
-    { $sort: { _id: 1 } },
-    {
-      $project: {
-        _id: 0,
-        date: '$_id',
-        spend: { $round: ['$spend', 2] },
-        impressions: 1,
-        clicks: 1,
-        reach: 1,
-        form_leads: 1,
-        whatsapp_leads: 1,
-        total_leads: { $add: ['$form_leads', '$whatsapp_leads'] },
-        // Derived per-day metrics — saves the frontend from repeating
-        // these calcs in every cell. Guard with cond to avoid div/0.
-        ctr: {
-          $cond: [
-            { $gt: ['$impressions', 0] },
-            { $round: [{ $multiply: [{ $divide: ['$clicks', '$impressions'] }, 100] }, 2] },
-            0,
-          ],
-        },
-        cpc: {
-          $cond: [
-            { $gt: ['$clicks', 0] },
-            { $round: [{ $divide: ['$spend', '$clicks'] }, 2] },
-            0,
-          ],
-        },
-        cpm: {
-          $cond: [
-            { $gt: ['$impressions', 0] },
-            { $round: [{ $multiply: [{ $divide: ['$spend', '$impressions'] }, 1000] }, 2] },
-            0,
-          ],
-        },
-        cpl: {
-          $cond: [
-            { $gt: [{ $add: ['$form_leads', '$whatsapp_leads'] }, 0] },
-            { $round: [{ $divide: ['$spend', { $add: ['$form_leads', '$whatsapp_leads'] }] }, 2] },
-            0,
-          ],
-        },
-        // legacy alias
-        leads: { $add: ['$form_leads', '$whatsapp_leads'] },
-      },
-    },
-  ]);
-
-  // ---- Campaign breakdown ----
-  const campaignAgg = await MetaInsights.aggregate([
-    {
-      $match: {
-        client_id: clientId,
-        level: 'campaign',
-        date: dateRange,
-      },
-    },
-    {
-      $group: {
-        _id: '$entity_id',
-        spend: { $sum: '$spend' },
-        impressions: { $sum: '$impressions' },
-        clicks: { $sum: '$clicks' },
-        form_leads: { $sum: '$leads' },
-        whatsapp_leads: { $sum: '$messaging_conversations_started' },
-        calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
-      },
-    },
-    { $sort: { spend: -1 } },
-  ]);
-
+  // ---- Build campaigns (campaignDocs lookup depends on campaignAgg) ----
   const campaignIds = campaignAgg.map((c) => c._id);
   const campaignDocs = await MetaCampaign.find({ campaign_id: { $in: campaignIds } })
     .select('campaign_id name status objective effective_status daily_budget')
@@ -1094,9 +1064,7 @@ export const getClientAnalytics = async (req, res) => {
       calls,
       total_leads: totalConv,
       ctr: c.impressions > 0 ? round2((c.clicks / c.impressions) * 100) : 0,
-      // avg_cost_per_conv = spend / (leads + messages + calls)
       avg_cost_per_conv: totalConv > 0 ? round2(c.spend / totalConv) : 0,
-      // legacy aliases (kept for backward compat)
       cpl: totalConv > 0 ? round2(c.spend / totalConv) : 0,
       cpl_form: formLeads > 0 ? round2(c.spend / formLeads) : 0,
       cpl_whatsapp: waLeads > 0 ? round2(c.spend / waLeads) : 0,
@@ -1105,36 +1073,7 @@ export const getClientAnalytics = async (req, res) => {
     };
   });
 
-  // ---- Lead forms ----
-  // Lead date filter: Meta's `meta_created_time` is stored in UTC, but Indian
-  // clients submit leads in IST (UTC+5:30). Shift the boundary by -5h30m so
-  // "today" means IST midnight → IST 23:59, not UTC midnight → UTC 23:59.
-  // (MetaInsights dates stay on UTC boundaries — they come from Meta's own
-  // date_start field which is already in ad-account timezone.)
-  const IST_MS = 5.5 * 60 * 60 * 1000;
-  const leadSince = new Date(since.getTime() - IST_MS);
-  const leadUntil = new Date(until.getTime() - IST_MS);
-  const leadDateRange = { $gte: leadSince, $lte: leadUntil };
-  const leadDateFilter = {
-    $or: [
-      { meta_created_time: leadDateRange },
-      { meta_created_time: null, createdAt: leadDateRange },
-    ],
-  };
-
-  const leadForms = await MetaLeadForm.find({ client_id: clientId })
-    .select('form_id name status locale page_id last_seen_at')
-    .lean();
-  const formLeadCounts = await Lead.aggregate([
-    {
-      $match: {
-        client: clientId,
-        source: 'meta',
-        ...leadDateFilter,
-      },
-    },
-    { $group: { _id: '$meta_form_id', count: { $sum: 1 } } },
-  ]);
+  // ---- Lead forms count map ----
   const leadCountByForm = new Map(formLeadCounts.map((r) => [r._id, r.count]));
   const lead_forms = leadForms.map((f) => ({
     form_id: f.form_id,
@@ -1144,19 +1083,6 @@ export const getClientAnalytics = async (req, res) => {
     leads_in_range: leadCountByForm.get(f.form_id) || 0,
     last_seen_at: f.last_seen_at,
   }));
-
-  // ---- Leads in range ----
-  // Filter by Meta's `meta_created_time` (actual form submission), not our
-  // `createdAt` (DB ingestion), so leads synced late still land in the right
-  // window. Mirrors the filter used for `lead_forms.leads_in_range`.
-  const leads_in_range = await Lead.find({
-    client: clientId,
-    source: 'meta',
-    ...leadDateFilter,
-  })
-    .select('name email phone status meta_form_id meta_form_name meta_campaign_id meta_adset_id meta_ad_id platform createdAt meta_created_time raw_field_data utm_source utm_medium utm_campaign utm_content utm_term is_duplicate lead_location lead_category telecaller_name first_call_date first_call_label response_label remarks next_followup_date appointment_status appointment_date appointment_booked_date follow_ups')
-    .sort({ meta_created_time: -1, createdAt: -1 })
-    .lean();
 
   // ---- Override Leads + Messages with actual CRM records ------------------
   // MetaInsights campaign attribution misses organic form leads and counts
@@ -1208,88 +1134,7 @@ export const getClientAnalytics = async (req, res) => {
     c.cpl_whatsapp = crm.whatsapp > 0 ? round2(c.spend / crm.whatsapp) : 0;
   }
 
-  // ---- Live Meta-side figures ------------------------------------------
-  // Meta exposes the prepaid balance + lifetime spend directly, unlike
-  // Google Ads. Pull them on every analytics fetch so the frontend always
-  // shows current values. `balance` and `amount_spent` come back as paise
-  // strings — convert to rupees with 2-decimal precision.
-  let meta_account = null;
-  if (client.meta_ad_account_id) {
-    // Fields persisted on the Client document — used both as a defensive
-    // fallback when the live Meta verify fails AND to backfill any keys
-    // the live call doesn't return (e.g. timezone_name has been observed
-    // missing on freshly synced accounts). The admin Ads page reads
-    // these directly from its cached client list, which is why this
-    // panel never goes blank there. The client portal only sees the API
-    // response, so we have to do the merge here.
-    const persisted = {
-      id: client.meta_ad_account_id || '',
-      name: client.meta_ad_account_name || '',
-      currency: client.meta_ad_account_currency || '',
-      timezone_name: client.meta_ad_account_timezone || '',
-    };
-    try {
-      const { account } = await verifyAdAccountAccess(client.meta_ad_account_id);
-
-      // True available balance: funding_source_details.display_string for
-      // PREPAID accounts contains "Available balance (₹22,509.40 INR)".
-      // For POSTPAID (credit card) accounts the string shows card details like
-      // "Visa •••• 1234 (₹802.13)" where the number is the billing-cycle charge,
-      // not a remaining balance. Only extract when "Available balance" is present.
-      let available_balance = null;
-      const ds = account.funding_source_details?.display_string || '';
-      if (/available\s+balance/i.test(ds)) {
-        const m = ds.match(/[\d,]+(?:\.\d+)?/);
-        if (m) available_balance = round2(Number(m[0].replace(/,/g, '')));
-      }
-
-      meta_account = {
-        id: account.id || persisted.id,
-        name: account.name || persisted.name,
-        currency: account.currency || persisted.currency,
-        timezone_name: account.timezone_name || persisted.timezone_name,
-        account_status: account.account_status,
-        available_balance,
-        balance: round2(Number(account.balance || 0) / 100),
-        amount_spent: round2(Number(account.amount_spent || 0) / 100),
-        disable_reason: account.disable_reason ?? 0,
-        fetched_at: new Date(),
-      };
-    } catch (err) {
-      // Live verify failed — keep whatever the Client doc has so the
-      // portal's Meta panel still renders Ad Account / Currency / TZ.
-      meta_account = {
-        ...persisted,
-        error: err.message,
-        fetched_at: new Date(),
-      };
-    }
-  }
-
-  // ---- Today's spend (always today, independent of selected date range) ----
-  // Meta's account.balance field is the billing-cycle outstanding for postpaid
-  // accounts — not a "remaining prepaid balance". We query our own synced
-  // MetaInsights for today's date to give a reliable "today's spend" figure.
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setUTCHours(23, 59, 59, 999);
-  const [todaySummaryAgg] = await MetaInsights.aggregate([
-    {
-      $match: {
-        client_id: clientId,
-        level: 'campaign',
-        date: { $gte: todayStart, $lte: todayEnd },
-      },
-    },
-    { $group: { _id: null, spend: { $sum: '$spend' } } },
-  ]);
-  const today_spend = round2((todaySummaryAgg || {}).spend || 0);
-
-  // ---- Hourly leads (single-day only) ------------------------------------
-  // MetaInsights is daily-only so hourly spend isn't available. When the
-  // selected range is a single day, build per-IST-hour lead counts from the
-  // individual lead timestamps (meta_created_time / createdAt).
+  // ---- Hourly leads (single-day only, computed from leads_in_range) --------
   const IST_OFFSET_HOURLY = 5.5 * 60 * 60 * 1000;
   const isSingleDay = since.toISOString().slice(0, 10) === until.toISOString().slice(0, 10);
   let hourly_leads = null;
@@ -1306,6 +1151,56 @@ export const getClientAnalytics = async (req, res) => {
       .filter((_, h) => h >= 7 && h <= 23);
   }
 
+  // ---- Batch 2: Meta API + today's spend + entity counts in parallel -------
+  const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
+  const todayEnd   = new Date(); todayEnd.setUTCHours(23, 59, 59, 999);
+
+  const fetchMetaAccount = async () => {
+    if (!client.meta_ad_account_id) return null;
+    const persisted = {
+      id: client.meta_ad_account_id || '',
+      name: client.meta_ad_account_name || '',
+      currency: client.meta_ad_account_currency || '',
+      timezone_name: client.meta_ad_account_timezone || '',
+    };
+    try {
+      const { account } = await verifyAdAccountAccess(client.meta_ad_account_id);
+      let available_balance = null;
+      const ds = account.funding_source_details?.display_string || '';
+      if (/available\s+balance/i.test(ds)) {
+        const m = ds.match(/[\d,]+(?:\.\d+)?/);
+        if (m) available_balance = round2(Number(m[0].replace(/,/g, '')));
+      }
+      return {
+        id: account.id || persisted.id,
+        name: account.name || persisted.name,
+        currency: account.currency || persisted.currency,
+        timezone_name: account.timezone_name || persisted.timezone_name,
+        account_status: account.account_status,
+        available_balance,
+        balance: round2(Number(account.balance || 0) / 100),
+        amount_spent: round2(Number(account.amount_spent || 0) / 100),
+        disable_reason: account.disable_reason ?? 0,
+        fetched_at: new Date(),
+      };
+    } catch (err) {
+      return { ...persisted, error: err.message, fetched_at: new Date() };
+    }
+  };
+
+  const [meta_account, todaySummaryResult, campaignCount, adsetCount, adCount] = await Promise.all([
+    fetchMetaAccount(),
+    MetaInsights.aggregate([
+      { $match: { client_id: clientId, level: 'campaign', date: { $gte: todayStart, $lte: todayEnd } } },
+      { $group: { _id: null, spend: { $sum: '$spend' } } },
+    ]),
+    client.meta_ad_account_id ? MetaCampaign.countDocuments({ client_id: clientId }) : Promise.resolve(0),
+    client.meta_ad_account_id ? MetaAdSet.countDocuments({ client_id: clientId }) : Promise.resolve(0),
+    client.meta_ad_account_id ? MetaAd.countDocuments({ client_id: clientId }) : Promise.resolve(0),
+  ]);
+
+  const today_spend = round2((todaySummaryResult[0] || {}).spend || 0);
+
   res.json({
     client_id: clientId,
     client_name: client.clientName,
@@ -1321,11 +1216,7 @@ export const getClientAnalytics = async (req, res) => {
     leads_in_range,
     meta_account,
     today_spend,
-    entity_counts: {
-      campaigns: await MetaCampaign.countDocuments({ client_id: clientId }),
-      adsets: await MetaAdSet.countDocuments({ client_id: clientId }),
-      ads: await MetaAd.countDocuments({ client_id: clientId }),
-    },
+    entity_counts: { campaigns: campaignCount, adsets: adsetCount, ads: adCount },
   });
 };
 
