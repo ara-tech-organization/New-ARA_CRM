@@ -400,6 +400,18 @@ const Dashboard = () => {
     }).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
   }, [clientsForDisplay, dateByClient]);
 
+  // Derive Leads / Messages / Calls totals from metaDataMap (already loaded above).
+  // Must be before any early return to satisfy React hooks ordering rules.
+  const metaBandData = useMemo(() => {
+    const vals = Object.values(metaDataMap);
+    if (vals.length === 0) return null;
+    return {
+      leads:    vals.reduce((s, c) => s + (c.form_leads    || 0), 0),
+      messages: vals.reduce((s, c) => s + (c.whatsapp_leads || 0), 0),
+      calls:    vals.reduce((s, c) => s + (c.calls          || 0), 0),
+    };
+  }, [metaDataMap]);
+
   if (initialLoading) {
     return <PageLoader message="Loading dashboard..." />;
   }
@@ -497,17 +509,6 @@ const Dashboard = () => {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const userName = user?.name || user?.email?.split('@')[0] || 'there';
-
-  // Derive Leads / Messages / Calls totals from metaDataMap (already loaded above).
-  const metaBandData = useMemo(() => {
-    const vals = Object.values(metaDataMap);
-    if (vals.length === 0) return null;
-    return {
-      leads:    vals.reduce((s, c) => s + (c.form_leads    || 0), 0),
-      messages: vals.reduce((s, c) => s + (c.whatsapp_leads || 0), 0),
-      calls:    vals.reduce((s, c) => s + (c.calls          || 0), 0),
-    };
-  }, [metaDataMap]);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enGB}>
