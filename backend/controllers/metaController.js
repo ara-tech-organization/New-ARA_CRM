@@ -1319,60 +1319,73 @@ export const getClientsAdsComparison = async (req, res) => {
 
     const clientIds = clients.map((c) => c._id);
 
-    // Single round-trip aggregation across all clients.
-    const aggRows = await MetaInsights.aggregate([
-      {
-        $match: {
-          client_id: { $in: clientIds },
-          level: 'campaign',
-          date: dateRange,
-        },
-      },
-      {
-        $group: {
-          _id: '$client_id',
-          spend: { $sum: '$spend' },
-          impressions: { $sum: '$impressions' },
-          reach: { $sum: '$reach' },
-          clicks: { $sum: '$clicks' },
-          form_leads: { $sum: '$leads' },
-          whatsapp_leads: { $sum: '$messaging_conversations_started' },
-        },
-      },
-    ]);
-    const byId = new Map(aggRows.map((r) => [String(r._id), r]));
+    // IST-adjusted lead date boundaries
+    const IST_MS_C = 5.5 * 60 * 60 * 1000;
+    const leadSince = new Date(since.getTime() - IST_MS_C);
+    const leadUntil = new Date(until.getTime() - IST_MS_C);
+    const leadDateFilter = {
+      $or: [
+        { meta_created_time: { $gte: leadSince, $lte: leadUntil } },
+        { meta_created_time: null, createdAt: { $gte: leadSince, $lte: leadUntil } },
+      ],
+    };
 
-    // Aggregate budgets per client. Daily lifetime budgets are stored on
-    // MetaCampaign — sum across active campaigns to approximate "Budget".
-    const budgetRows = await MetaCampaign.aggregate([
-      { $match: { client_id: { $in: clientIds } } },
-      {
-        $group: {
-          _id: '$client_id',
-          totalBudget: {
-            $sum: {
-              $add: [
-                { $ifNull: ['$daily_budget', 0] },
-                { $ifNull: ['$lifetime_budget', 0] },
-              ],
-            },
+    const [aggRows, budgetRows, crmLeadRows] = await Promise.all([
+      MetaInsights.aggregate([
+        { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
+        {
+          $group: {
+            _id: '$client_id',
+            spend: { $sum: '$spend' },
+            impressions: { $sum: '$impressions' },
+            reach: { $sum: '$reach' },
+            clicks: { $sum: '$clicks' },
+            calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
           },
         },
-      },
+      ]),
+      MetaCampaign.aggregate([
+        { $match: { client_id: { $in: clientIds } } },
+        {
+          $group: {
+            _id: '$client_id',
+            totalBudget: { $sum: { $add: [{ $ifNull: ['$daily_budget', 0] }, { $ifNull: ['$lifetime_budget', 0] }] } },
+          },
+        },
+      ]),
+      Lead.aggregate([
+        { $match: { client: { $in: clientIds }, source: 'meta', ...leadDateFilter } },
+        {
+          $group: {
+            _id: '$client',
+            form_leads: { $sum: { $cond: [{ $ne: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] }, 1, 0] } },
+            whatsapp_leads: { $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] }, 1, 0] } },
+          },
+        },
+      ]),
     ]);
+
+    const byId = new Map(aggRows.map((r) => [String(r._id), r]));
     const budgetById = new Map(budgetRows.map((r) => [String(r._id), r.totalBudget]));
+    const crmById = new Map(crmLeadRows.map((r) => [String(r._id), r]));
 
     const overviews = clients.map((c) => {
       const row = byId.get(String(c._id)) || {};
+      const crm = crmById.get(String(c._id)) || { form_leads: 0, whatsapp_leads: 0 };
       const spend = round2(row.spend);
       const impressions = row.impressions || 0;
       const reach = row.reach || 0;
       const clicks = row.clicks || 0;
-      const leads = (row.form_leads || 0) + (row.whatsapp_leads || 0);
+      const calls = row.calls || 0;
+      const formLeads = crm.form_leads || 0;
+      const whatsappLeads = crm.whatsapp_leads || 0;
+      const leads = formLeads + whatsappLeads;
+      const totalConv = leads + calls;
       const ctr = impressions > 0 ? round2((clicks / impressions) * 100) : 0;
       const cpc = clicks > 0 ? round2(spend / clicks) : 0;
       const cpm = impressions > 0 ? round2((spend / impressions) * 1000) : 0;
       const cpl = leads > 0 ? round2(spend / leads) : 0;
+      const avg_cost_per_conv = totalConv > 0 ? round2(spend / totalConv) : 0;
       const frequency = reach > 0 ? round2(impressions / reach) : 0;
       const firstPage = Array.isArray(c.meta_pages) && c.meta_pages.length > 0 ? c.meta_pages[0] : null;
       return {
@@ -1382,25 +1395,10 @@ export const getClientsAdsComparison = async (req, res) => {
         metaAdAccountId: c.meta_ad_account_id || '',
         pageName: firstPage?.page_name || '',
         currency: c.meta_ad_account_currency || 'INR',
-        // Budget fields — Meta doesn't expose a single "fund" + "available
-        // balance" the way Google's billing record does, so keep these as
-        // best-effort sums (campaign budgets) and zeros for the columns
-        // we don't have a source for. Frontend renders them with the same
-        // INR formatter so missing values just show ₹0.
         totalBudget: round2(budgetById.get(String(c._id)) || 0),
         availableBalance: 0,
-        spend,
-        reach,
-        impressions,
-        frequency,
-        clicks,
-        ctr,
-        cpc,
-        cpm,
-        leads,
-        formLeads: row.form_leads || 0,
-        whatsappLeads: row.whatsapp_leads || 0,
-        cpl,
+        spend, reach, impressions, frequency, clicks, ctr, cpc, cpm,
+        leads, formLeads, whatsappLeads, calls, avg_cost_per_conv, cpl,
       };
     });
 

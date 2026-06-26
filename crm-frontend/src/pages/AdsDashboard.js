@@ -767,8 +767,10 @@ const AdsDashboard = () => {
                         <MuiTooltip arrow title="Click-through rate = clicks ÷ impressions"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CTR</TableCell></MuiTooltip>
                         <MuiTooltip arrow title="Cost per click = spend ÷ clicks"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CPC</TableCell></MuiTooltip>
                         <MuiTooltip arrow title="Cost per 1,000 impressions"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CPM</TableCell></MuiTooltip>
-                        <MuiTooltip arrow title="Form + WhatsApp leads in the range"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Leads</TableCell></MuiTooltip>
-                        <MuiTooltip arrow title="Cost per lead = spend ÷ leads"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">CPL</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Actual form leads from CRM"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Leads</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Actual WhatsApp leads from CRM"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Messages</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Click-to-call actions from Meta campaigns"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Calls</TableCell></MuiTooltip>
+                        <MuiTooltip arrow title="Avg cost per conversion = spend ÷ (leads + messages + calls)"><TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10`, cursor: 'help' }} align="right">Avg Cost/Conv</TableCell></MuiTooltip>
                         <TableCell sx={{ bgcolor: `${META_BLUE}10` }}></TableCell>
                       </TableRow>
                     </TableHead>
@@ -819,11 +821,13 @@ const AdsDashboard = () => {
                           <TableCell align="right" sx={{ fontWeight: 600, color: BROWN }}>{fmtPct(c.ctr)}</TableCell>
                           <TableCell align="right">{fmtINR2(c.cpc)}</TableCell>
                           <TableCell align="right">{fmtINR(c.cpm)}</TableCell>
-                          <TableCell align="right">{fmtNum(c.leads)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.formLeads)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.whatsappLeads)}</TableCell>
+                          <TableCell align="right">{fmtNum(c.calls)}</TableCell>
                           <TableCell align="right">
-                            {c.cpl > 0 ? (
-                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: c.cpl > 500 ? '#ef4444' : '#10b981' }}>
-                                {fmtINR(c.cpl)}
+                            {c.avg_cost_per_conv > 0 ? (
+                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: c.avg_cost_per_conv > 500 ? '#ef4444' : '#10b981' }}>
+                                {fmtINR(c.avg_cost_per_conv)}
                               </Typography>
                             ) : '—'}
                           </TableCell>
