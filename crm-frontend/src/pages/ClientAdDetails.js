@@ -1018,19 +1018,26 @@ const ClientAdDetails = () => {
                       <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Page Name</Typography>
                       <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{client?.meta_pages?.[0]?.page_name || '—'}</Typography>
                     </Grid>
-                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account</Typography>
-                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.name || client?.meta_ad_account_name || '—'}</Typography>
-                      {client?.meta_ad_account_id && (
-                        <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', fontFamily: 'monospace' }}>{client.meta_ad_account_id}</Typography>
-                      )}
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency / Time Zone</Typography>
-                      <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                        {metaAccount?.currency || client?.meta_ad_account_currency || '—'} · {metaAccount?.timezone_name || client?.meta_ad_account_timezone || '—'}
-                      </Typography>
-                    </Grid>
+                    {client?.meta_ad_account_id ? (
+                      <>
+                        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                          <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Ad Account</Typography>
+                          <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{metaAccount?.name || client?.meta_ad_account_name || '—'}</Typography>
+                          <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', fontFamily: 'monospace' }}>{client.meta_ad_account_id}</Typography>
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                          <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Currency / Time Zone</Typography>
+                          <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                            {metaAccount?.currency || client?.meta_ad_account_currency || '—'} · {metaAccount?.timezone_name || client?.meta_ad_account_timezone || '—'}
+                          </Typography>
+                        </Grid>
+                      </>
+                    ) : (
+                      <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+                        <Chip label="Page-only · No Ad Account" size="small" sx={{ height: 22, fontSize: '0.72rem', fontWeight: 600, bgcolor: '#f59e0b18', color: '#b45309', border: '1px solid #f59e0b40' }} />
+                        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.5 }}>Leads are collected via organic form submissions on this page.</Typography>
+                      </Grid>
+                    )}
                     {metaRange && (
                       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                         <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Data Range</Typography>
@@ -1039,14 +1046,16 @@ const ClientAdDetails = () => {
                         </Typography>
                       </Grid>
                     )}
-                    <Grid size={{ xs: 12, sm: 6, md: 6 }}>
-                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Entities</Typography>
-                      <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
-                        <Chip label={`${metaEntityCounts.campaigns ?? 0} campaigns`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
-                        <Chip label={`${metaEntityCounts.adsets ?? 0} ad sets`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${COPPER}15`, color: COPPER, fontWeight: 600 }} />
-                        <Chip label={`${metaEntityCounts.ads ?? 0} ads`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${BROWN}15`, color: BROWN, fontWeight: 600 }} />
-                      </Box>
-                    </Grid>
+                    {client?.meta_ad_account_id && (
+                      <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Entities</Typography>
+                        <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+                          <Chip label={`${metaEntityCounts.campaigns ?? 0} campaigns`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${META_BLUE}15`, color: META_BLUE, fontWeight: 600 }} />
+                          <Chip label={`${metaEntityCounts.adsets ?? 0} ad sets`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${COPPER}15`, color: COPPER, fontWeight: 600 }} />
+                          <Chip label={`${metaEntityCounts.ads ?? 0} ads`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${BROWN}15`, color: BROWN, fontWeight: 600 }} />
+                        </Box>
+                      </Grid>
+                    )}
                   </Grid>
                 </Paper>
 
@@ -1150,11 +1159,11 @@ const ClientAdDetails = () => {
                   </>
                 )}
 
-                {/* Campaigns */}
-                <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
+                {/* Campaigns — hidden for page-only clients */}
+                {client?.meta_ad_account_id && <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
                   Campaigns {metaCampaigns.length > 0 && `(${metaCampaigns.length})`}
-                </Typography>
-                <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                </Typography>}
+                {client?.meta_ad_account_id && <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
                   <Table size="small" sx={{ minWidth: 1200 }}>
                     <TableHead>
                       <TableRow>
@@ -1210,7 +1219,7 @@ const ClientAdDetails = () => {
                       )}
                     </TableBody>
                   </Table>
-                </TableContainer>
+                </TableContainer>}
 
                 {/* Daily / Hourly Trend Chart */}
                 {metaDaily.length > 0 && (() => {
