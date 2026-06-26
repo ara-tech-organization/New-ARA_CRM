@@ -366,6 +366,7 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
           },
           metaForm: { $sum: { $ifNull: ['$leads', 0] } },
           metaWhatsapp: { $sum: { $ifNull: ['$messaging_conversations_started', 0] } },
+          metaCalls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
           metaFund: { $sum: { $ifNull: ['$spend', 0] } },
         },
       },
@@ -390,6 +391,7 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
       clientName: clientNameById.get(String(r._id.clientId)) || '',
       metaForm: r.metaForm || 0,
       metaWhatsapp: r.metaWhatsapp || 0,
+      metaCalls: r.metaCalls || 0,
       metaFund: r.metaFund || 0,
       googleCall: 0,
       googleWebsite: 0,
@@ -403,7 +405,7 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
     });
 
   const totals = {
-    metaForm: 0, metaWhatsapp: 0, metaFund: 0, metaTotalLeads: 0,
+    metaForm: 0, metaWhatsapp: 0, metaCalls: 0, metaFund: 0, metaTotalLeads: 0,
     googleCall: 0, googleWebsite: 0, googleFund: 0, googleTotalLeads: 0,
     totalLeads: 0, totalSpend: 0, entryCount: 0,
   };
@@ -414,6 +416,7 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
     const date = r._id.date;
     const metaForm = r.metaForm || 0;
     const metaWhatsapp = r.metaWhatsapp || 0;
+    const metaCalls = r.metaCalls || 0;
     const metaFund = round2(r.metaFund || 0);
     const googleCall = r.googleCall || 0;
     const googleWebsite = r.googleWebsite || 0;
@@ -427,6 +430,7 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
 
     totals.metaForm += metaForm;
     totals.metaWhatsapp += metaWhatsapp;
+    totals.metaCalls += metaCalls;
     totals.metaFund += metaFund;
     totals.metaTotalLeads += metaTotalLeads;
     totals.googleCall += googleCall;
@@ -443,6 +447,7 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
       date,
       metaForm,
       metaWhatsapp,
+      metaCalls,
       metaFund,
       metaCPL,
       metaTotalLeads,

@@ -931,6 +931,7 @@ export const getClientAnalytics = async (req, res) => {
         inline_link_clicks: { $sum: '$inline_link_clicks' },
         form_leads: { $sum: '$leads' },
         whatsapp_leads: { $sum: '$messaging_conversations_started' },
+        calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
         conversions: { $sum: '$conversions' },
         video_thruplay: { $sum: '$video_thruplay' },
         rows: { $sum: 1 },
@@ -939,7 +940,7 @@ export const getClientAnalytics = async (req, res) => {
   ]);
   const sum = summaryAgg || {
     spend: 0, impressions: 0, reach: 0, clicks: 0, inline_link_clicks: 0,
-    form_leads: 0, whatsapp_leads: 0, conversions: 0, video_thruplay: 0, rows: 0,
+    form_leads: 0, whatsapp_leads: 0, calls: 0, conversions: 0, video_thruplay: 0, rows: 0,
   };
   const totalLeads = (sum.form_leads || 0) + (sum.whatsapp_leads || 0);
   const summary = {
@@ -955,6 +956,7 @@ export const getClientAnalytics = async (req, res) => {
     // Lead breakdown
     form_leads: sum.form_leads || 0,
     whatsapp_leads: sum.whatsapp_leads || 0,
+    calls: sum.calls || 0,
     total_leads: totalLeads,
     conversions: sum.conversions || 0,
     // KPIs
@@ -1455,6 +1457,7 @@ export const getMetaDashboardOverview = async (req, res) => {
           spend: { $sum: '$spend' },
           form_leads: { $sum: '$leads' },
           whatsapp_leads: { $sum: '$messaging_conversations_started' },
+          calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
         },
       },
     ]);
@@ -1465,12 +1468,61 @@ export const getMetaDashboardOverview = async (req, res) => {
       const whatsapp_leads = r.whatsapp_leads || 0;
       const total_leads = form_leads + whatsapp_leads;
       const cpl = total_leads > 0 ? round2(spend / total_leads) : 0;
-      return { clientId: r._id, spend, total_leads, form_leads, whatsapp_leads, cpl };
+      const calls = r.calls || 0;
+      return { clientId: r._id, spend, total_leads, form_leads, whatsapp_leads, calls, cpl };
     });
 
     res.json({ count: overviews.length, clients: overviews });
   } catch (error) {
     console.error('getMetaDashboardOverview error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// GET /api/meta/daily-metrics?from=YYYY-MM-DD&to=YYYY-MM-DD[&clientId=ObjectId]
+// Date-wise totals of Leads / Messages / Calls across all Meta-enabled clients
+// (or one client when clientId is supplied). Powers the 3-row metrics band.
+export const getMetaDailyMetrics = async (req, res) => {
+  try {
+    const { since, until } = parseDateRange(req.query);
+    const clientId = req.query.clientId;
+
+    const matchStage = {
+      level: 'campaign',
+      date: { $gte: since, $lte: until },
+    };
+    if (clientId && /^[0-9a-fA-F]{24}$/.test(clientId)) {
+      matchStage.client_id = new (await import('mongoose')).default.Types.ObjectId(clientId);
+    }
+
+    const rows = await MetaInsights.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+          leads:    { $sum: '$leads' },
+          messages: { $sum: '$messaging_conversations_started' },
+          calls:    { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const dates    = rows.map((r) => r._id);
+    const leads    = rows.map((r) => r.leads    || 0);
+    const messages = rows.map((r) => r.messages || 0);
+    const calls    = rows.map((r) => r.calls    || 0);
+
+    const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+    res.json({
+      dates,
+      leads,
+      messages,
+      calls,
+      totals: { leads: sum(leads), messages: sum(messages), calls: sum(calls) },
+    });
+  } catch (error) {
+    console.error('getMetaDailyMetrics error:', error);
     res.status(500).json({ error: error.message });
   }
 };

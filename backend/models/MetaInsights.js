@@ -43,6 +43,7 @@ const metaInsightsSchema = new mongoose.Schema(
     // Lead-focused shortcuts (mirror DailyLeadData.metaData)
     leads: { type: Number, default: 0 },
     messaging_conversations_started: { type: Number, default: 0 },
+    calls: { type: Number, default: 0 },
     conversions: { type: Number, default: 0 },
     conversion_values: { type: Number, default: 0 },
 

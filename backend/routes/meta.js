@@ -39,6 +39,7 @@ import {
   deleteClientLead,
   getClientsAdsComparison,
   getMetaDashboardOverview,
+  getMetaDailyMetrics,
   getTelecallingReport,
   getMonthlyAbstract,
   saveMonthlyAbstractCell,
@@ -112,6 +113,7 @@ router.get("/clients", getClientsAdsComparison);
 // fields the home Dashboard's per-client cards need. Replaces an N+1 that
 // fired one /client/:id/analytics call per client on dashboard load.
 router.get("/dashboard-overview", getMetaDashboardOverview);
+router.get("/daily-metrics", getMetaDailyMetrics);
 
 // Inline CRM edits from MetaLeadsTable. Reachable from both the admin
 // /client-ads page and the client portal — same auth pattern as the

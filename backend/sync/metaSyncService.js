@@ -214,6 +214,7 @@ const upsertInsights = async (clientId, adAccountId, rows, level) => {
           r.actions,
           'onsite_conversion.messaging_conversation_started_7d'
         ),
+        calls: actionValue(r.actions, 'click_to_call_native_call_placed'),
         conversions: toNumber(r.conversions),
         conversion_values: toNumber(r.conversion_values),
         video_thruplay: actionValue(
