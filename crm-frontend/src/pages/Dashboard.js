@@ -30,7 +30,6 @@ import {
   PieChart, Pie, Cell,
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
-import MetricsBand from '../components/MetricsBand';
 const CLIENT_COLORS = ['#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723'];
 
 // --- Client Performance Card — clickable, navigates to client ads detail page ---
@@ -400,18 +399,6 @@ const Dashboard = () => {
     }).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
   }, [clientsForDisplay, dateByClient]);
 
-  // Derive Leads / Messages / Calls totals from metaDataMap (already loaded above).
-  // Must be before any early return to satisfy React hooks ordering rules.
-  const metaBandData = useMemo(() => {
-    const vals = Object.values(metaDataMap);
-    if (vals.length === 0) return null;
-    return {
-      leads:    vals.reduce((s, c) => s + (c.form_leads    || 0), 0),
-      messages: vals.reduce((s, c) => s + (c.whatsapp_leads || 0), 0),
-      calls:    vals.reduce((s, c) => s + (c.calls          || 0), 0),
-    };
-  }, [metaDataMap]);
-
   if (initialLoading) {
     return <PageLoader message="Loading dashboard..." />;
   }
@@ -626,16 +613,6 @@ const Dashboard = () => {
           </Box>
         </MuiAlert>
       )}
-
-      {/* ── Meta 3-metric band: Leads / Messages / Calls ─────────── */}
-      <Box sx={{ mb: 2 }}>
-        <MetricsBand
-          from={selectedDate}
-          to={selectedDate}
-          data={metaBandData}
-          loading={metaLoading}
-        />
-      </Box>
 
       {/* ── Row 1: Headline KPIs (big cards) — Total Clients, Active
           Clients, Total Leads. Per-platform totals and spend used to

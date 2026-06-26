@@ -28,7 +28,6 @@ import MetaLeadsTable from '../components/MetaLeadsTable';
 import TelecallingReport from '../components/TelecallingReport';
 import MonthlyAbstract from '../components/MonthlyAbstract';
 import LeadCheckPanel from '../components/LeadCheckPanel';
-import MetricsBand from '../components/MetricsBand';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -1051,11 +1050,6 @@ const ClientAdDetails = () => {
                   </Grid>
                 </Paper>
 
-                {/* 3-metric summary band */}
-                <Box sx={{ mb: 2 }}>
-                  <MetricsBand from={dateFrom} to={dateTo} clientId={clientId} />
-                </Box>
-
                 {/* Billing — from meta_account (live ad-account numbers).
                     The backend's getClientAnalytics tries to verify the
                     ad account live with Meta on every request. If that
@@ -1135,14 +1129,13 @@ const ClientAdDetails = () => {
                     <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1, borderLeft: `3px solid ${META_BLUE}`, pl: 1.5 }}>
                       Performance Summary
                     </Typography>
-                    {/* Row 1 — Outcomes (spend + leads with paired CPL) */}
+                    {/* Row 1 — Outcomes: Spend + Leads + Messages + Calls + Avg Cost/Conv */}
                     <Grid container spacing={1.5} sx={{ mb: 2 }}>
                       {metaSummary.spend != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Spend" value={fmtINR(metaSummary.spend)} color={META_BLUE} icon={<WalletIcon />} /></Grid>}
-                      {metaSummary.total_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Total Leads" value={fmtNum(metaSummary.total_leads)} color={META_BLUE} icon={<GroupsIcon />} sublabel={metaSummary.cpl != null ? `${fmtINR(metaSummary.cpl)}/lead` : null} /></Grid>}
-                      {metaSummary.form_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="📋 Leads" value={fmtNum(metaSummary.form_leads)} color={COPPER} icon={<GroupsIcon />} sublabel={metaSummary.cpl_form != null ? `${fmtINR(metaSummary.cpl_form)}/lead` : null} /></Grid>}
-                      {metaSummary.whatsapp_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="💬 Messages" value={fmtNum(metaSummary.whatsapp_leads)} color={BROWN} icon={<ChatIcon />} sublabel={metaSummary.cpl_whatsapp != null ? `${fmtINR(metaSummary.cpl_whatsapp)}/lead` : null} /></Grid>}
-                      {metaSummary.calls != null && metaSummary.calls > 0 && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="📞 Calls" value={fmtNum(metaSummary.calls)} color="#2e7d32" icon={<PeopleIcon />} /></Grid>}
-                      {metaSummary.cpl != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPL (Overall)" value={fmtINR(metaSummary.cpl)} color={META_BLUE} icon={<MoneyIcon />} /></Grid>}
+                      {metaSummary.form_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="📋 Leads" value={fmtNum(metaSummary.form_leads)} color={COPPER} icon={<GroupsIcon />} /></Grid>}
+                      {metaSummary.whatsapp_leads != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="💬 Messages" value={fmtNum(metaSummary.whatsapp_leads)} color={BROWN} icon={<ChatIcon />} /></Grid>}
+                      {metaSummary.calls != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="📞 Calls" value={fmtNum(metaSummary.calls)} color="#2e7d32" icon={<PeopleIcon />} /></Grid>}
+                      {metaSummary.avg_cost_per_conv != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Avg Cost/Conv" value={metaSummary.avg_cost_per_conv > 0 ? fmtINR(metaSummary.avg_cost_per_conv) : '—'} color={META_BLUE} icon={<MoneyIcon />} sublabel="per (Lead+Msg+Call)" /></Grid>}
                       {metaSummary.reach != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="Reach" value={fmtNum(metaSummary.reach)} color={COPPER} icon={<PeopleIcon />} /></Grid>}
                     </Grid>
 
@@ -1173,15 +1166,16 @@ const ClientAdDetails = () => {
                         <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Impr.</TableCell>
                         <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Clicks</TableCell>
                         <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CTR</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Leads</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">CPL</TableCell>
-                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Messages</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">📋 Leads</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">💬 Messages</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">📞 Calls</TableCell>
+                        <TableCell sx={{ fontWeight: 700, bgcolor: `${META_BLUE}10` }} align="right">Avg Cost/Conv</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {metaCampaigns.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={11} align="center" sx={{ py: 3, color: 'text.secondary', fontStyle: 'italic' }}>
+                          <TableCell colSpan={12} align="center" sx={{ py: 3, color: 'text.secondary', fontStyle: 'italic' }}>
                             No campaign data for this range
                           </TableCell>
                         </TableRow>
@@ -1206,9 +1200,10 @@ const ClientAdDetails = () => {
                               <TableCell align="right">{fmtNum(c.impressions)}</TableCell>
                               <TableCell align="right">{fmtNum(c.clicks)}</TableCell>
                               <TableCell align="right">{fmtPct(c.ctr)}</TableCell>
-                              <TableCell align="right">{fmtNum(c.leads)}</TableCell>
-                              <TableCell align="right">{c.cpl != null && c.cpl > 0 ? fmtINR(c.cpl) : '—'}</TableCell>
-                              <TableCell align="right">{fmtNum(c.messaging_conversations_started)}</TableCell>
+                              <TableCell align="right">{fmtNum(c.form_leads)}</TableCell>
+                              <TableCell align="right">{fmtNum(c.whatsapp_leads)}</TableCell>
+                              <TableCell align="right">{fmtNum(c.calls)}</TableCell>
+                              <TableCell align="right">{c.avg_cost_per_conv > 0 ? fmtINR(c.avg_cost_per_conv) : '—'}</TableCell>
                             </TableRow>
                           );
                         })

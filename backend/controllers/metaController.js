@@ -963,10 +963,14 @@ export const getClientAnalytics = async (req, res) => {
     ctr: sum.impressions > 0 ? round2((sum.clicks / sum.impressions) * 100) : 0,
     cpc: sum.clicks > 0 ? round2(sum.spend / sum.clicks) : 0,
     cpm: sum.impressions > 0 ? round2((sum.spend / sum.impressions) * 1000) : 0,
-    // Cost per lead, per bucket
+    // Cost per conversion — denominator = leads + messages + calls
     cpl_form: sum.form_leads > 0 ? round2(sum.spend / sum.form_leads) : 0,
     cpl_whatsapp: sum.whatsapp_leads > 0 ? round2(sum.spend / sum.whatsapp_leads) : 0,
     cpl: totalLeads > 0 ? round2(sum.spend / totalLeads) : 0,
+    avg_cost_per_conv: (() => {
+      const totalConv = totalLeads + (sum.calls || 0);
+      return totalConv > 0 ? round2(sum.spend / totalConv) : 0;
+    })(),
     // Legacy aliases (old field names — keep until frontend migrates)
     leads: totalLeads,
     messaging_conversations_started: sum.whatsapp_leads || 0,
@@ -1057,6 +1061,7 @@ export const getClientAnalytics = async (req, res) => {
         clicks: { $sum: '$clicks' },
         form_leads: { $sum: '$leads' },
         whatsapp_leads: { $sum: '$messaging_conversations_started' },
+        calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
       },
     },
     { $sort: { spend: -1 } },
@@ -1070,7 +1075,10 @@ export const getClientAnalytics = async (req, res) => {
 
   const campaigns = campaignAgg.map((c) => {
     const doc = campaignById.get(c._id) || {};
-    const totalLeads = (c.form_leads || 0) + (c.whatsapp_leads || 0);
+    const formLeads = c.form_leads || 0;
+    const waLeads   = c.whatsapp_leads || 0;
+    const calls     = c.calls || 0;
+    const totalConv = formLeads + waLeads + calls;
     return {
       campaign_id: c._id,
       name: doc.name || '(unknown)',
@@ -1081,27 +1089,36 @@ export const getClientAnalytics = async (req, res) => {
       spend: round2(c.spend),
       impressions: c.impressions,
       clicks: c.clicks,
-      form_leads: c.form_leads || 0,
-      whatsapp_leads: c.whatsapp_leads || 0,
-      total_leads: totalLeads,
+      form_leads: formLeads,
+      whatsapp_leads: waLeads,
+      calls,
+      total_leads: totalConv,
       ctr: c.impressions > 0 ? round2((c.clicks / c.impressions) * 100) : 0,
-      cpl_form: c.form_leads > 0 ? round2(c.spend / c.form_leads) : 0,
-      cpl_whatsapp: c.whatsapp_leads > 0 ? round2(c.spend / c.whatsapp_leads) : 0,
-      cpl: totalLeads > 0 ? round2(c.spend / totalLeads) : 0,
-      // legacy aliases
-      leads: totalLeads,
-      messaging_conversations_started: c.whatsapp_leads || 0,
+      // avg_cost_per_conv = spend / (leads + messages + calls)
+      avg_cost_per_conv: totalConv > 0 ? round2(c.spend / totalConv) : 0,
+      // legacy aliases (kept for backward compat)
+      cpl: totalConv > 0 ? round2(c.spend / totalConv) : 0,
+      cpl_form: formLeads > 0 ? round2(c.spend / formLeads) : 0,
+      cpl_whatsapp: waLeads > 0 ? round2(c.spend / waLeads) : 0,
+      leads: totalConv,
+      messaging_conversations_started: waLeads,
     };
   });
 
   // ---- Lead forms ----
-  // Lead date filter: prefer Meta's authoritative `meta_created_time`
-  // (when the user actually submitted the form), fall back to our `createdAt`
-  // (ingestion time) only for legacy rows that predate the backfill.
+  // Lead date filter: Meta's `meta_created_time` is stored in UTC, but Indian
+  // clients submit leads in IST (UTC+5:30). Shift the boundary by -5h30m so
+  // "today" means IST midnight → IST 23:59, not UTC midnight → UTC 23:59.
+  // (MetaInsights dates stay on UTC boundaries — they come from Meta's own
+  // date_start field which is already in ad-account timezone.)
+  const IST_MS = 5.5 * 60 * 60 * 1000;
+  const leadSince = new Date(since.getTime() - IST_MS);
+  const leadUntil = new Date(until.getTime() - IST_MS);
+  const leadDateRange = { $gte: leadSince, $lte: leadUntil };
   const leadDateFilter = {
     $or: [
-      { meta_created_time: dateRange },
-      { meta_created_time: null, createdAt: dateRange },
+      { meta_created_time: leadDateRange },
+      { meta_created_time: null, createdAt: leadDateRange },
     ],
   };
 
