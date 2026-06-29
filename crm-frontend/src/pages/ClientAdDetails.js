@@ -83,6 +83,7 @@ const ClientAdDetails = () => {
   const [metaData, setMetaData] = useState(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState(null);
+  const [spendOverview, setSpendOverview] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(today);
@@ -306,6 +307,9 @@ const ClientAdDetails = () => {
   useEffect(() => {
     if (tab === 0 && clientId) {
       fetchGoogleAnalytics();
+      api.get(`/analytics/client/${clientId}/spend-overview`)
+        .then(r => setSpendOverview(r.data))
+        .catch(() => {});
     } else if (tab === 1 && clientId) {
       fetchMetaAnalytics();
     }
@@ -595,47 +599,23 @@ const ClientAdDetails = () => {
                     </Grid>
                   </Paper>
 
-                  {/* Billing */}
-                  {billing && (
+                  {/* Spend Overview */}
+                  {spendOverview && (
                     <Card variant="outlined" sx={{ borderLeft: `3px solid ${GOOGLE_GREEN}`, mb: 2 }}>
                       <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem' }}>Billing</Typography>
-                          {billing.billing_type && (
-                            <Chip label={billing.billing_type.toUpperCase()} size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: `${GOOGLE_GREEN}15`, color: GOOGLE_GREEN, fontWeight: 600 }} />
-                          )}
-                        </Box>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1.5 }}>Ad Spend</Typography>
                         <Grid container spacing={1.5}>
-                          {billing.total_added_funds != null && (
-                            <Grid size={{ xs: 6, md: 3 }}>
-                              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Total Added</Typography>
-                              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: BROWN }}>{fmtINR(billing.total_added_funds)}</Typography>
+                          {[
+                            { label: 'Today', value: spendOverview.today },
+                            { label: 'Yesterday', value: spendOverview.yesterday },
+                            { label: 'This Week', value: spendOverview.thisWeek },
+                            { label: 'This Month', value: spendOverview.thisMonth },
+                          ].map(({ label, value }) => (
+                            <Grid key={label} size={{ xs: 6, md: 3 }}>
+                              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>{label}</Typography>
+                              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: value > 0 ? GOOGLE_GREEN : 'text.secondary' }}>{fmtINR(value)}</Typography>
                             </Grid>
-                          )}
-                          {billing.total_spend != null && (
-                            <Grid size={{ xs: 6, md: 3 }}>
-                              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Total Spent</Typography>
-                              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: GOOGLE_GREEN }}>{fmtINR(billing.total_spend)}</Typography>
-                            </Grid>
-                          )}
-                          {billing.available_balance != null && (
-                            <Grid size={{ xs: 6, md: 3 }}>
-                              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Available</Typography>
-                              <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: isLowBalance ? '#ef4444' : '#10b981', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                {fmtINR(billing.available_balance)}
-                                {isLowBalance && <WarningIcon sx={{ fontSize: 14 }} />}
-                              </Typography>
-                            </Grid>
-                          )}
-                          {billing.total_added_funds > 0 && (
-                            <Grid size={{ xs: 6, md: 3 }}>
-                              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Utilization</Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <LinearProgress variant="determinate" value={Math.min(budgetPct, 100)} sx={{ flex: 1, height: 6, borderRadius: 3, '& .MuiLinearProgress-bar': { bgcolor: isLowBalance ? '#ef4444' : GOOGLE_GREEN } }} />
-                                <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: GOOGLE_GREEN }}>{budgetPct.toFixed(0)}%</Typography>
-                              </Box>
-                            </Grid>
-                          )}
+                          ))}
                         </Grid>
                       </CardContent>
                     </Card>
