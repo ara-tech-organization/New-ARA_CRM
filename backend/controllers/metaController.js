@@ -1114,31 +1114,32 @@ export const getClientAnalytics = async (req, res) => {
   }
 
   // ---- Override per-campaign leads + messages with CRM records -----------
-  // Same source-of-truth logic as the summary override above, applied per
-  // campaign using meta_campaign_id. Organic leads (no campaign_id) are
-  // counted in the summary but not attributed to any campaign row.
-  const leadsByCampaign = new Map();
-  for (const l of leads_in_range) {
-    if (!l.meta_campaign_id) continue;
-    if (!leadsByCampaign.has(l.meta_campaign_id)) {
-      leadsByCampaign.set(l.meta_campaign_id, { form: 0, whatsapp: 0 });
+  // Only override when CRM has matching leads; otherwise keep MetaInsights
+  // campaign-level values so rows stay consistent with the summary.
+  if (leads_in_range.length > 0) {
+    const leadsByCampaign = new Map();
+    for (const l of leads_in_range) {
+      if (!l.meta_campaign_id) continue;
+      if (!leadsByCampaign.has(l.meta_campaign_id)) {
+        leadsByCampaign.set(l.meta_campaign_id, { form: 0, whatsapp: 0 });
+      }
+      const bucket = leadsByCampaign.get(l.meta_campaign_id);
+      if ((l.platform || '').toLowerCase() === 'whatsapp') bucket.whatsapp++;
+      else bucket.form++;
     }
-    const bucket = leadsByCampaign.get(l.meta_campaign_id);
-    if ((l.platform || '').toLowerCase() === 'whatsapp') bucket.whatsapp++;
-    else bucket.form++;
-  }
-  for (const c of campaigns) {
-    const crm = leadsByCampaign.get(c.campaign_id) || { form: 0, whatsapp: 0 };
-    c.form_leads = crm.form;
-    c.whatsapp_leads = crm.whatsapp;
-    c.messaging_conversations_started = crm.whatsapp;
-    const totalConv = crm.form + crm.whatsapp + c.calls;
-    c.total_leads = totalConv;
-    c.leads = totalConv;
-    c.avg_cost_per_conv = totalConv > 0 ? round2(c.spend / totalConv) : 0;
-    c.cpl = totalConv > 0 ? round2(c.spend / totalConv) : 0;
-    c.cpl_form = crm.form > 0 ? round2(c.spend / crm.form) : 0;
-    c.cpl_whatsapp = crm.whatsapp > 0 ? round2(c.spend / crm.whatsapp) : 0;
+    for (const c of campaigns) {
+      const crm = leadsByCampaign.get(c.campaign_id) || { form: 0, whatsapp: 0 };
+      c.form_leads = crm.form;
+      c.whatsapp_leads = crm.whatsapp;
+      c.messaging_conversations_started = crm.whatsapp;
+      const totalConv = crm.form + crm.whatsapp + c.calls;
+      c.total_leads = totalConv;
+      c.leads = totalConv;
+      c.avg_cost_per_conv = totalConv > 0 ? round2(c.spend / totalConv) : 0;
+      c.cpl = totalConv > 0 ? round2(c.spend / totalConv) : 0;
+      c.cpl_form = crm.form > 0 ? round2(c.spend / crm.form) : 0;
+      c.cpl_whatsapp = crm.whatsapp > 0 ? round2(c.spend / crm.whatsapp) : 0;
+    }
   }
 
   // ---- Hourly leads (single-day only, computed from leads_in_range) --------
