@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import {
@@ -27,7 +27,6 @@ import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
 import MetaLeadsTable from '../components/MetaLeadsTable';
 import TelecallingReport from '../components/TelecallingReport';
 import MonthlyAbstract from '../components/MonthlyAbstract';
-import LeadCheckPanel from '../components/LeadCheckPanel';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -523,7 +522,7 @@ const ClientAdDetails = () => {
               sx={{ textTransform: 'none', fontWeight: 600 }}
             />
             <Tab label="EOD Report" sx={{ textTransform: 'none', fontWeight: 600 }} />
-            <Tab label="Lead Check" sx={{ textTransform: 'none', fontWeight: 600 }} />
+            <Tab label="Leads Table" sx={{ textTransform: 'none', fontWeight: 600 }} />
           </Tabs>
         </Box>
 
@@ -1464,11 +1463,13 @@ const ClientAdDetails = () => {
             />
           )}
 
-          {/* LEAD CHECK TAB — day-wise lead counts for this client,
-              with Daily / Weekly / Monthly preset toggle plus a
-              custom from/to range. */}
+          {/* LEADS TABLE TAB — 15-column per-lead detail for this client
+              over a date range. Same column shape as the EOD/Abstract
+              "today's leads" / "leads this month" tables and the client
+              portal's /leads page, so admins see exactly what telecallers
+              filled in on each lead. */}
           {tab === 3 && (
-            <LeadCheckPanel clientId={clientId} apiInstance={api} />
+            <AdminLeadsTablePanel clientId={clientId} apiInstance={api} />
           )}
         </CardContent>
       </Card>
@@ -1540,12 +1541,192 @@ const AdminEodReportPanel = ({ clientId, clientName, apiInstance, onJumpToLeads 
           clientName={clientName}
           apiInstance={apiInstance}
           onJumpToLeads={onJumpToLeads}
+          telecallerOnly
         />
       ) : (
         <MonthlyAbstract
           clientId={clientId}
           apiInstance={apiInstance}
+          telecallerOnly
         />
+      )}
+    </Box>
+  );
+};
+
+// Admin Leads Table panel — 15-column per-lead detail for a date range.
+// Same column shape as the EOD report's TODAY'S LEADS table and the
+// Monthly Abstract's LEADS THIS MONTH table, so admins, telecallers,
+// and clients all see the same view of the underlying Lead documents.
+// Derives `fu_count` + `latest_followup` client-side from
+// `lead.follow_ups[]` so we can reuse the existing /analytics endpoint.
+const AdminLeadsTablePanel = ({ clientId, apiInstance }) => {
+  const TBL_BROWN = '#3E2723';
+  const TBL_COPPER = '#C08552';
+  const TBL_CREAM = '#FFF4ED';
+  const TBL_BORDER = '#E8D5C4';
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchLeads = useCallback(async () => {
+    if (!clientId || !apiInstance) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiInstance.get(`/meta/client/${clientId}/analytics`, {
+        params: { from, to },
+      });
+      const arr = Array.isArray(res.data?.leads_in_range) ? res.data.leads_in_range : [];
+      setLeads(arr);
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to load leads');
+      setLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId, apiInstance, from, to]);
+
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  const fmt = (d) => {
+    if (!d) return '—';
+    try {
+      return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replaceAll('/', '-');
+    } catch { return '—'; }
+  };
+
+  const iso = (d) => d.toISOString().split('T')[0];
+  const todayIso = iso(new Date());
+  const d7 = new Date(); d7.setDate(new Date().getDate() - 6);
+  const d30 = new Date(); d30.setDate(new Date().getDate() - 29);
+  const isToday = from === todayIso && to === todayIso;
+  const is7 = from === iso(d7) && to === todayIso;
+  const is30 = from === iso(d30) && to === todayIso;
+  const presetSx = { bgcolor: TBL_BROWN, color: '#fff', borderColor: TBL_BROWN, '&:hover': { bgcolor: TBL_BROWN, filter: 'brightness(1.1)' } };
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {/* Toolbar — date pickers + presets + refresh */}
+      <Paper variant="outlined" sx={{ p: 1.2, display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap', borderLeft: `3px solid ${TBL_BROWN}` }}>
+        <Box sx={{ flex: 1, minWidth: 220 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '0.95rem', color: TBL_BROWN }}>
+            Leads Table ({leads.length})
+          </Typography>
+          <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary' }}>
+            Every lead the telecaller entered for this client in the selected date range.
+          </Typography>
+        </Box>
+        <TextField
+          type="date" size="small" label="From" value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          sx={{ minWidth: 150 }} disabled={loading}
+        />
+        <TextField
+          type="date" size="small" label="To" value={to}
+          onChange={(e) => setTo(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          sx={{ minWidth: 150 }} disabled={loading}
+        />
+        <Box sx={{ display: 'flex', gap: 0.6 }}>
+          <Button size="small" variant={isToday ? 'contained' : 'outlined'} disabled={loading} sx={isToday ? presetSx : undefined} onClick={() => { setFrom(todayIso); setTo(todayIso); }}>Today</Button>
+          <Button size="small" variant={is7 ? 'contained' : 'outlined'} disabled={loading} sx={is7 ? presetSx : undefined} onClick={() => { setFrom(iso(d7)); setTo(todayIso); }}>7 Days</Button>
+          <Button size="small" variant={is30 ? 'contained' : 'outlined'} disabled={loading} sx={is30 ? presetSx : undefined} onClick={() => { setFrom(iso(d30)); setTo(todayIso); }}>30 Days</Button>
+        </Box>
+        <Button
+          size="small" variant="outlined"
+          startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
+          onClick={fetchLeads} disabled={loading}
+        >
+          {loading ? 'Loading...' : 'Refresh'}
+        </Button>
+      </Paper>
+
+      {error && <Alert severity="error">{error}</Alert>}
+
+      {loading && leads.length === 0 && (
+        <Box sx={{ textAlign: 'center', py: 6 }}>
+          <CircularProgress sx={{ color: TBL_COPPER }} />
+          <Typography sx={{ mt: 1.5, color: 'text.secondary' }}>Loading leads…</Typography>
+        </Box>
+      )}
+
+      {!loading && !error && leads.length === 0 && (
+        <Alert severity="info">No leads in this date range.</Alert>
+      )}
+
+      {leads.length > 0 && (
+        <Paper variant="outlined" sx={{ overflow: 'auto', borderRadius: 1 }}>
+          <Box sx={{ minWidth: 1500 }}>
+            <Table size="small" sx={{ borderCollapse: 'collapse' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell
+                    colSpan={15}
+                    style={{ backgroundColor: TBL_BROWN, color: '#fff', border: '1px solid #fff' }}
+                    sx={{ fontWeight: 800, fontSize: '0.78rem', textAlign: 'left', pl: 2, py: 0.9, textTransform: 'uppercase' }}
+                  >
+                    LEADS — {leads.length} {leads.length === 1 ? 'entry' : 'entries'}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  {[
+                    'Date', 'Source', 'Name', 'Contact', 'Location',
+                    'Hair / Skin', 'First Call Date', 'Call Label',
+                    'Response', 'Remarks', 'Next Follow-up', 'Status',
+                    'Appt. Date', 'FU #', 'Latest / History',
+                  ].map((h) => (
+                    <TableCell
+                      key={h}
+                      style={{ backgroundColor: TBL_COPPER, color: '#fff', border: '1px solid #fff' }}
+                      sx={{ fontWeight: 700, fontSize: '0.66rem', textAlign: 'center', py: 0.7, px: 0.6, whiteSpace: 'nowrap', textTransform: 'uppercase' }}
+                    >
+                      {h}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {leads.map((l, idx) => {
+                  const followUps = Array.isArray(l.follow_ups) ? l.follow_ups : [];
+                  const latest = followUps.length ? followUps[followUps.length - 1] : null;
+                  const latestText = latest
+                    ? `${fmt(latest.date)} · ${latest.call_label || '—'}${latest.remarks ? ` · ${latest.remarks}` : ''}`
+                    : '—';
+                  const date = l.meta_created_time || l.createdAt;
+                  const source = l.manual_source_type || l.platform || '';
+                  const rowBg = idx % 2 === 0 ? '#fff' : TBL_CREAM;
+                  const cellStyle = { backgroundColor: rowBg, border: `1px solid ${TBL_BORDER}` };
+                  const cellSx = { fontSize: '0.72rem', textAlign: 'left', pl: 1, py: 0.4, fontWeight: 600 };
+                  return (
+                    <TableRow key={l._id}>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmt(date)}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, textTransform: 'uppercase' }}>{source || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, fontWeight: 700 }}>{l.name || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, fontFamily: 'monospace' }}>{l.phone || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={cellSx}>{l.lead_location || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={cellSx}>{l.lead_category || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmt(l.first_call_date)}</TableCell>
+                      <TableCell style={cellStyle} sx={cellSx}>{l.first_call_label || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, fontWeight: 700 }}>{l.response_label || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, maxWidth: 220, whiteSpace: 'normal' }}>{l.remarks || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmt(l.next_followup_date)}</TableCell>
+                      <TableCell style={cellStyle} sx={cellSx}>{l.appointment_status || '—'}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{fmt(l.appointment_date)}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, textAlign: 'center', fontWeight: 700 }}>{followUps.length}</TableCell>
+                      <TableCell style={cellStyle} sx={{ ...cellSx, maxWidth: 260, whiteSpace: 'normal' }}>{latestText}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Box>
+        </Paper>
       )}
     </Box>
   );
