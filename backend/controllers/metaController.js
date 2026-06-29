@@ -1092,23 +1092,26 @@ export const getClientAnalytics = async (req, res) => {
   // MetaInsights campaign attribution misses organic form leads and counts
   // messaging_conversations_started (ad click → chat opened) rather than
   // actual WhatsApp leads that became CRM records.
-  // Use leads_in_range as source of truth for both buckets.
-  const actualFormLeads = leads_in_range.filter(
-    (l) => (l.platform || '').toLowerCase() !== 'whatsapp'
-  ).length;
-  const actualWALeads = leads_in_range.filter(
-    (l) => (l.platform || '').toLowerCase() === 'whatsapp'
-  ).length;
-  summary.form_leads = actualFormLeads;
-  summary.whatsapp_leads = actualWALeads;
-  summary.messaging_conversations_started = actualWALeads;
-  const newTotalLeads = actualFormLeads + actualWALeads;
-  summary.total_leads = newTotalLeads;
-  summary.leads = newTotalLeads;
-  summary.cpl_form = actualFormLeads > 0 ? round2(summary.spend / actualFormLeads) : 0;
-  summary.cpl = newTotalLeads > 0 ? round2(summary.spend / newTotalLeads) : 0;
-  const totalConvActual = newTotalLeads + summary.calls;
-  summary.avg_cost_per_conv = totalConvActual > 0 ? round2(summary.spend / totalConvActual) : 0;
+  // Only override when CRM has matching leads; otherwise keep MetaInsights
+  // values so the detail page stays consistent with the dashboard.
+  if (leads_in_range.length > 0) {
+    const actualFormLeads = leads_in_range.filter(
+      (l) => (l.platform || '').toLowerCase() !== 'whatsapp'
+    ).length;
+    const actualWALeads = leads_in_range.filter(
+      (l) => (l.platform || '').toLowerCase() === 'whatsapp'
+    ).length;
+    summary.form_leads = actualFormLeads;
+    summary.whatsapp_leads = actualWALeads;
+    summary.messaging_conversations_started = actualWALeads;
+    const newTotalLeads = actualFormLeads + actualWALeads;
+    summary.total_leads = newTotalLeads;
+    summary.leads = newTotalLeads;
+    summary.cpl_form = actualFormLeads > 0 ? round2(summary.spend / actualFormLeads) : 0;
+    summary.cpl = newTotalLeads > 0 ? round2(summary.spend / newTotalLeads) : 0;
+    const totalConvActual = newTotalLeads + summary.calls;
+    summary.avg_cost_per_conv = totalConvActual > 0 ? round2(summary.spend / totalConvActual) : 0;
+  }
 
   // ---- Override per-campaign leads + messages with CRM records -----------
   // Same source-of-truth logic as the summary override above, applied per
