@@ -476,6 +476,62 @@ router.get('/client/:clientId', async (req, res) => {
   }
 });
 
+// GET /api/analytics/client/:clientId/spend-overview
+// Returns Google Ads spend for today / yesterday / this week / this month
+router.get('/client/:clientId/spend-overview', async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    if (req.clientId && String(req.clientId) !== String(clientId)) {
+      return res.status(403).json({ error: 'Portal token cannot access another client' });
+    }
+
+    // All date math in IST (UTC+5:30)
+    const IST = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(Date.now() + IST);
+    const y = nowIST.getUTCFullYear(), mo = nowIST.getUTCMonth(), d = nowIST.getUTCDate();
+    const dow = nowIST.getUTCDay(); // 0=Sun
+
+    const startOfDay  = (yr, m, dy) => new Date(Date.UTC(yr, m, dy) - IST);
+    const today     = startOfDay(y, mo, d);
+    const yesterday = startOfDay(y, mo, d - 1);
+    const weekStart = startOfDay(y, mo, d - (dow === 0 ? 6 : dow - 1)); // Mon
+    const monthStart= startOfDay(y, mo, 1);
+    const tomorrow  = startOfDay(y, mo, d + 1);
+
+    const [rows] = await Promise.all([
+      Metric.aggregate([
+        {
+          $match: {
+            client_id: new mongoose.Types.ObjectId(clientId),
+            date: { $gte: monthStart, $lt: tomorrow }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            today:     { $sum: { $cond: [{ $and: [{ $gte: ['$date', today] }, { $lt: ['$date', tomorrow] }] }, '$cost', 0] } },
+            yesterday: { $sum: { $cond: [{ $and: [{ $gte: ['$date', yesterday] }, { $lt: ['$date', today] }] }, '$cost', 0] } },
+            thisWeek:  { $sum: { $cond: [{ $gte: ['$date', weekStart] }, '$cost', 0] } },
+            thisMonth: { $sum: '$cost' }
+          }
+        }
+      ])
+    ]);
+
+    const r = rows[0] || { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0 };
+    const round2 = v => Math.round(v * 100) / 100;
+    res.json({
+      today:     round2(r.today),
+      yesterday: round2(r.yesterday),
+      thisWeek:  round2(r.thisWeek),
+      thisMonth: round2(r.thisMonth),
+    });
+  } catch (error) {
+    console.error('Spend overview error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /**
  * Aggregate keyword-level metrics for a client within the requested date range.
  * Returns the TOP N keywords (default 20) by cost desc within the range.
