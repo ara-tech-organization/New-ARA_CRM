@@ -230,8 +230,8 @@ router.post('/clients/bulk-associate', async (req, res) => {
       errors
     });
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+    try { await session.abortTransaction(); } catch (_) {}
+    try { session.endSession(); } catch (_) {}
     console.error('Bulk associate transaction error:', error);
     res.status(500).json({ error: error.message });
   }
