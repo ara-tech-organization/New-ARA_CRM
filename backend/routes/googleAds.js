@@ -4,7 +4,6 @@ import { triggerClientSync } from '../sync/scheduler.js';
 import Client from '../models/Client.js';
 import Campaign from '../models/Campaign.js';
 import googleAdsService from '../services/googleAdsService.js';
-import mongoose from 'mongoose';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -171,9 +170,6 @@ router.put('/client/:clientId/associate', async (req, res) => {
 
 // Bulk associate Google Ads customer IDs with clients
 router.post('/clients/bulk-associate', async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const { associations } = req.body; // Array of { clientId, customerId, accountName }
 
@@ -200,7 +196,7 @@ router.post('/clients/bulk-associate', async (req, res) => {
             google_ads_account_name: accountName || '',
             google_ads_enabled: true
           },
-          { returnDocument: 'after', runValidators: true, session }
+          { returnDocument: 'after', runValidators: true }
         );
 
         if (!client) {
@@ -221,18 +217,13 @@ router.post('/clients/bulk-associate', async (req, res) => {
       }
     }
 
-    await session.commitTransaction();
-    session.endSession();
-
     res.json({
       message: `Bulk association completed. ${results.length} successful, ${errors.length} errors`,
       results,
       errors
     });
   } catch (error) {
-    try { await session.abortTransaction(); } catch (_) {}
-    try { session.endSession(); } catch (_) {}
-    console.error('Bulk associate transaction error:', error);
+    console.error('Bulk associate error:', error);
     res.status(500).json({ error: error.message });
   }
 });
