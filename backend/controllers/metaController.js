@@ -1313,7 +1313,7 @@ export const getClientsAdsComparison = async (req, res) => {
     const dateRange = { $gte: since, $lte: until };
 
     const clients = await Client.find({ meta_enabled: true })
-      .select('clientName meta_ad_account_id meta_ad_account_name meta_ad_account_currency meta_pages')
+      .select('clientName meta_ad_account_id meta_ad_account_name meta_ad_account_currency meta_pages billing')
       .sort({ clientName: 1 })
       .lean();
 
@@ -1400,7 +1400,7 @@ export const getClientsAdsComparison = async (req, res) => {
         pageName: firstPage?.page_name || '',
         currency: c.meta_ad_account_currency || 'INR',
         totalBudget: round2(budgetById.get(String(c._id)) || 0),
-        availableBalance: 0,
+        availableBalance: round2(c.billing?.available_balance || 0),
         spend, reach, impressions, frequency, clicks, ctr, cpc, cpm,
         leads, formLeads, whatsappLeads, calls, avg_cost_per_conv, cpl,
       };
