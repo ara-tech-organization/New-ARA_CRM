@@ -1254,63 +1254,6 @@ const Clients = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 12 }}>
-              <Divider sx={{ my: 1 }} />
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Team Assignment
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel>Team Name</InputLabel>
-                <Select
-                  name="team"
-                  value={newClient.team}
-                  label="Team Name"
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setNewClient(prev => ({ ...prev, team: val, assignedSMM: '', assignedSME: '' }));
-                  }}
-                >
-                  <MenuItem value="">None</MenuItem>
-                  {teams.map((t) => (
-                    <MenuItem key={t} value={t}>{t}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel>Assigned SMM</InputLabel>
-                <Select
-                  name="assignedSMM"
-                  value={newClient.assignedSMM}
-                  label="Assigned SMM"
-                  onChange={handleInputChange}
-                >
-                  <MenuItem value="">None</MenuItem>
-                  {smmUsers.map(u => (
-                    <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth>
-                <InputLabel>Assigned SME</InputLabel>
-                <Select
-                  name="assignedSME"
-                  value={newClient.assignedSME}
-                  label="Assigned SME"
-                  onChange={handleInputChange}
-                >
-                  <MenuItem value="">None</MenuItem>
-                  {smmUsers.map(u => (
-                    <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -1436,63 +1379,6 @@ const Clients = () => {
                     <MenuItem value="inactive">Inactive</MenuItem>
                     <MenuItem value="pending">Pending</MenuItem>
                     <MenuItem value="suspended">Suspended</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                  Team Assignment
-                </Typography>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Team Name</InputLabel>
-                  <Select
-                    name="team"
-                    value={editClient.team}
-                    label="Team Name"
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setEditClient(prev => ({ ...prev, team: val, assignedSMM: '', assignedSME: '' }));
-                    }}
-                  >
-                    <MenuItem value="">None</MenuItem>
-                    {teams.map((t) => (
-                      <MenuItem key={t} value={t}>{t}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Assigned SMM</InputLabel>
-                  <Select
-                    name="assignedSMM"
-                    value={editClient.assignedSMM}
-                    label="Assigned SMM"
-                    onChange={handleEditInputChange}
-                  >
-                    <MenuItem value="">None</MenuItem>
-                    {smmUsers.map(u => (
-                      <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Assigned SME</InputLabel>
-                  <Select
-                    name="assignedSME"
-                    value={editClient.assignedSME}
-                    label="Assigned SME"
-                    onChange={handleEditInputChange}
-                  >
-                    <MenuItem value="">None</MenuItem>
-                    {smmUsers.map(u => (
-                      <MenuItem key={u._id || u.userID} value={u.name}>{u.name}</MenuItem>
-                    ))}
                   </Select>
                 </FormControl>
               </Grid>
