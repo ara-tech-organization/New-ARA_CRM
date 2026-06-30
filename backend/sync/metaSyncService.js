@@ -272,9 +272,15 @@ export const syncByAdAccount = async ({
   // 0. Verify access first — fast failure if ad account is unreachable
   try {
     const { account } = await verifyAdAccountAccess(adAccountId);
-    const balance = account?.balance != null ? Math.round(Number(account.balance)) / 100 : null;
-    if (balance !== null) {
-      await Client.findByIdAndUpdate(clientId, { meta_ad_account_balance: balance });
+    // Prefer available_balance from funding_source_details (same value individual page shows)
+    let cachedBalance = account?.balance != null ? Math.round(Number(account.balance)) / 100 : null;
+    const ds = account?.funding_source_details?.display_string || '';
+    if (/available\s+balance/i.test(ds)) {
+      const m = ds.match(/[\d,]+(?:\.\d+)?/);
+      if (m) cachedBalance = Math.round(Number(m[0].replace(/,/g, '')) * 100) / 100;
+    }
+    if (cachedBalance !== null) {
+      await Client.findByIdAndUpdate(clientId, { meta_ad_account_balance: cachedBalance });
     }
     stages.push({ stage: 'verify', status: 'ok' });
   } catch (err) {
