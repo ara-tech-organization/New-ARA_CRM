@@ -271,7 +271,11 @@ export const syncByAdAccount = async ({
 
   // 0. Verify access first — fast failure if ad account is unreachable
   try {
-    await verifyAdAccountAccess(adAccountId);
+    const { account } = await verifyAdAccountAccess(adAccountId);
+    const balance = account?.balance != null ? Math.round(Number(account.balance)) / 100 : null;
+    if (balance !== null) {
+      await Client.findByIdAndUpdate(clientId, { meta_ad_account_balance: balance });
+    }
     stages.push({ stage: 'verify', status: 'ok' });
   } catch (err) {
     pushError('verify', err);

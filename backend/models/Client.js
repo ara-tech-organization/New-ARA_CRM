@@ -180,6 +180,10 @@ const clientSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    meta_ad_account_balance: {
+      type: Number,
+      default: null,
+    },
     meta_pages: {
       type: [
         {
