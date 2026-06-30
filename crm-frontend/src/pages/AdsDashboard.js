@@ -497,8 +497,6 @@ const AdsDashboard = () => {
                       <MuiTooltip arrow title="Client / ad account name"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }}>Account</TableCell></MuiTooltip>
                       <MuiTooltip arrow title="Google Ads Customer ID"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }}>Customer ID</TableCell></MuiTooltip>
                       <MuiTooltip arrow title="Account-level budget set in Google Ads"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Budget</TableCell></MuiTooltip>
-                      <MuiTooltip arrow title="Total funds loaded to date"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Fund</TableCell></MuiTooltip>
-                      <MuiTooltip arrow title="Remaining balance to spend"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Available</TableCell></MuiTooltip>
                       <MuiTooltip arrow title="Times the ads were shown"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Impressions</TableCell></MuiTooltip>
                       <MuiTooltip arrow title="Total ad clicks received"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">Clicks</TableCell></MuiTooltip>
                       <MuiTooltip arrow title="Click-through rate = clicks ÷ impressions"><TableCell sx={{ fontWeight: 700, bgcolor: `${GOOGLE_GREEN}10`, cursor: 'help' }} align="right">CTR</TableCell></MuiTooltip>
@@ -543,15 +541,6 @@ const AdsDashboard = () => {
                           </TableCell>
                           <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'text.secondary' }}>{c.googleAdsCustomerId}</TableCell>
                           <TableCell align="right">{fmtINR(c.totalBudget)}</TableCell>
-                          <TableCell align="right">{fmtINR(c.fund)}</TableCell>
-                          <TableCell align="right">
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
-                              {c.availableBalance < 100 && <WarningIcon sx={{ fontSize: 14, color: '#ef4444' }} />}
-                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: c.availableBalance < 100 ? '#ef4444' : '#10b981' }}>
-                                {fmtINR(c.availableBalance)}
-                              </Typography>
-                            </Box>
-                          </TableCell>
                           <TableCell align="right">{fmtNum(c.totalImpressions)}</TableCell>
                           <TableCell align="right">{fmtNum(c.totalClicks)}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, color: BROWN }}>{fmtPct(c.ctr)}</TableCell>
