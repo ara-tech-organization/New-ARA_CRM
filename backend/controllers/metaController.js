@@ -1345,6 +1345,8 @@ export const getClientsAdsComparison = async (req, res) => {
             reach: { $sum: '$reach' },
             clicks: { $sum: '$clicks' },
             calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
+            insights_leads: { $sum: { $ifNull: ['$leads', 0] } },
+            insights_wa: { $sum: { $ifNull: ['$messaging_conversations_started', 0] } },
           },
         },
       ]),
@@ -1375,14 +1377,15 @@ export const getClientsAdsComparison = async (req, res) => {
 
     const overviews = clients.map((c) => {
       const row = byId.get(String(c._id)) || {};
-      const crm = crmById.get(String(c._id)) || { form_leads: 0, whatsapp_leads: 0 };
+      const crm = crmById.get(String(c._id));
       const spend = round2(row.spend);
       const impressions = row.impressions || 0;
       const reach = row.reach || 0;
       const clicks = row.clicks || 0;
       const calls = row.calls || 0;
-      const formLeads = crm.form_leads || 0;
-      const whatsappLeads = crm.whatsapp_leads || 0;
+      // Fall back to MetaInsights leads when no CRM lead records exist for this client/date range
+      const formLeads = crm ? (crm.form_leads || 0) : (row.insights_leads || 0);
+      const whatsappLeads = crm ? (crm.whatsapp_leads || 0) : (row.insights_wa || 0);
       const leads = formLeads + whatsappLeads;
       const totalConv = leads + calls;
       const ctr = impressions > 0 ? round2((clicks / impressions) * 100) : 0;
