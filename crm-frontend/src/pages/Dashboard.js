@@ -43,6 +43,14 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, a
   const googleLeads = (data.googleCall || 0) + (data.googleWebsite || 0);
   const totalLeads = metaLeads + googleLeads;
   const isLinked = client.googleAdsEnabled && adsData;
+  // Meta ad-account balance from the dashboard-overview API. Anything
+  // under ₹1,000 flags a red "Low Balance" chip in the header — pauses
+  // are a real risk below that. `null` (not yet fetched) suppresses the
+  // chip to avoid a false alarm before the API responds.
+  const metaBalance = client.metaEnabled && metaApi?.available_balance != null
+    ? Number(metaApi.available_balance)
+    : null;
+  const isLowBalance = metaBalance != null && metaBalance < 1000;
 
   const MetricBox = ({ value, label }) => (
     <Box sx={{ flex: 1, textAlign: 'center', py: 0.8, px: 1, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1.5 }}>
@@ -75,15 +83,34 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, a
         px: 2, py: 1.2,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Avatar sx={{ width: 30, height: 30, bgcolor: 'rgba(255,255,255,0.25)', fontSize: '0.8rem', fontWeight: 700, color: 'white' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
+          <Avatar sx={{ width: 30, height: 30, bgcolor: 'rgba(255,255,255,0.25)', fontSize: '0.8rem', fontWeight: 700, color: 'white', flexShrink: 0 }}>
             {client.name?.charAt(0)}
           </Avatar>
-          <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: 'white' }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {client.name}
           </Typography>
         </Box>
-        <Chip label={dateStr} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontSize: '0.68rem', height: 22 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexShrink: 0 }}>
+          {isLowBalance && (
+            <Chip
+              label={`LOW BAL ₹${Math.round(metaBalance).toLocaleString('en-IN')}`}
+              size="small"
+              sx={{
+                bgcolor: '#ef4444',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: '0.62rem',
+                height: 22,
+                letterSpacing: 0.3,
+                border: '1px solid #ffffff55',
+                '& .MuiChip-label': { px: 0.9 },
+              }}
+              title={`Meta account balance ₹${metaBalance.toLocaleString('en-IN')} — below ₹1,000 threshold`}
+            />
+          )}
+          <Chip label={dateStr} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontSize: '0.68rem', height: 22 }} />
+        </Box>
       </Box>
 
       <CardContent sx={{ px: 2, py: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -463,10 +490,9 @@ const Dashboard = () => {
   const needsReview = zeroLeadSpender || worstCpl;
 
   // ── Needs Attention list ─────────────────────────────────────────
-  // Generates a short flagged list — drives the Alerts panel below.
-  // Three rules right now: (a) a Meta-linked client with zero leads
-  // today, (b) any client with low Meta balance vs threshold,
-  // (c) any client with no calls + no leads tracked today.
+  // Performance alerts only — anything balance-related now lives in the
+  // dedicated Low Balance card below. Rule: Meta-linked client with
+  // spend today but zero leads back.
   const attentionItems = clients.flatMap((c) => {
     const items = [];
     const meta = metaDataMap[c._id];
@@ -485,12 +511,31 @@ const Dashboard = () => {
         message: `${c.name} — Meta spend ₹${Math.round(metaSpendToday)} today but 0 leads`,
       });
     }
-    if (c.metaEnabled && !meta && !leadsLoading) {
-      // Meta-linked but the API didn't return — could be sync issue.
-      // Only flag when it's not just a still-loading state.
-    }
     return items;
   }).slice(0, 4);
+
+  // ── Low Balance list ─────────────────────────────────────────────
+  // Every Meta-linked client whose ad account balance is below ₹2,000.
+  // Splits into two visual tiers in the card below:
+  //   * Critical  — balance < ₹1,000. Red border + red badge. Ads are
+  //                 at real risk of auto-pausing.
+  //   * Watch     — ₹1,000 ≤ balance < ₹2,000. Amber border + amber
+  //                 badge. Not urgent, but top-up soon.
+  // Clients with balance = null (never synced) are excluded so we don't
+  // spam the panel with false alarms before the first sync writes a
+  // real value.
+  const lowBalanceClients = clients
+    .map((c) => {
+      const bal = metaDataMap[c._id]?.available_balance;
+      return {
+        id: c._id,
+        name: c.name,
+        balance: bal != null ? Number(bal) : null,
+        metaEnabled: !!c.metaEnabled,
+      };
+    })
+    .filter((c) => c.metaEnabled && c.balance != null && c.balance < 2000)
+    .sort((a, b) => a.balance - b.balance);
 
   // Greeting changes with the hour so it feels alive.
   const hour = new Date().getHours();
@@ -569,6 +614,81 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
+      {/* ── Low Balance (conditional) ──────────────────────────────
+          Sits directly under the welcome hero so the ops team sees
+          any ad accounts in the ₹0-₹2,000 band the moment they open
+          the dashboard. Two visual tiers inside a single alert:
+          CRITICAL (< ₹1,000, red) and WATCH (₹1,000-₹1,999, amber).
+          Same interaction as the attention items alert — click a row
+          to open that client's ads page. */}
+      {lowBalanceClients.length > 0 && (() => {
+        const criticalCount = lowBalanceClients.filter((c) => c.balance < 1000).length;
+        const watchCount = lowBalanceClients.length - criticalCount;
+        const alertSeverity = criticalCount > 0 ? 'error' : 'warning';
+        const accentColor = criticalCount > 0 ? '#ef4444' : '#f59e0b';
+        return (
+          <MuiAlert
+            severity={alertSeverity}
+            icon={<WarningIcon />}
+            sx={{
+              mb: 2,
+              borderLeft: `4px solid ${accentColor}`,
+              '& .MuiAlert-message': { width: '100%' },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8, flexWrap: 'wrap', gap: 1 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                Low Balance —{' '}
+                {criticalCount > 0 && (
+                  <Box component="span" sx={{ color: '#ef4444' }}>
+                    {criticalCount} critical{watchCount > 0 ? ' · ' : ''}
+                  </Box>
+                )}
+                {watchCount > 0 && (
+                  <Box component="span" sx={{ color: '#f59e0b' }}>
+                    {watchCount} watch
+                  </Box>
+                )}
+              </Typography>
+              <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+                Meta accounts under ₹2,000 · red = under ₹1,000 (auto-pause risk)
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {lowBalanceClients.map((c) => {
+                const isCritical = c.balance < 1000;
+                const tierColor = isCritical ? '#ef4444' : '#f59e0b';
+                const hoverBg = isCritical ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.10)';
+                return (
+                  <Box
+                    key={c.id}
+                    onClick={() => navigate(`/client-ads/${c.id}`)}
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 1,
+                      py: 0.5, px: 1, borderRadius: 1, cursor: 'pointer',
+                      '&:hover': { bgcolor: hoverBg },
+                    }}
+                  >
+                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tierColor, flexShrink: 0 }} />
+                    <Typography sx={{ fontSize: '0.82rem', flex: 1, fontWeight: isCritical ? 600 : 400 }}>
+                      {c.name} — Meta balance{' '}
+                      <Box component="span" sx={{ color: tierColor, fontWeight: 700 }}>
+                        ₹{Math.round(c.balance).toLocaleString('en-IN')}
+                      </Box>
+                      {isCritical && (
+                        <Box component="span" sx={{ color: '#ef4444', fontWeight: 700 }}>
+                          {' '}(below ₹1,000, ads may auto-pause)
+                        </Box>
+                      )}
+                    </Typography>
+                    <ArrowForwardIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                  </Box>
+                );
+              })}
+            </Box>
+          </MuiAlert>
+        );
+      })()}
 
       {/* ── Needs Attention (conditional) ──────────────────────────
           Only shows when at least one client meets an alert rule
@@ -593,26 +713,32 @@ const Dashboard = () => {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {attentionItems.map((item, i) => (
-              <Box
-                key={i}
-                onClick={() => navigate(`/client-ads/${item.clientId}`)}
-                sx={{
-                  display: 'flex', alignItems: 'center', gap: 1,
-                  py: 0.5, px: 1, borderRadius: 1, cursor: 'pointer',
-                  '&:hover': { bgcolor: 'rgba(245,158,11,0.1)' },
-                }}
-              >
-                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#f59e0b', flexShrink: 0 }} />
-                <Typography sx={{ fontSize: '0.82rem', flex: 1 }}>
-                  {item.message}
-                </Typography>
-                <ArrowForwardIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-              </Box>
-            ))}
+            {attentionItems.map((item, i) => {
+              const isError = item.severity === 'error';
+              const dotColor = isError ? '#ef4444' : '#f59e0b';
+              const hoverBg = isError ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.10)';
+              return (
+                <Box
+                  key={i}
+                  onClick={() => navigate(`/client-ads/${item.clientId}`)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1,
+                    py: 0.5, px: 1, borderRadius: 1, cursor: 'pointer',
+                    '&:hover': { bgcolor: hoverBg },
+                  }}
+                >
+                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: dotColor, flexShrink: 0 }} />
+                  <Typography sx={{ fontSize: '0.82rem', flex: 1, fontWeight: isError ? 600 : 400 }}>
+                    {item.message}
+                  </Typography>
+                  <ArrowForwardIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                </Box>
+              );
+            })}
           </Box>
         </MuiAlert>
       )}
+
 
       {/* ── Row 1: Headline KPIs (big cards) — Total Clients, Active
           Clients, Total Leads. Per-platform totals and spend used to

@@ -797,8 +797,8 @@ const AdsDashboard = () => {
                           <TableCell align="right" sx={{ fontWeight: 700, color: META_BLUE }}>{fmtINR(c.spend)}</TableCell>
                           <TableCell align="right">
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: 'flex-end' }}>
-                              {c.availableBalance < 100 && <WarningIcon sx={{ fontSize: 14, color: '#ef4444' }} />}
-                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: c.availableBalance < 100 ? '#ef4444' : '#10b981' }}>
+                              {c.availableBalance < 1000 && <WarningIcon sx={{ fontSize: 14, color: '#ef4444' }} />}
+                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: c.availableBalance < 1000 ? '#ef4444' : '#10b981' }}>
                                 {fmtINR(c.availableBalance)}
                               </Typography>
                             </Box>

@@ -1211,6 +1211,18 @@ export const getClientAnalytics = async (req, res) => {
   const today_spend = round2((todaySummaryResult[0] || {}).spend || 0);
   console.log(`${_tag} batch2(Meta+counts) ${Date.now()-_t2}ms | total ${Date.now()-_t0}ms`);
 
+  // Persist the live balance back to Client.meta_ad_account_balance so
+  // the Dashboard's /meta/dashboard-overview (which reads the cached
+  // field for speed, not the Meta API) surfaces a fresh number. Only
+  // update when the live value is a real number — the API returns null
+  // when funding_source_details is missing, and we don't want that
+  // wiping a previously-valid cached balance.
+  if (meta_account && meta_account.available_balance != null) {
+    Client.findByIdAndUpdate(clientId, {
+      meta_ad_account_balance: meta_account.available_balance,
+    }).catch((e) => console.error('meta_ad_account_balance cache update failed:', e.message));
+  }
+
   res.json({
     client_id: clientId,
     client_name: client.clientName,
@@ -1434,9 +1446,47 @@ export const getMetaDashboardOverview = async (req, res) => {
     const dateRange = { $gte: since, $lte: until };
 
     const clients = await Client.find({ meta_enabled: true })
-      .select('_id')
+      .select('_id meta_ad_account_id meta_ad_account_balance')
       .lean();
     if (clients.length === 0) return res.json({ count: 0, clients: [] });
+
+    // Balance strategy:
+    //  1. Seed the map with the cached value on the Client doc (fast path,
+    //     used as fallback if the live Meta call fails).
+    //  2. In parallel, hit the Meta API for each client that has an
+    //     ad account ID. `Promise.allSettled` so one 401/rate-limit
+    //     doesn't nuke the whole dashboard.
+    //  3. Overwrite the map with the live value where the fetch
+    //     succeeded, and fire-and-forget update the DB cache so future
+    //     dashboards stay warm even if Meta is briefly slow.
+    // Why fetch live here: the sync job that's *meant* to keep
+    // meta_ad_account_balance current has been unreliable, so a client
+    // page can show "LOW BAL" while the dashboard misses it. Fetching
+    // in-line closes that gap; cost is ~1-2s of parallel Meta calls.
+    const balanceById = new Map(
+      clients.map((c) => [
+        String(c._id),
+        c.meta_ad_account_balance != null ? Number(c.meta_ad_account_balance) : null,
+      ])
+    );
+
+    const withAdAccount = clients.filter((c) => c.meta_ad_account_id);
+    const liveResults = await Promise.allSettled(
+      withAdAccount.map((c) => verifyAdAccountAccess(c.meta_ad_account_id))
+    );
+    liveResults.forEach((result, i) => {
+      if (result.status !== 'fulfilled') return;
+      const account = result.value?.account;
+      const ds = account?.funding_source_details?.display_string || '';
+      if (!/available\s+balance/i.test(ds)) return;
+      const m = ds.match(/[\d,]+(?:\.\d+)?/);
+      if (!m) return;
+      const liveBal = round2(Number(m[0].replace(/,/g, '')));
+      const client = withAdAccount[i];
+      balanceById.set(String(client._id), liveBal);
+      Client.findByIdAndUpdate(client._id, { meta_ad_account_balance: liveBal })
+        .catch((e) => console.error('meta_ad_account_balance cache update failed:', e.message));
+    });
 
     const clientIds = clients.map((c) => c._id);
     const rows = await MetaInsights.aggregate([
@@ -1452,14 +1502,31 @@ export const getMetaDashboardOverview = async (req, res) => {
       },
     ]);
 
-    const overviews = rows.map((r) => {
-      const spend = round2(r.spend);
+    const insightsById = new Map(rows.map((r) => [String(r._id), r]));
+
+    const overviews = clientIds.map((cid) => {
+      const key = String(cid);
+      const r = insightsById.get(key) || {};
+      const spend = round2(r.spend || 0);
       const form_leads = r.form_leads || 0;
       const whatsapp_leads = r.whatsapp_leads || 0;
       const total_leads = form_leads + whatsapp_leads;
       const cpl = total_leads > 0 ? round2(spend / total_leads) : 0;
       const calls = r.calls || 0;
-      return { clientId: r._id, spend, total_leads, form_leads, whatsapp_leads, calls, cpl };
+      const rawBalance = balanceById.get(key);
+      return {
+        clientId: cid,
+        spend,
+        total_leads,
+        form_leads,
+        whatsapp_leads,
+        calls,
+        cpl,
+        // null → client has never synced its Meta account, don't alert.
+        // A synced ₹0 balance IS a real "low balance" signal though, so
+        // that stays a number and will flag on the Dashboard.
+        available_balance: rawBalance != null ? round2(rawBalance) : null,
+      };
     });
 
     res.json({ count: overviews.length, clients: overviews });

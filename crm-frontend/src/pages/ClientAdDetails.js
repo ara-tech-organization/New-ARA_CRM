@@ -336,6 +336,14 @@ const ClientAdDetails = () => {
   const displayPlace = client?.place;
   const displayOrgType = client?.organisationType;
   const displayStatus = client?.status || 'active';
+  // Meta ad account balance — prefer the live value returned inside
+  // metaData.meta_account (fetched from Meta), falling back to the
+  // cached value on the Client doc so we can still flag "low" before
+  // the Meta tab loads.
+  const headerBalance = metaData?.meta_account?.available_balance != null
+    ? Number(metaData.meta_account.available_balance)
+    : (client?.meta_ad_account_balance != null ? Number(client.meta_ad_account_balance) : null);
+  const isLowMetaBalance = client?.meta_enabled && headerBalance != null && headerBalance < 1000;
 
   // Expanded campaign rows (for keyword dropdown)
   const [expandedCampaigns, setExpandedCampaigns] = useState({});
@@ -390,6 +398,23 @@ const ClientAdDetails = () => {
           <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1.2 }}>{displayName}</Typography>
           <Box sx={{ display: 'flex', gap: 0.8, mt: 0.3, flexWrap: 'wrap' }}>
             <Chip label={displayStatus} size="small" sx={{ height: 18, fontSize: '0.65rem', textTransform: 'capitalize', bgcolor: '#10b98115', color: '#10b981' }} />
+            {isLowMetaBalance && (
+              <Chip
+                icon={<WarningIcon sx={{ fontSize: 12, color: '#fff !important' }} />}
+                label={`LOW BAL ₹${Math.round(headerBalance).toLocaleString('en-IN')}`}
+                size="small"
+                sx={{
+                  height: 20,
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  bgcolor: '#ef4444',
+                  color: '#fff',
+                  letterSpacing: 0.3,
+                  '& .MuiChip-label': { px: 0.7 },
+                }}
+                title={`Meta ad account balance ₹${headerBalance.toLocaleString('en-IN')} — below ₹1,000 threshold, at risk of auto-pause`}
+              />
+            )}
             {displayPlace && <Chip label={displayPlace} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />}
             {displayOrgType && <Chip label={displayOrgType} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />}
             {clientInfo?.googleAdsAccountName && (
@@ -1094,10 +1119,43 @@ const ClientAdDetails = () => {
                             </Typography>
                           </Grid>
                           <Grid size={{ xs: 6, md: 2 }}>
-                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Account Balance</Typography>
-                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#f59e0b' }}>
-                              {metaAccount?.available_balance != null ? fmtINR(metaAccount.available_balance) : '—'}
-                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Account Balance</Typography>
+                              {/* Below ₹1,000 = auto-pause risk. Loud red
+                                  chip + warning icon so it can't be missed
+                                  while scanning the header strip. */}
+                              {metaAccount?.available_balance != null && Number(metaAccount.available_balance) < 1000 && (
+                                <Chip
+                                  label="LOW"
+                                  size="small"
+                                  sx={{
+                                    height: 14,
+                                    fontSize: '0.55rem',
+                                    fontWeight: 800,
+                                    bgcolor: '#ef4444',
+                                    color: '#fff',
+                                    letterSpacing: 0.3,
+                                    '& .MuiChip-label': { px: 0.6 },
+                                  }}
+                                />
+                              )}
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+                              {metaAccount?.available_balance != null && Number(metaAccount.available_balance) < 1000 && (
+                                <WarningIcon sx={{ fontSize: 16, color: '#ef4444' }} />
+                              )}
+                              <Typography
+                                sx={{
+                                  fontWeight: 700,
+                                  fontSize: '1rem',
+                                  color: metaAccount?.available_balance != null && Number(metaAccount.available_balance) < 1000
+                                    ? '#ef4444'
+                                    : '#f59e0b',
+                                }}
+                              >
+                                {metaAccount?.available_balance != null ? fmtINR(metaAccount.available_balance) : '—'}
+                              </Typography>
+                            </Box>
                           </Grid>
                           <Grid size={{ xs: 6, md: 2 }}>
                             <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>Lifetime Spent</Typography>
