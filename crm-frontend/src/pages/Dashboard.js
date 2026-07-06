@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   Grid, Card, CardContent, Typography, Box, CircularProgress,
-  Chip, Avatar, Button, Divider, TextField, InputAdornment,
+  Chip, Avatar, Button, Divider, TextField, InputAdornment, InputBase,
+  IconButton, Paper,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Alert as MuiAlert,
   Tooltip,
@@ -11,6 +12,7 @@ import {
 import {
   Facebook, Google, People, Refresh as RefreshIcon,
   Search as SearchIcon,
+  Clear as ClearIcon,
   Warning as WarningIcon,
   ArrowForward as ArrowForwardIcon,
   EmojiEvents as TrophyIcon,
@@ -33,7 +35,7 @@ import {
 const CLIENT_COLORS = ['#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723'];
 
 // --- Client Performance Card — clickable, navigates to client ads detail page ---
-const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, adsLoading, metaLoading }) => {
+const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, metaBalanceValue, adsLoading, metaLoading }) => {
   // Prefer live Meta API summary when available; fall back to DailyEntry tracking.
   const metaForm = metaApi?.form_leads != null ? metaApi.form_leads : (data.metaForm || 0);
   const metaWhats = metaApi?.whatsapp_leads != null ? metaApi.whatsapp_leads : (data.metaWhatsapp || 0);
@@ -43,13 +45,14 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, a
   const googleLeads = (data.googleCall || 0) + (data.googleWebsite || 0);
   const totalLeads = metaLeads + googleLeads;
   const isLinked = client.googleAdsEnabled && adsData;
-  // Meta ad-account balance from the dashboard-overview API. Anything
-  // under ₹1,000 flags a red "Low Balance" chip in the header — pauses
-  // are a real risk below that. `null` (not yet fetched) suppresses the
-  // chip to avoid a false alarm before the API responds.
-  const metaBalance = client.metaEnabled && metaApi?.available_balance != null
-    ? Number(metaApi.available_balance)
-    : null;
+  // Meta ad-account balance. Prefer the dedicated /meta/clients batch
+  // (already deployed on Azure), fall back to dashboard-overview's
+  // available_balance (once that endpoint update ships). Suppress the
+  // chip when neither source has answered yet — no false alarms.
+  const rawBalance = metaBalanceValue != null
+    ? metaBalanceValue
+    : (metaApi?.available_balance != null ? metaApi.available_balance : null);
+  const metaBalance = client.metaEnabled && rawBalance != null ? Number(rawBalance) : null;
   const isLowBalance = metaBalance != null && metaBalance < 1000;
 
   const MetricBox = ({ value, label }) => (
@@ -77,39 +80,78 @@ const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, a
           borderColor: color,
         },
       }}>
-      {/* Colored header with client name */}
+      {/* Colored header with client name.
+          The name wraps to a second line when needed so long client
+          names ("Advanced GroHair & GloSkin Karaikal") stay readable
+          instead of truncating to "Advanced GroHair & GloSkin K...".
+          Date + low-balance sit on a compact metadata row underneath
+          so they never compete for horizontal space with the title. */}
       <Box sx={{
         background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`,
-        px: 2, py: 1.2,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        px: 1.8, py: 1.1,
+        display: 'flex', alignItems: 'flex-start', gap: 1,
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
-          <Avatar sx={{ width: 30, height: 30, bgcolor: 'rgba(255,255,255,0.25)', fontSize: '0.8rem', fontWeight: 700, color: 'white', flexShrink: 0 }}>
-            {client.name?.charAt(0)}
-          </Avatar>
-          <Typography sx={{ fontWeight: 700, fontSize: '0.92rem', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <Avatar sx={{
+          width: 32, height: 32,
+          bgcolor: 'rgba(255,255,255,0.28)',
+          fontSize: '0.86rem', fontWeight: 800, color: 'white',
+          flexShrink: 0, mt: 0.2,
+          border: '1px solid rgba(255,255,255,0.35)',
+        }}>
+          {client.name?.charAt(0)}
+        </Avatar>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            title={client.name}
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              color: 'white',
+              lineHeight: 1.25,
+              // Wrap onto a second line rather than truncating; cap at
+              // two lines so a runaway string can't stretch the card.
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              wordBreak: 'break-word',
+              textWrap: 'balance',
+            }}
+          >
             {client.name}
           </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexShrink: 0 }}>
-          {isLowBalance && (
-            <Chip
-              label={`LOW BAL ₹${Math.round(metaBalance).toLocaleString('en-IN')}`}
-              size="small"
-              sx={{
-                bgcolor: '#ef4444',
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: '0.62rem',
-                height: 22,
-                letterSpacing: 0.3,
-                border: '1px solid #ffffff55',
-                '& .MuiChip-label': { px: 0.9 },
-              }}
-              title={`Meta account balance ₹${metaBalance.toLocaleString('en-IN')} — below ₹1,000 threshold`}
-            />
-          )}
-          <Chip label={dateStr} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, fontSize: '0.68rem', height: 22 }} />
+          {/* Metadata row — date + low-balance flag on their own line
+              so the title above always has the full header width. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.5, flexWrap: 'wrap' }}>
+            <Typography sx={{
+              fontSize: '0.66rem', fontWeight: 700,
+              color: 'rgba(255,255,255,0.85)',
+              letterSpacing: '0.3px',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {dateStr}
+            </Typography>
+            {isLowBalance && (
+              <>
+                <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.5)' }} />
+                <Chip
+                  label={`LOW ₹${Math.round(metaBalance).toLocaleString('en-IN')}`}
+                  size="small"
+                  sx={{
+                    bgcolor: '#ef4444',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: '0.58rem',
+                    height: 17,
+                    letterSpacing: 0.3,
+                    border: '1px solid #ffffff66',
+                    '& .MuiChip-label': { px: 0.6 },
+                  }}
+                  title={`Meta account balance ₹${metaBalance.toLocaleString('en-IN')} — below ₹1,000 threshold`}
+                />
+              </>
+            )}
+          </Box>
         </Box>
       </Box>
 
@@ -320,6 +362,32 @@ const Dashboard = () => {
     return () => { cancelled = true; };
   }, [cachedClients, selectedDate]);
 
+  // Balance-only fetch — separate from dashboard-overview because the
+  // /meta/clients endpoint (Ads Comparison sibling) already exposes
+  // Client.meta_ad_account_balance in a batch call that's LIVE on Azure
+  // today. Using it decouples the low-balance alert from any pending
+  // backend deploy that adds `available_balance` to dashboard-overview.
+  const [balanceByClientId, setBalanceByClientId] = useState({});
+  useEffect(() => {
+    const metaClients = cachedClients.filter(c => c.meta_enabled || c.metaEnabled);
+    if (metaClients.length === 0) { setBalanceByClientId({}); return; }
+    let cancelled = false;
+    api.get('/meta/clients', { params: { from: selectedDate, to: selectedDate } })
+      .then(res => {
+        if (cancelled) return;
+        const list = res.data?.clients || [];
+        const map = {};
+        list.forEach(c => {
+          if (c.clientId != null && c.availableBalance != null) {
+            map[String(c.clientId)] = Number(c.availableBalance);
+          }
+        });
+        setBalanceByClientId(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [cachedClients, selectedDate]);
+
   // Only block the page on essentials (clients list). Everything else loads progressively.
   const initialLoading = clientsLoading && cachedClients.length === 0;
   const loading = leadsLoading || clientsLoading || adsLoading || metaLoading || otherDateLoading;
@@ -526,7 +594,13 @@ const Dashboard = () => {
   // real value.
   const lowBalanceClients = clients
     .map((c) => {
-      const bal = metaDataMap[c._id]?.available_balance;
+      // Prefer the batch balance endpoint (deployed today), fall back
+      // to whatever dashboard-overview returns (once the new backend
+      // ships). Either source is fine — the alert renders when EITHER
+      // one shows a non-null value under ₹2,000.
+      const balFromBatch = balanceByClientId[c._id];
+      const balFromOverview = metaDataMap[c._id]?.available_balance;
+      const bal = balFromBatch != null ? balFromBatch : balFromOverview;
       return {
         id: c._id,
         name: c.name,
@@ -614,79 +688,396 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
-      {/* ── Low Balance (conditional) ──────────────────────────────
-          Sits directly under the welcome hero so the ops team sees
-          any ad accounts in the ₹0-₹2,000 band the moment they open
-          the dashboard. Two visual tiers inside a single alert:
-          CRITICAL (< ₹1,000, red) and WATCH (₹1,000-₹1,999, amber).
-          Same interaction as the attention items alert — click a row
-          to open that client's ads page. */}
+      {/* ── Top-of-page search ─────────────────────────────────────
+          Elevated from the "Client-wise Performance" section header
+          so it's the first thing after the welcome hero. Compact
+          single-row layout keeps it discoverable without dominating
+          the fold. Same `clientSearch` state drives the card grid
+          filter further down. */}
+      <Paper
+        elevation={0}
+        sx={{
+          mb: 2,
+          px: 1.5,
+          borderRadius: 1.5,
+          border: '1px solid',
+          borderColor: '#C0855222',
+          background: `linear-gradient(90deg, #FFF4ED 0%, #ffffff 60%)`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          height: 42,
+        }}
+      >
+        <SearchIcon sx={{ color: '#C08552', fontSize: 20, flexShrink: 0 }} />
+        <InputBase
+          fullWidth
+          placeholder={`Search ${clients.length} client${clients.length === 1 ? '' : 's'}…`}
+          value={clientSearch}
+          onChange={(e) => setClientSearch(e.target.value)}
+          sx={{
+            fontSize: '0.88rem',
+            fontWeight: 500,
+            '& input::placeholder': { color: '#3E272377', opacity: 1 },
+          }}
+          inputProps={{ 'aria-label': 'Search clients' }}
+        />
+        {clientSearch && (
+          <>
+            <Chip
+              size="small"
+              label={`${clients.filter(c => c.name?.toLowerCase().includes(clientSearch.toLowerCase())).length} match${clients.filter(c => c.name?.toLowerCase().includes(clientSearch.toLowerCase())).length === 1 ? '' : 'es'}`}
+              sx={{
+                height: 20, fontSize: '0.66rem', fontWeight: 700,
+                bgcolor: '#C0855218', color: '#C08552', border: '1px solid #C0855230',
+                flexShrink: 0,
+              }}
+            />
+            <IconButton
+              size="small"
+              onClick={() => setClientSearch('')}
+              aria-label="Clear search"
+              sx={{
+                color: '#3E272388', p: 0.3, flexShrink: 0,
+                '&:hover': { color: '#3E2723', bgcolor: '#3E272308' },
+              }}
+            >
+              <ClearIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </>
+        )}
+      </Paper>
+
+      {/* ── Balance Watch (conditional) ─────────────────────────────
+          Fuel-gauge tiles for every Meta ad account under ₹2,000.
+          Reads /meta/clients (already deployed) with a fallback to
+          dashboard-overview once that ships. Each tile encodes tier
+          three ways for fast scanning: a left severity stripe, the
+          amount typed in tier colour, and a depletion bar with the
+          ₹1,000 auto-pause threshold marked. */}
       {lowBalanceClients.length > 0 && (() => {
+        const CRIT = '#ef4444';
+        const WATCH = '#f59e0b';
+        const BROWN_C = '#3E2723';
+        const COPPER_C = '#C08552';
+        const CREAM_C = '#FFF4ED';
+        const TRACK = '#EAE1D5';
         const criticalCount = lowBalanceClients.filter((c) => c.balance < 1000).length;
         const watchCount = lowBalanceClients.length - criticalCount;
-        const alertSeverity = criticalCount > 0 ? 'error' : 'warning';
-        const accentColor = criticalCount > 0 ? '#ef4444' : '#f59e0b';
+        const totalExposure = lowBalanceClients.reduce((s, c) => s + (c.balance || 0), 0);
+        const accent = criticalCount > 0 ? CRIT : WATCH;
+        const fmtINR0 = (n) => `₹${Math.round(n).toLocaleString('en-IN')}`;
         return (
-          <MuiAlert
-            severity={alertSeverity}
-            icon={<WarningIcon />}
+          <Card
+            variant="outlined"
             sx={{
               mb: 2,
-              borderLeft: `4px solid ${accentColor}`,
-              '& .MuiAlert-message': { width: '100%' },
+              overflow: 'hidden',
+              position: 'relative',
+              background: `linear-gradient(180deg, ${CREAM_C} 0%, #fff 65%)`,
+              borderColor: `${accent}55`,
+              '&::before': {
+                content: '""',
+                position: 'absolute', left: 0, top: 0, bottom: 0,
+                width: 5, backgroundColor: accent,
+              },
+              '@keyframes bwPulse': {
+                '0%,100%': { opacity: 1 },
+                '50%': { opacity: 0.55 },
+              },
+              '@media (prefers-reduced-motion: reduce)': {
+                '& .bw-pulse': { animation: 'none !important' },
+              },
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8, flexWrap: 'wrap', gap: 1 }}>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                Low Balance —{' '}
-                {criticalCount > 0 && (
-                  <Box component="span" sx={{ color: '#ef4444' }}>
-                    {criticalCount} critical{watchCount > 0 ? ' · ' : ''}
-                  </Box>
-                )}
-                {watchCount > 0 && (
-                  <Box component="span" sx={{ color: '#f59e0b' }}>
-                    {watchCount} watch
-                  </Box>
-                )}
-              </Typography>
-              <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
-                Meta accounts under ₹2,000 · red = under ₹1,000 (auto-pause risk)
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              {lowBalanceClients.map((c) => {
-                const isCritical = c.balance < 1000;
-                const tierColor = isCritical ? '#ef4444' : '#f59e0b';
-                const hoverBg = isCritical ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.10)';
-                return (
-                  <Box
-                    key={c.id}
-                    onClick={() => navigate(`/client-ads/${c.id}`)}
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 1,
-                      py: 0.5, px: 1, borderRadius: 1, cursor: 'pointer',
-                      '&:hover': { bgcolor: hoverBg },
-                    }}
-                  >
-                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tierColor, flexShrink: 0 }} />
-                    <Typography sx={{ fontSize: '0.82rem', flex: 1, fontWeight: isCritical ? 600 : 400 }}>
-                      {c.name} — Meta balance{' '}
-                      <Box component="span" sx={{ color: tierColor, fontWeight: 700 }}>
-                        ₹{Math.round(c.balance).toLocaleString('en-IN')}
+            <CardContent sx={{ p: 2.5, pl: 3, '&:last-child': { pb: 2.5 } }}>
+              {/* ── Header — three balanced blocks ────────────────── */}
+              <Box sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1.4fr 1.6fr 1fr' },
+                gap: { xs: 1.5, md: 2 },
+                alignItems: 'center',
+                mb: 2,
+              }}>
+                {/* Block 1 — title */}
+                <Box>
+                  <Typography sx={{
+                    fontSize: '0.66rem', fontWeight: 800, letterSpacing: '1.5px',
+                    color: COPPER_C, textTransform: 'uppercase', lineHeight: 1,
+                    mb: 0.7,
+                  }}>
+                    Balance Watch
+                  </Typography>
+                  <Typography sx={{
+                    fontWeight: 800, fontSize: '1.05rem', color: BROWN_C, lineHeight: 1.2,
+                  }}>
+                    {lowBalanceClients.length} account{lowBalanceClients.length === 1 ? '' : 's'} under ₹2,000
+                  </Typography>
+                  <Typography sx={{
+                    fontSize: '0.7rem', color: `${BROWN_C}99`, fontWeight: 500, mt: 0.3,
+                  }}>
+                    Top-up before ads auto-pause at ₹1,000
+                  </Typography>
+                </Box>
+
+                {/* Block 2 — tier counters as balanced pill-stats */}
+                <Box sx={{
+                  display: 'grid',
+                  gridTemplateColumns: (criticalCount > 0 && watchCount > 0) ? '1fr 1fr' : '1fr',
+                  gap: 1,
+                }}>
+                  {criticalCount > 0 && (
+                    <Box sx={{
+                      display: 'flex', alignItems: 'center', gap: 1.2,
+                      px: 1.4, py: 0.9,
+                      borderRadius: 1.5,
+                      bgcolor: `${CRIT}10`,
+                      border: `1px solid ${CRIT}30`,
+                    }}>
+                      <Box sx={{
+                        width: 34, height: 34, borderRadius: '50%',
+                        bgcolor: CRIT, color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 900, fontSize: '1rem',
+                        fontVariantNumeric: 'tabular-nums',
+                        flexShrink: 0,
+                      }}>
+                        {criticalCount}
                       </Box>
-                      {isCritical && (
-                        <Box component="span" sx={{ color: '#ef4444', fontWeight: 700 }}>
-                          {' '}(below ₹1,000, ads may auto-pause)
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{
+                          fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.6px',
+                          color: CRIT, textTransform: 'uppercase', lineHeight: 1,
+                        }}>
+                          Critical
+                        </Typography>
+                        <Typography sx={{
+                          fontSize: '0.7rem', color: `${BROWN_C}AA`, fontWeight: 500, mt: 0.3,
+                        }}>
+                          Below ₹1,000
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                  {watchCount > 0 && (
+                    <Box sx={{
+                      display: 'flex', alignItems: 'center', gap: 1.2,
+                      px: 1.4, py: 0.9,
+                      borderRadius: 1.5,
+                      bgcolor: `${WATCH}10`,
+                      border: `1px solid ${WATCH}30`,
+                    }}>
+                      <Box sx={{
+                        width: 34, height: 34, borderRadius: '50%',
+                        bgcolor: WATCH, color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 900, fontSize: '1rem',
+                        fontVariantNumeric: 'tabular-nums',
+                        flexShrink: 0,
+                      }}>
+                        {watchCount}
+                      </Box>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{
+                          fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.6px',
+                          color: WATCH, textTransform: 'uppercase', lineHeight: 1,
+                        }}>
+                          Watch
+                        </Typography>
+                        <Typography sx={{
+                          fontSize: '0.7rem', color: `${BROWN_C}AA`, fontWeight: 500, mt: 0.3,
+                        }}>
+                          ₹1,000 – ₹1,999
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+
+                {/* Block 3 — combined exposure */}
+                <Box sx={{
+                  textAlign: { xs: 'left', md: 'right' },
+                  borderLeft: { md: `1px solid ${BROWN_C}18` },
+                  pl: { md: 2 },
+                }}>
+                  <Typography sx={{
+                    fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.8px',
+                    color: `${BROWN_C}99`, textTransform: 'uppercase',
+                  }}>
+                    Combined exposure
+                  </Typography>
+                  <Typography sx={{
+                    fontWeight: 900, fontSize: '1.4rem', color: BROWN_C,
+                    fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, mt: 0.4,
+                  }}>
+                    {fmtINR0(totalExposure)}
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* ── Fuel-gauge grid ─────────────────────────────────── */}
+              <Grid container spacing={1.5}>
+                {lowBalanceClients.map((c) => {
+                  const isCritical = c.balance < 1000;
+                  const tierColor = isCritical ? CRIT : WATCH;
+                  const tierLabel = isCritical ? 'Critical' : 'Watch';
+                  const fillPct = Math.max(2, Math.min(100, (c.balance / 2000) * 100));
+                  return (
+                    <Grid key={c.id} size={{ xs: 12, sm: 6, lg: 4 }}>
+                      <Box
+                        onClick={() => navigate(`/client-ads/${c.id}`)}
+                        tabIndex={0}
+                        role="button"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            navigate(`/client-ads/${c.id}`);
+                          }
+                        }}
+                        sx={{
+                          position: 'relative',
+                          bgcolor: '#fff',
+                          border: `1px solid ${tierColor}30`,
+                          borderRadius: 1.5,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
+                          '&:hover': {
+                            transform: 'translateY(-2px)',
+                            boxShadow: `0 10px 22px ${tierColor}22`,
+                            borderColor: `${tierColor}80`,
+                          },
+                          '&:focus-visible': {
+                            outline: `2px solid ${tierColor}`,
+                            outlineOffset: 2,
+                          },
+                        }}
+                      >
+                        {/* Left severity stripe */}
+                        <Box sx={{
+                          position: 'absolute', left: 0, top: 0, bottom: 0,
+                          width: 3, bgcolor: tierColor,
+                        }} />
+
+                        {/* Tile body — strict two-row grid inside a
+                            padded content area for clean vertical
+                            rhythm regardless of name length */}
+                        <Box sx={{ pl: 2.2, pr: 2, py: 1.6 }}>
+                          {/* Row 1 — identity + amount, baseline-aligned */}
+                          <Box sx={{
+                            display: 'grid',
+                            gridTemplateColumns: 'auto 1fr auto',
+                            gap: 1.2,
+                            alignItems: 'center',
+                            mb: 1.4,
+                          }}>
+                            <Box sx={{
+                              width: 34, height: 34, borderRadius: '50%',
+                              bgcolor: `${tierColor}18`,
+                              color: tierColor,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontWeight: 900, fontSize: '0.9rem',
+                              border: `1px solid ${tierColor}45`,
+                            }}>
+                              {c.name?.charAt(0) || '?'}
+                            </Box>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography sx={{
+                                fontWeight: 800, fontSize: '0.85rem', color: BROWN_C,
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                lineHeight: 1.15,
+                              }}>
+                                {c.name}
+                              </Typography>
+                              <Box sx={{
+                                display: 'inline-flex', alignItems: 'center',
+                                mt: 0.4,
+                                px: 0.7, py: 0.15,
+                                borderRadius: 0.6,
+                                bgcolor: `${tierColor}18`,
+                                border: `1px solid ${tierColor}35`,
+                              }}>
+                                <Typography sx={{
+                                  fontSize: '0.6rem', fontWeight: 800, color: tierColor,
+                                  textTransform: 'uppercase', letterSpacing: '0.6px',
+                                  lineHeight: 1,
+                                }}>
+                                  {tierLabel}
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Typography
+                              className={isCritical ? 'bw-pulse' : ''}
+                              sx={{
+                                fontWeight: 900, fontSize: '1.25rem', color: tierColor,
+                                fontVariantNumeric: 'tabular-nums',
+                                lineHeight: 1,
+                                animation: isCritical ? 'bwPulse 2s ease-in-out infinite' : 'none',
+                              }}
+                            >
+                              {fmtINR0(c.balance)}
+                            </Typography>
+                          </Box>
+
+                          {/* Row 2 — depletion bar */}
+                          <Box sx={{
+                            position: 'relative',
+                            height: 6, borderRadius: 3,
+                            bgcolor: TRACK,
+                            overflow: 'visible',
+                          }}>
+                            <Box sx={{
+                              position: 'absolute', left: 0, top: 0, bottom: 0,
+                              width: `${fillPct}%`,
+                              background: `linear-gradient(90deg, ${tierColor}D0 0%, ${tierColor} 100%)`,
+                              borderRadius: 3,
+                              transition: 'width 0.6s ease',
+                            }} />
+                            {/* ₹1K threshold marker — 50% of the 0-2K
+                                range. A vertical tick, no floating
+                                label (endpoint labels below carry the
+                                context so nothing overlaps the bar). */}
+                            <Box sx={{
+                              position: 'absolute',
+                              left: '50%', top: -3, bottom: -3,
+                              width: 2, bgcolor: BROWN_C,
+                              transform: 'translateX(-1px)',
+                              borderRadius: 1,
+                              opacity: 0.55,
+                            }} />
+                          </Box>
+
+                          {/* Row 3 — endpoint scale, 3-column grid so
+                              labels don't collide with the bar or
+                              each other regardless of tile width */}
+                          <Box sx={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 1fr 1fr',
+                            mt: 0.7,
+                            fontSize: '0.58rem',
+                            fontWeight: 700,
+                            letterSpacing: '0.4px',
+                            color: `${BROWN_C}88`,
+                            textTransform: 'uppercase',
+                          }}>
+                            <Typography sx={{ fontSize: 'inherit', fontWeight: 'inherit', textAlign: 'left' }}>
+                              ₹0
+                            </Typography>
+                            <Typography sx={{ fontSize: 'inherit', fontWeight: 'inherit', textAlign: 'center', color: `${BROWN_C}AA` }}>
+                              ₹1K pause
+                            </Typography>
+                            <Typography sx={{ fontSize: 'inherit', fontWeight: 'inherit', textAlign: 'right' }}>
+                              ₹2K
+                            </Typography>
+                          </Box>
                         </Box>
-                      )}
-                    </Typography>
-                    <ArrowForwardIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                  </Box>
-                );
-              })}
-            </Box>
-          </MuiAlert>
+                      </Box>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </CardContent>
+          </Card>
         );
       })()}
 
@@ -1088,21 +1479,19 @@ const Dashboard = () => {
       </Grid>
 
       {/* ── Row 3: Client Performance Cards ── */}
+      {/* Search moved to the top of the page as a full-width Quick
+          Find bar — this heading now just labels the section. Row
+          count reflects the active filter so users can see whether
+          they're looking at the whole list or a filtered slice. */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h6" sx={{ fontWeight: 600 }}>
           Client-wise Performance
           <Typography component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary', ml: 1 }}>
-            {clients.length} clients
+            {clientSearch
+              ? `${clients.filter(c => c.name?.toLowerCase().includes(clientSearch.toLowerCase())).length} of ${clients.length} clients · filtered by "${clientSearch}"`
+              : `${clients.length} clients`}
           </Typography>
         </Typography>
-        <TextField
-          size="small"
-          placeholder="Search clients..."
-          value={clientSearch}
-          onChange={(e) => setClientSearch(e.target.value)}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} /></InputAdornment> } }}
-          sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem' } }}
-        />
       </Box>
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[...clients].filter(c => !clientSearch || c.name?.toLowerCase().includes(clientSearch.toLowerCase())).sort((a, b) => {
@@ -1119,6 +1508,7 @@ const Dashboard = () => {
               onClick={() => navigate(`/client-ads/${client._id}`)}
               adsData={adsDataMap[client._id]}
               metaApi={metaDataMap[client._id]}
+              metaBalanceValue={balanceByClientId[client._id]}
               adsLoading={adsLoading}
               metaLoading={metaLoading}
             />

@@ -18,6 +18,7 @@ const DashboardEnhanced = lazy(() => import('./pages/DashboardEnhanced'));
 const DashboardPro = lazy(() => import('./pages/DashboardPro'));
 const DailyEntry = lazy(() => import('./pages/DailyEntry'));
 const FundEntry = lazy(() => import('./pages/FundEntry'));
+const FundEntryPro = lazy(() => import('./pages/FundEntryPro'));
 const Clients = lazy(() => import('./pages/Clients'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -130,6 +131,7 @@ function App() {
           <Route path="daily-lead-data" element={<DailyLeadData />} />
           <Route path="client-vault" element={<ClientVault />} />
           <Route path="fund-entry" element={<FundEntry />} />
+          <Route path="fund-entry-pro" element={<FundEntryPro />} />
           <Route path="clients" element={<Clients />} />
           <Route path="leads" element={<Leads />} />
           <Route path="reports" element={<Reports />} />

@@ -24,24 +24,53 @@ const fetchWithTimeout = async (url, options = {}, timeout = 15000) => {
   }
 };
 
-// GET /api/funds - Proxies to main API (production data)
+// GET /api/funds
+// Reads directly from the local FundEntry collection — the same place
+// POST /api/funds writes to. Previously this proxied to an older CRM
+// backend (MAIN_API_URL), which meant entries saved via the FundEntry
+// UI never surfaced in any list view. That legacy proxy is still
+// available at /api/funds/legacy for anyone who needs the old data.
+//
+// Query params (all optional):
+//   dateFrom       — YYYY-MM-DD, inclusive lower bound on `date`
+//   dateTo         — YYYY-MM-DD, inclusive upper bound on `date`
+//   entryType      — 'daily_fund' | 'general'
+//   clientId       — filter to a single client
 router.get('/', async (req, res) => {
+  try {
+    const { dateFrom, dateTo, entryType, clientId } = req.query;
+    const query = {};
+    if (entryType) query.entryType = entryType;
+    if (clientId) query.clientId = clientId;
+    if (dateFrom || dateTo) {
+      query.date = {};
+      if (dateFrom) query.date.$gte = dateFrom;
+      if (dateTo)   query.date.$lte = dateTo;
+    }
+    const entries = await FundEntry.find(query)
+      .sort({ date: -1, updatedAt: -1 })
+      .limit(2000)
+      .lean();
+    return res.status(200).json({ count: entries.length, data: entries });
+  } catch (error) {
+    console.error('Funds fetch error:', error.message);
+    return res.status(500).json({ error: error.message, data: [] });
+  }
+});
+
+// GET /api/funds/legacy — the old MAIN_API_URL proxy. Kept in case
+// anything still relies on it; new UI reads from the /api/funds root.
+router.get('/legacy', async (req, res) => {
   try {
     const headers = {};
     if (req.headers.authorization) headers.Authorization = req.headers.authorization;
     if (req.headers.cookie) headers.cookie = req.headers.cookie;
-
     const qs = new URLSearchParams(req.query).toString();
     const url = `${MAIN_API_URL}/api/funds${qs ? `?${qs}` : ''}`;
     const response = await fetchWithTimeout(url, { headers }, 20000);
-    if (!response.ok) {
-      console.error(`Funds proxy: main API returned ${response.status}`);
-      return res.status(200).json([]);
-    }
-    const data = await response.json();
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error('Funds proxy error:', error.message);
+    if (!response.ok) return res.status(200).json([]);
+    return res.status(200).json(await response.json());
+  } catch {
     return res.status(200).json([]);
   }
 });

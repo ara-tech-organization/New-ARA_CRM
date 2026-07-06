@@ -5,6 +5,7 @@ import { logout, loadUserFromStorage } from '../store/slices/authSlice';
 import api from '../api/axios';
 import { ThemeContext } from '../contexts/ThemeContext';
 import leadMatrixLogo from '../assets/Lead-Matrix-Logo.png';
+import LowBalanceBell from '../components/LowBalanceBell';
 import {
   Box,
   Drawer,
@@ -88,6 +89,7 @@ const routePermissions = {
   '/ads-dashboard': 'ads-dashboard',
   '/client-vault': 'client-vault',
   '/fund-entry': 'fund-entry',
+  '/fund-entry-pro': 'fund-entry',
   '/reports': 'reports',
   '/settings': 'settings',
   '/access-management': 'access-management',
@@ -254,6 +256,13 @@ const MainLayout = () => {
     //   badge: null,
     //   permissionId: 'fund-entry'
     // },
+    {
+      text: 'Fund Entry',
+      icon: <AccountBalanceIcon />,
+      path: '/fund-entry-pro',
+      badge: null,
+      permissionId: 'fund-entry'
+    },
     {
       text: 'Analytics',
       icon: <ReportsIcon />,
@@ -688,6 +697,11 @@ const MainLayout = () => {
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Low-balance notification bell — visible to admins so
+                anyone monitoring the CRM sees which Meta accounts are
+                at risk of auto-pausing without opening the dashboard. */}
+            {(isAdmin || isSuperAdmin) && <LowBalanceBell />}
+
             {/* ARA Apps launcher — opens sibling apps in a new tab so
                 the CRM session is preserved. Admins + superadmins only;
                 hidden from everyone else to keep the bar uncluttered. */}
