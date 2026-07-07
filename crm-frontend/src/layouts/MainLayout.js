@@ -50,7 +50,6 @@ import {
   Task as TaskIcon,
   Insights as InsightsIcon,
   EditNote as EditNoteIcon,
-  AccountBalance as AccountBalanceIcon,
   Shield as ShieldIcon,
   Leaderboard as LeaderboardIcon,
   Campaign as CampaignIcon,
@@ -88,8 +87,6 @@ const routePermissions = {
   '/leads': 'leads',
   '/ads-dashboard': 'ads-dashboard',
   '/client-vault': 'client-vault',
-  '/fund-entry': 'fund-entry',
-  '/fund-entry-pro': 'fund-entry',
   '/reports': 'reports',
   '/settings': 'settings',
   '/access-management': 'access-management',
@@ -249,20 +246,6 @@ const MainLayout = () => {
     //   badge: null,
     //   permissionId: 'content-management'
     // },
-    // {
-    //   text: 'Fund Entry',
-    //   icon: <AccountBalanceIcon />,
-    //   path: '/fund-entry',
-    //   badge: null,
-    //   permissionId: 'fund-entry'
-    // },
-    {
-      text: 'Fund Entry',
-      icon: <AccountBalanceIcon />,
-      path: '/fund-entry-pro',
-      badge: null,
-      permissionId: 'fund-entry'
-    },
     {
       text: 'Analytics',
       icon: <ReportsIcon />,

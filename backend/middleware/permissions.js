@@ -20,11 +20,6 @@ const API_TO_PAGE_PERMISSIONS = {
   'client:read': ['clients', 'dashboard', 'daily-entry', 'daily-lead-data'],
   'client:update': ['clients'],
   'client:delete': ['clients'],
-  // Fund permissions -> fund-entry page
-  'fund:create': ['fund-entry'],
-  'fund:read': ['fund-entry', 'dashboard'],
-  'fund:update': ['fund-entry'],
-  'fund:delete': ['fund-entry'],
   // Vault permissions -> client-vault page
   'vault:read': ['client-vault'],
   'vault:update': ['client-vault'],

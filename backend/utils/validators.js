@@ -170,27 +170,6 @@ export const leadValidation = [
     .withMessage('Notes must not exceed 1000 characters'),
 ];
 
-// Fund Entry validation rules
-export const fundEntryValidation = [
-  body('amount')
-    .notEmpty()
-    .withMessage('Amount is required')
-    .isNumeric()
-    .withMessage('Amount must be a number')
-    .isFloat({ min: 0 })
-    .withMessage('Amount must be positive'),
-  body('date')
-    .notEmpty()
-    .withMessage('Date is required')
-    .isISO8601()
-    .withMessage('Invalid date format'),
-  body('description')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Description must not exceed 500 characters'),
-];
-
 // Daily Lead Data validation rules
 export const dailyLeadDataValidation = [
   body('date')

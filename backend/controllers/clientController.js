@@ -1,6 +1,5 @@
 import Client from '../models/Client.js';
 import DailyEntry from '../models/DailyEntry.js';
-import FundEntry from '../models/FundEntry.js';
 import ContentEntry from '../models/ContentEntry.js';
 import Lead from '../models/Lead.js';
 import Vault from '../models/Vault.js';
@@ -228,7 +227,6 @@ export const deleteClient = asyncHandler(async (req, res) => {
   };
 
   await safeDelete('DailyEntry',    () => DailyEntry.deleteMany({ clientId: clientIdStr }));
-  await safeDelete('FundEntry',     () => FundEntry.deleteMany({ $or: [{ client: client._id }, { clientId: clientIdStr }] }));
   await safeDelete('ContentEntry',  () => ContentEntry.deleteMany({ clientName }));
   await safeDelete('Lead',          () => Lead.deleteMany({ client: client._id }));
   await safeDelete('Vault',         () => Vault.deleteMany({ clientId: clientIdStr }));

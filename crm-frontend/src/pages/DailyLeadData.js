@@ -252,7 +252,7 @@ const DailyLeadData = () => {
             <th class="meta-col">Meta Form</th>
             <th class="meta-col">Meta WhatsApp</th>
             <th class="meta-col">Meta Total</th>
-            <th class="meta-col">Meta Fund (₹)</th>
+            <th class="meta-col">Spent (₹)</th>
           </tr>
         </thead>
         <tbody>
@@ -568,7 +568,7 @@ const DailyLeadData = () => {
                         <Tooltip arrow title="Meta click-to-WhatsApp conversations on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Messages</TableCell></Tooltip>
                         <Tooltip arrow title="Meta click-to-call button taps on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#2e7d3215', cursor: 'help' }} align="center">Calls</TableCell></Tooltip>
                         <Tooltip arrow title="Meta Form + Meta WhatsApp total for this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Meta Total</TableCell></Tooltip>
-                        <Tooltip arrow title="Total Meta ad spend on this day (₹)"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="right">Meta Fund</TableCell></Tooltip>
+                        <Tooltip arrow title="Total Meta ad spend on this day (₹)"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="right">Spent</TableCell></Tooltip>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -698,7 +698,7 @@ const DailyLeadData = () => {
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Form</TableCell>
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta WhatsApp</TableCell>
                     <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Total</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Meta Fund</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Spent</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>

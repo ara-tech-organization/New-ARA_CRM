@@ -1,5 +1,4 @@
 import Client from '../models/Client.js';
-import FundEntry from '../models/FundEntry.js';
 import DailyEntry from '../models/DailyEntry.js';
 import DailyLeadData from '../models/DailyLeadData.js';
 import Lead from '../models/Lead.js';
@@ -38,34 +37,13 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     }),
   ]);
 
-  // Get revenue data
-  const revenueData = await FundEntry.aggregate([
-    {
-      $match: { status: 'completed', type: 'income' },
-    },
-    {
-      $group: {
-        _id: null,
-        totalRevenue: { $sum: '$amount' },
-      },
-    },
-  ]);
-
-  const expenseData = await FundEntry.aggregate([
-    {
-      $match: { status: 'completed', type: 'expense' },
-    },
-    {
-      $group: {
-        _id: null,
-        totalExpense: { $sum: '$amount' },
-      },
-    },
-  ]);
-
-  const totalRevenue = revenueData[0]?.totalRevenue || 0;
-  const totalExpense = expenseData[0]?.totalExpense || 0;
-  const netProfit = totalRevenue - totalExpense;
+  // Revenue / expense tracking previously derived from the FundEntry
+  // collection, which has been removed. Zero these out so the endpoint
+  // still responds with a stable shape; wire in a new source later if
+  // financial reports are re-introduced.
+  const totalRevenue = 0;
+  const totalExpense = 0;
+  const netProfit = 0;
 
   res.status(200).json({
     success: true,
@@ -87,45 +65,12 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getSalesReport = asyncHandler(async (req, res) => {
-  const { dateFrom, dateTo, groupBy = 'month' } = req.query;
-
-  const matchStage = { status: 'completed', type: 'income' };
-  if (dateFrom || dateTo) {
-    matchStage.date = {};
-    if (dateFrom) matchStage.date.$gte = new Date(dateFrom);
-    if (dateTo) matchStage.date.$lte = new Date(dateTo);
-  }
-
-  let groupByFormat;
-  switch (groupBy) {
-    case 'day':
-      groupByFormat = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
-      break;
-    case 'week':
-      groupByFormat = { $week: '$date' };
-      break;
-    case 'year':
-      groupByFormat = { $year: '$date' };
-      break;
-    default: // month
-      groupByFormat = { $dateToString: { format: '%Y-%m', date: '$date' } };
-  }
-
-  const salesData = await FundEntry.aggregate([
-    { $match: matchStage },
-    {
-      $group: {
-        _id: groupByFormat,
-        totalSales: { $sum: '$amount' },
-        count: { $sum: 1 },
-        avgSale: { $avg: '$amount' },
-      },
-    },
-    { $sort: { _id: 1 } },
-  ]);
-
-  const totalSales = salesData.reduce((sum, item) => sum + item.totalSales, 0);
-  const totalTransactions = salesData.reduce((sum, item) => sum + item.count, 0);
+  // Sales aggregate previously came from FundEntry (removed). Return an
+  // empty series so consumers keep working; hook up a replacement source
+  // when financial reporting is rebuilt.
+  const salesData = [];
+  const totalSales = 0;
+  const totalTransactions = 0;
 
   res.status(200).json({
     success: true,
@@ -303,59 +248,10 @@ export const getLeadPerformanceReport = asyncHandler(async (req, res) => {
  * @access  Private (Admin/Superadmin)
  */
 export const getFinancialReport = asyncHandler(async (req, res) => {
-  const { dateFrom, dateTo, groupBy = 'month' } = req.query;
-
-  const matchStage = { status: 'completed' };
-  if (dateFrom || dateTo) {
-    matchStage.date = {};
-    if (dateFrom) matchStage.date.$gte = new Date(dateFrom);
-    if (dateTo) matchStage.date.$lte = new Date(dateTo);
-  }
-
-  let groupByFormat;
-  switch (groupBy) {
-    case 'day':
-      groupByFormat = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
-      break;
-    case 'week':
-      groupByFormat = { $week: '$date' };
-      break;
-    case 'year':
-      groupByFormat = { $year: '$date' };
-      break;
-    default:
-      groupByFormat = { $dateToString: { format: '%Y-%m', date: '$date' } };
-  }
-
-  const financialData = await FundEntry.aggregate([
-    { $match: matchStage },
-    {
-      $group: {
-        _id: {
-          period: groupByFormat,
-          type: '$type',
-        },
-        total: { $sum: '$amount' },
-        count: { $sum: 1 },
-      },
-    },
-    { $sort: { '_id.period': 1 } },
-  ]);
-
-  // Transform data for easier consumption
+  // Financial series previously came from FundEntry (removed). Return
+  // an empty object so callers keep responding with the same shape;
+  // repopulate when a replacement financial source is wired up.
   const formattedData = {};
-  financialData.forEach((item) => {
-    const period = item._id.period;
-    if (!formattedData[period]) {
-      formattedData[period] = { income: 0, expense: 0, profit: 0 };
-    }
-    if (item._id.type === 'income') {
-      formattedData[period].income = item.total;
-    } else if (item._id.type === 'expense') {
-      formattedData[period].expense = item.total;
-    }
-    formattedData[period].profit = formattedData[period].income - formattedData[period].expense;
-  });
 
   res.status(200).json({
     success: true,

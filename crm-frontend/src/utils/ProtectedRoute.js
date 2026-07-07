@@ -10,7 +10,6 @@ const routePermissions = {
   '/clients': 'clients',
   '/leads': 'leads',
   '/client-vault': 'client-vault',
-  '/fund-entry': 'fund-entry',
   '/reports': 'reports',
   '/settings': 'settings',
   '/access-management': 'access-management',

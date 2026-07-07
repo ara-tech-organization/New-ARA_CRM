@@ -30,7 +30,6 @@ export const register = asyncHandler(async (req, res) => {
       'leads',
       'clients',
       'client-vault',
-      'fund-entry',
       'reports',
       'settings',
       'access-management',
