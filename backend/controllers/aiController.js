@@ -92,19 +92,63 @@ const buildPrompt = ({ platform, clientName, dateRange, summary, campaigns }) =>
   ].join('\n');
 };
 
-// Robust JSON extraction — Gemini occasionally wraps the JSON in a
-// markdown code fence even when asked not to; strip fences and any
-// surrounding prose so JSON.parse doesn't choke.
+// Robust JSON extraction — handles three failure modes:
+//   1. Gemini wraps output in a ```json``` fence despite instructions.
+//   2. Gemini adds prose either side of the JSON block.
+//   3. The response gets truncated by maxOutputTokens mid-array or
+//      mid-string; we repair by closing whatever's still open so at
+//      least the fields that DID come through are usable.
 const extractJson = (text) => {
   if (!text || typeof text !== 'string') return null;
   let cleaned = text.trim();
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenceMatch) cleaned = fenceMatch[1].trim();
   const firstBrace = cleaned.indexOf('{');
-  const lastBrace = cleaned.lastIndexOf('}');
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
-  const jsonSlice = cleaned.slice(firstBrace, lastBrace + 1);
-  try { return JSON.parse(jsonSlice); } catch { return null; }
+  if (firstBrace === -1) return null;
+  let slice = cleaned.slice(firstBrace);
+  // Fast path — the whole thing already parses.
+  try { return JSON.parse(slice); } catch { /* fall through to repair */ }
+  // Repair path — trim any trailing junk and rebalance braces/brackets/quotes.
+  const lastBrace = slice.lastIndexOf('}');
+  if (lastBrace !== -1 && lastBrace > 0) {
+    try { return JSON.parse(slice.slice(0, lastBrace + 1)); } catch { /* keep repairing */ }
+  }
+  const repaired = repairTruncatedJson(slice);
+  if (repaired) {
+    try { return JSON.parse(repaired); } catch { return null; }
+  }
+  return null;
+};
+
+// Walk the string tracking depth of {}, [], and open strings. When we
+// hit the end of the input mid-way through something, emit the closers
+// needed to make the JSON parseable. Handles the common truncation
+// pattern where Gemini cuts off inside a string in the middle of a
+// strengths / strategies array.
+const repairTruncatedJson = (input) => {
+  let inString = false;
+  let escape = false;
+  const stack = [];
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' && stack[stack.length - 1] === '{') stack.pop();
+    else if (ch === ']' && stack[stack.length - 1] === '[') stack.pop();
+  }
+  let out = input;
+  // Trim a dangling comma/colon so the JSON stays syntactically valid.
+  out = out.replace(/[,\s]*$/, '');
+  // If we stopped mid-string, close the string.
+  if (inString) out += '"';
+  // Close any open arrays and objects, in reverse order.
+  for (let i = stack.length - 1; i >= 0; i -= 1) {
+    out += stack[i] === '{' ? '}' : ']';
+  }
+  return out;
 };
 
 // Validate + normalise the model's response so the frontend can trust
@@ -158,9 +202,12 @@ export const analyzeCampaign = async (req, res) => {
       // phrasings across repeat runs.
       temperature: 0.4,
       topP: 0.9,
-      // Cap output so a runaway response can't burn tokens; ~1500
-      // tokens is comfortably enough for the structured JSON above.
-      maxOutputTokens: 1500,
+      // 1500 tokens was hitting the cap on Gemini 2.5-flash, which
+      // burns some budget on internal reasoning before writing. 4096
+      // is enough headroom for the full seven-section JSON with no
+      // truncation, and still bounded so a runaway response can't
+      // blow the budget.
+      maxOutputTokens: 4096,
       // Nudge the model toward structured JSON.
       responseMimeType: 'application/json',
     },
