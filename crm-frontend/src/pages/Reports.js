@@ -182,6 +182,28 @@ const CustomTooltip = ({ active, payload, label, metricKey }) => {
   return null;
 };
 
+// Compact stat tile used by the Google Ads overview strip.
+// Left border in the metric's color + eyebrow label + tabular-nums
+// value. Doubles as a "which metric matters" cue when scanning.
+const SummaryTile = ({ label, value, color }) => (
+  <Card variant="outlined" sx={{ borderLeft: `3px solid ${color}`, height: '100%' }}>
+    <CardContent sx={{ py: 1.4, '&:last-child': { pb: 1.4 } }}>
+      <Typography sx={{
+        fontSize: '0.62rem', fontWeight: 800, letterSpacing: '1.1px',
+        color: '#8B7261', textTransform: 'uppercase', mb: 0.3,
+      }}>
+        {label}
+      </Typography>
+      <Typography sx={{
+        fontWeight: 900, fontSize: '1.1rem', color,
+        fontVariantNumeric: 'tabular-nums', lineHeight: 1.1,
+      }}>
+        {value}
+      </Typography>
+    </CardContent>
+  </Card>
+);
+
 // Individual Line Chart Component
 const MetricLineChart = ({ data, metricKey, title }) => {
   const config = METRIC_CONFIG[metricKey];
@@ -355,6 +377,38 @@ const Reports = () => {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [barAnalytics, setBarAnalytics] = useState(null);
   const loading = analyticsLoading;
+
+  // ── Google Ads (per selected client) state ─────────────────────
+  // Fetches the selected client's Google Ads performance for the
+  // From/To range already picked at the top of the page. Uses the
+  // same /analytics/client/:id endpoint the per-client detail page
+  // uses, so the numbers exactly match what admins see there.
+  const [googleData, setGoogleData] = useState(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleMetric, setGoogleMetric] = useState('cost');
+  const [googleChartTab, setGoogleChartTab] = useState(0); // 0=Daily Trends · 1=Date-wise Table
+  useEffect(() => {
+    if (!selectedClient || !fromDate || !toDate) {
+      setGoogleData(null);
+      return;
+    }
+    let cancelled = false;
+    setGoogleLoading(true);
+    api.get(`/analytics/client/${selectedClient}`, {
+      params: { start_date: fromDate, end_date: toDate },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setGoogleData(res.data || null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Reports Google Ads fetch failed:', err);
+        setGoogleData(null);
+      })
+      .finally(() => { if (!cancelled) setGoogleLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedClient, fromDate, toDate]);
 
   // Line-chart / stats / table fetch — uses the picked From/To dates.
   useEffect(() => {
@@ -1125,6 +1179,380 @@ const Reports = () => {
             </CardContent>
           </Card>
           )}
+      {/* ── Google Ads (selected client + date range) ─────────────
+          Mirrors the client picker and the From/To range at the top
+          of the page. When no client is picked or the picked client
+          isn't linked to Google Ads, the card shows a friendly empty
+          state. Otherwise, four summary tiles + a daily performance
+          chart with a metric toggle. */}
+      {selectedClient && (() => {
+        const GOOGLE_GREEN = '#34A853';
+        const BROWN_C = '#3E2723';
+        const CREAM_C = '#FFF4ED';
+        const BORDER_C = '#E8D5C4';
+        const summary = googleData?.summary || null;
+        const dailyRaw = Array.isArray(googleData?.dailyMetrics) ? googleData.dailyMetrics : [];
+        // Normalise the date to `YYYY-MM-DD` regardless of whether
+        // the backend returns a raw ISO timestamp or a plain date.
+        // Previously the ISO tail (`…T00:00:00.000Z`) leaked into
+        // the X-axis label.
+        const isoDay = (raw) => String(raw || '').slice(0, 10);
+        // Aggregate multiple campaigns on the same date into one row
+        // per date, so the trend chart plots a single line per metric.
+        const byDate = {};
+        dailyRaw.forEach((d) => {
+          const dt = isoDay(d.date);
+          if (!dt) return;
+          if (!byDate[dt]) byDate[dt] = { date: dt, cost: 0, clicks: 0, impressions: 0, conversions: 0 };
+          byDate[dt].cost += Number(d.cost) || 0;
+          byDate[dt].clicks += Number(d.clicks) || 0;
+          byDate[dt].impressions += Number(d.impressions) || 0;
+          byDate[dt].conversions += Number(d.conversions) || 0;
+        });
+        // Nice "Jul 2" style labels via date-fns — matches the Meta
+        // charts elsewhere on the page instead of raw ISO strings.
+        const fmtShort = (iso) => {
+          try {
+            const d = parseISO(iso);
+            return isValidDate(d) ? fmtDate(d, 'MMM d') : iso;
+          } catch { return iso; }
+        };
+        const daily = Object.values(byDate)
+          .map((d) => ({
+            ...d,
+            cpl: d.conversions > 0 ? Math.round((d.cost / d.conversions) * 100) / 100 : 0,
+            dateLabel: fmtShort(d.date),
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+        const totalCost = summary?.totalCost ?? daily.reduce((s, d) => s + d.cost, 0);
+        const totalClicks = summary?.totalClicks ?? daily.reduce((s, d) => s + d.clicks, 0);
+        const totalConversions = summary?.totalConversions ?? daily.reduce((s, d) => s + d.conversions, 0);
+        const cpl = totalConversions > 0 ? Math.round((totalCost / totalConversions) * 100) / 100 : 0;
+        const hasData = daily.length > 0 || totalCost > 0 || totalClicks > 0;
+
+        const METRICS = [
+          { key: 'cost', label: 'Cost (₹)', short: 'Cost', color: GOOGLE_GREEN, isCurrency: true },
+          { key: 'clicks', label: 'Clicks', short: 'Clicks', color: '#4285F4', isCurrency: false },
+          { key: 'conversions', label: 'Conversions', short: 'Conv.', color: '#FBBC04', isCurrency: false },
+          { key: 'cpl', label: 'Cost per Lead (₹)', short: 'CPL', color: '#EA4335', isCurrency: true },
+        ];
+        const active = METRICS.find((m) => m.key === googleMetric) || METRICS[0];
+        const fmt = (v) => (active.isCurrency ? `₹${Number(v).toLocaleString('en-IN')}` : Number(v).toLocaleString('en-IN'));
+
+        return (
+          <Card variant="outlined" sx={{ mb: 2, borderColor: `${GOOGLE_GREEN}33` }}>
+            <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
+              {/* Header */}
+              <Box sx={{
+                display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+                flexWrap: 'wrap', gap: 2, mb: 2,
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.4 }}>
+                  <Box sx={{
+                    width: 40, height: 40, borderRadius: 1.5,
+                    bgcolor: GOOGLE_GREEN, color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0, fontWeight: 900, fontSize: '1rem',
+                    boxShadow: `0 6px 16px ${GOOGLE_GREEN}44`,
+                  }}>
+                    G
+                  </Box>
+                  <Box>
+                    <Typography sx={{
+                      fontSize: '0.66rem', fontWeight: 800, letterSpacing: '1.4px',
+                      color: GOOGLE_GREEN, textTransform: 'uppercase', lineHeight: 1, mb: 0.4,
+                    }}>
+                      Google Ads · Performance
+                    </Typography>
+                    <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', color: BROWN_C, lineHeight: 1.15 }}>
+                      {selectedClientName}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.76rem', color: `${BROWN_C}99`, mt: 0.3 }}>
+                      {fromDate ? fmtDDMMYYYY(fromDate) : '—'} → {toDate ? fmtDDMMYYYY(toDate) : '—'}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {hasData && (
+                  <ToggleButtonGroup
+                    value={googleMetric}
+                    exclusive
+                    size="small"
+                    onChange={(_, v) => v && setGoogleMetric(v)}
+                    sx={{
+                      bgcolor: '#fff',
+                      '& .MuiToggleButton-root': {
+                        border: `1px solid ${BORDER_C}`,
+                        color: `${BROWN_C}AA`,
+                        textTransform: 'none',
+                        fontWeight: 700, fontSize: '0.76rem',
+                        px: 1.4, py: 0.4,
+                        '&.Mui-selected': {
+                          bgcolor: GOOGLE_GREEN, color: '#fff',
+                          '&:hover': { bgcolor: GOOGLE_GREEN, filter: 'brightness(1.08)' },
+                        },
+                      },
+                    }}
+                  >
+                    {METRICS.map((m) => (
+                      <ToggleButton key={m.key} value={m.key}>{m.short}</ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
+                )}
+              </Box>
+
+              {/* Summary strip */}
+              {hasData && (
+                <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                  <Grid size={{ xs: 6, md: 3 }}>
+                    <SummaryTile label="Total Cost" value={`₹${totalCost.toLocaleString('en-IN')}`} color={GOOGLE_GREEN} />
+                  </Grid>
+                  <Grid size={{ xs: 6, md: 3 }}>
+                    <SummaryTile label="Total Clicks" value={totalClicks.toLocaleString('en-IN')} color="#4285F4" />
+                  </Grid>
+                  <Grid size={{ xs: 6, md: 3 }}>
+                    <SummaryTile label="Conversions" value={totalConversions.toLocaleString('en-IN', { maximumFractionDigits: 2 })} color="#FBBC04" />
+                  </Grid>
+                  <Grid size={{ xs: 6, md: 3 }}>
+                    <SummaryTile label="Cost per Lead" value={`₹${cpl.toLocaleString('en-IN')}`} color="#EA4335" />
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* ── Best / Quietest Day (Google Ads) ────────────────
+                  Ranked by conversions (leads-equivalent for Google).
+                  Cost + CPL sit as the subtitle so the spotlight
+                  answers "which day delivered the most for the money"
+                  in one glance — same visual treatment as the Meta
+                  Best/Quietest Day above but reading Google numbers. */}
+              {(() => {
+                const daysWithActivity = daily.filter((d) => (d.conversions || 0) > 0 || (d.cost || 0) > 0);
+                if (daysWithActivity.length === 0) return null;
+                const sortedByConv = [...daysWithActivity].sort((a, b) => (b.conversions || 0) - (a.conversions || 0));
+                const best = sortedByConv[0];
+                const worst = sortedByConv[sortedByConv.length - 1];
+                const sameDay = best.date === worst.date;
+                const bestConv = Number(best.conversions || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                const worstConv = Number(worst.conversions || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                return (
+                  <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Card variant="outlined" sx={{ borderLeft: '4px solid #10b981', height: '100%' }}>
+                        <CardContent sx={{ py: 1.8, display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: '#10b98115', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <TrendingUp sx={{ color: '#10b981', fontSize: 24 }} />
+                          </Box>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                              Best Day
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: '#10b981', lineHeight: 1.1 }}>
+                              {best.dateLabel}
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                              {bestConv} conversions (₹{Number(best.cost || 0).toLocaleString('en-IN')} spent{best.cpl > 0 ? ` · ₹${best.cpl.toLocaleString('en-IN')} CPL` : ''})
+                            </Typography>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Card variant="outlined" sx={{ borderLeft: '4px solid #ef4444', height: '100%' }}>
+                        <CardContent sx={{ py: 1.8, display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: '#ef444415', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <TrendingDown sx={{ color: '#ef4444', fontSize: 24 }} />
+                          </Box>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                              Quietest Day
+                            </Typography>
+                            <Typography sx={{ fontWeight: 800, fontSize: '1.25rem', color: '#ef4444', lineHeight: 1.1 }}>
+                              {worst.dateLabel}
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                              {sameDay
+                                ? 'Only day with activity in the range'
+                                : `${worstConv} conversions (₹${Number(worst.cost || 0).toLocaleString('en-IN')} spent${worst.cpl > 0 ? ` · ₹${worst.cpl.toLocaleString('en-IN')} CPL` : ''})`}
+                            </Typography>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  </Grid>
+                );
+              })()}
+
+              {/* Daily Trends / Date-wise Table — gated by shared
+                  loading and empty states so both tabs benefit from
+                  the same skeleton and "no data" fallback. */}
+              {googleLoading && !hasData ? (
+                <Box sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.5,
+                  px: 1.6, py: 2, borderRadius: 1.5,
+                  bgcolor: CREAM_C, border: `1px dashed ${BORDER_C}`,
+                }}>
+                  <CircularProgress size={18} sx={{ color: GOOGLE_GREEN }} />
+                  <Typography sx={{ fontSize: '0.85rem', color: `${BROWN_C}AA`, fontWeight: 500 }}>
+                    Fetching {selectedClientName}'s Google Ads data…
+                  </Typography>
+                </Box>
+              ) : !hasData ? (
+                <Box sx={{
+                  textAlign: 'center', py: 5, px: 2,
+                  bgcolor: CREAM_C, borderRadius: 1.5, border: `1px dashed ${BORDER_C}`,
+                }}>
+                  <Typography sx={{ fontWeight: 700, color: BROWN_C, mb: 0.4 }}>
+                    No Google Ads data for this range
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.82rem', color: `${BROWN_C}88` }}>
+                    Either this client isn't linked to Google Ads, or there was no ad activity between {fromDate ? fmtDDMMYYYY(fromDate) : '—'} and {toDate ? fmtDDMMYYYY(toDate) : '—'}.
+                  </Typography>
+                </Box>
+              ) : (
+                <>
+                    {/* Two-tab strip — Daily Trends + Date-wise Table. */}
+                    <Card variant="outlined" sx={{ mb: 2, borderColor: `${GOOGLE_GREEN}33` }}>
+                      <Tabs
+                        value={googleChartTab}
+                        onChange={(_, v) => setGoogleChartTab(v)}
+                        sx={{
+                          px: 2,
+                          '& .MuiTabs-indicator': { bgcolor: GOOGLE_GREEN, height: 3 },
+                          '& .Mui-selected': { color: `${GOOGLE_GREEN} !important` },
+                        }}
+                      >
+                        <Tab label="Daily Trends" sx={{ textTransform: 'none', fontWeight: 700 }} />
+                        <Tab label="Date-wise Table" sx={{ textTransform: 'none', fontWeight: 700 }} />
+                      </Tabs>
+                    </Card>
+
+                    {/* Tab 0 — Daily Trends (existing line chart) */}
+                    {googleChartTab === 0 && (
+                      <Box sx={{ width: '100%', height: 320, bgcolor: '#fff', borderRadius: 1.5, border: `1px solid ${BORDER_C}`, p: 1.5 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={daily}
+                            margin={{ top: 12, right: 24, left: 8, bottom: 8 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke={`${BROWN_C}18`} vertical={false} />
+                            <XAxis
+                              dataKey="dateLabel"
+                              stroke={`${BROWN_C}88`}
+                              tick={{ fill: `${BROWN_C}CC`, fontSize: 11 }}
+                              interval="preserveStartEnd"
+                              minTickGap={20}
+                            />
+                            <YAxis
+                              stroke={`${BROWN_C}88`}
+                              tick={{ fill: `${BROWN_C}CC`, fontSize: 11 }}
+                              tickFormatter={(v) => (
+                                active.isCurrency
+                                  ? `₹${(v/1000).toFixed(v >= 100000 ? 0 : 1)}k`
+                                  : v.toLocaleString('en-IN')
+                              )}
+                            />
+                            <Tooltip
+                              formatter={(v) => [fmt(v), active.label]}
+                              contentStyle={{
+                                background: '#fff',
+                                border: `1px solid ${BORDER_C}`,
+                                borderRadius: 8,
+                                fontSize: 12,
+                              }}
+                              cursor={{ stroke: `${active.color}88`, strokeDasharray: '3 3' }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey={active.key}
+                              stroke={active.color}
+                              strokeWidth={2.5}
+                              dot={{ r: 4, fill: active.color, strokeWidth: 0 }}
+                              activeDot={{ r: 6, fill: active.color, stroke: '#fff', strokeWidth: 2 }}
+                              isAnimationActive={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </Box>
+                    )}
+
+                    {/* Tab 1 — Date-wise Table (every day + change) */}
+                    {googleChartTab === 1 && (
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 420, overflow: 'auto' }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              {['Date', 'Cost', 'Clicks', 'Impressions', 'Conversions', 'CPL'].map((h) => (
+                                <TableCell
+                                  key={h}
+                                  align={h === 'Date' ? 'left' : 'right'}
+                                  sx={{
+                                    bgcolor: CREAM_C, color: BROWN_C,
+                                    fontWeight: 800, fontSize: '0.68rem',
+                                    textTransform: 'uppercase', letterSpacing: '0.5px',
+                                    borderBottom: `2px solid ${BORDER_C}`,
+                                  }}
+                                >
+                                  {h}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {daily.map((r) => (
+                              <TableRow key={r.date} hover>
+                                <TableCell sx={{ fontWeight: 700, color: BROWN_C, fontSize: '0.82rem' }}>
+                                  {r.dateLabel}
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: GOOGLE_GREEN, fontWeight: 700, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                  ₹{r.cost.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: BROWN_C, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                  {r.clicks.toLocaleString('en-IN')}
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: BROWN_C, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                  {r.impressions.toLocaleString('en-IN')}
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: BROWN_C, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                  {r.conversions.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: r.cpl > 0 ? '#EA4335' : `${BROWN_C}55`, fontWeight: 700, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                  {r.cpl > 0 ? `₹${r.cpl.toLocaleString('en-IN')}` : '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {/* Totals footer row */}
+                            <TableRow sx={{ '& td': { borderTop: `2px solid ${BORDER_C}` } }}>
+                              <TableCell sx={{ fontWeight: 800, color: BROWN_C, fontSize: '0.82rem' }}>
+                                TOTAL
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 800, color: GOOGLE_GREEN, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                ₹{daily.reduce((s, d) => s + d.cost, 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 800, color: BROWN_C, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                {daily.reduce((s, d) => s + d.clicks, 0).toLocaleString('en-IN')}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 800, color: BROWN_C, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                {daily.reduce((s, d) => s + d.impressions, 0).toLocaleString('en-IN')}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 800, color: BROWN_C, fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                {daily.reduce((s, d) => s + d.conversions, 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 800, color: '#EA4335', fontSize: '0.82rem', fontVariantNumeric: 'tabular-nums' }}>
+                                ₹{cpl.toLocaleString('en-IN')}
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
         </>
       )}
     </Box>

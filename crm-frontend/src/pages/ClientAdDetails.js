@@ -26,6 +26,7 @@ import { useDataCache } from '../contexts/DataCacheContext';
 import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
 import MetaLeadsTable from '../components/MetaLeadsTable';
 import TelecallingReport from '../components/TelecallingReport';
+import AiCampaignInsights from '../components/AiCampaignInsights';
 import MonthlyAbstract from '../components/MonthlyAbstract';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -684,6 +685,21 @@ const ClientAdDetails = () => {
                     </>
                   )}
 
+                  {/* AI campaign insights — sits between the Performance
+                      Summary above and the campaigns table below so the
+                      user gets a high-level narrative before diving into
+                      per-campaign numbers. */}
+                  {summary && (
+                    <AiCampaignInsights
+                      platform="google"
+                      clientName={displayName}
+                      dateRange={{ from: dateFrom, to: dateTo }}
+                      summary={summary}
+                      campaigns={campaignMetrics}
+                      accentColor={GOOGLE_GREEN}
+                    />
+                  )}
+
                   {/* Campaign Metrics */}
                   {campaignMetrics.length > 0 && (
                     <>
@@ -1194,6 +1210,19 @@ const ClientAdDetails = () => {
                       {metaSummary.cpm != null && <Grid size={{ xs: 6, md: 2 }}><KpiCard label="CPM" value={fmtINR(metaSummary.cpm)} color={COPPER} icon={<MoneyIcon />} /></Grid>}
                     </Grid>
                   </>
+                )}
+
+                {/* AI campaign insights — Meta-side narrative between
+                    the Performance Summary and the campaign table. */}
+                {metaSummary && (
+                  <AiCampaignInsights
+                    platform="meta"
+                    clientName={displayName}
+                    dateRange={{ from: dateFrom, to: dateTo }}
+                    summary={metaSummary}
+                    campaigns={metaCampaigns}
+                    accentColor={META_BLUE}
+                  />
                 )}
 
                 {/* Campaigns — hidden for page-only clients */}

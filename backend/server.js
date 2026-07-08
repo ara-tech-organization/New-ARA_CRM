@@ -26,6 +26,7 @@ import analyticsRoutes from "./routes/analytics.js";
 import paymentRoutes from "./routes/payments.js";
 import billingRoutes from "./routes/billing.js";
 import clientPortalRoutes from "./routes/clientPortal.js";
+import aiRoutes from "./routes/ai.js";
 import { startSyncScheduler } from "./sync/scheduler.js";
 
 // Load environment variables
@@ -186,6 +187,7 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/client-portal", clientPortalRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Basic route
 app.get("/", (req, res) => {
