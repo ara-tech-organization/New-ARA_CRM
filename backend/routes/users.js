@@ -33,10 +33,11 @@ router.get('/roles', getRoles);
 router.route('/:id')
   .get(idValidation, validate, getUser)
   .put(idValidation, updateUserValidation, validate, updateUser)
-  .delete(authorize('superadmin'), idValidation, validate, deleteUser);
+  .delete(authorize('superadmin', 'admin'), idValidation, validate, deleteUser);
 
 router.patch('/:id/toggle-status', idValidation, validate, toggleUserStatus);
 router.patch('/:id/change-password', idValidation, validate, changeUserPassword);
-router.patch('/:id/permissions', authorize('superadmin'), idValidation, validate, updateUserPermissions);
+// Both admin and superadmin can grant/revoke sidebar permissions.
+router.patch('/:id/permissions', authorize('superadmin', 'admin'), idValidation, validate, updateUserPermissions);
 
 export default router;
