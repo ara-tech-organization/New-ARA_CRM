@@ -191,118 +191,99 @@ const InsightPanel = ({
   </Box>
 );
 
-// ── Ranking helpers ─────────────────────────────────────────────
-export const rankTopPerformers = (clients) => clients
-  .filter((c) => (c.leads || 0) > 0)
-  .slice().sort((a, b) => (b.leads || 0) - (a.leads || 0));
+// ── Partitioning helper ─────────────────────────────────────────
+// Each client shows up in EXACTLY ONE bucket so the three panels
+// don't restate the same 26 clients under different sort keys.
+// Priority ladder (most flattering first):
+//   1. Top Performer  — top third by leads. Recognises volume.
+//   2. Best Value     — from what's left, the cheapest CPL third.
+//   3. Needs Review   — everything else (worst CPL of the leftovers).
+// A client only enters the pool if they actually converted (leads>0
+// AND cpl>0) — a single accidental lead with a garbage CPL would
+// otherwise dominate the Needs Review column.
+export const partitionInsights = (clients) => {
+  const pool = clients.filter((c) => (c.leads || 0) > 0 && (c.cpl || 0) > 0);
+  if (pool.length === 0) {
+    return { topPerformers: [], bestValue: [], needsReview: [] };
+  }
 
-export const rankBestValue = (clients) => clients
-  .filter((c) => (c.leads || 0) > 0 && (c.cpl || 0) > 0)
-  .slice().sort((a, b) => (a.cpl || 0) - (b.cpl || 0));
+  // ceil for the top bucket so an odd count leans toward recognising
+  // performers; the remaining two buckets split what's left evenly
+  // (Best Value gets ceil of the remainder, Needs Review gets the
+  // rest — usually equal, differs by 1 for some sizes).
+  const total = pool.length;
+  const topSize = Math.ceil(total / 3);
+  const remainderAfterTop = total - topSize;
+  const bestSize = Math.ceil(remainderAfterTop / 2);
 
-export const rankNeedsReview = (clients) => clients
-  .filter((c) => (c.spend || 0) > 0 && (c.leads || 0) === 0)
-  .slice().sort((a, b) => (b.spend || 0) - (a.spend || 0));
+  const byLeads = pool.slice().sort((a, b) => (b.leads || 0) - (a.leads || 0));
+  const topPerformers = byLeads.slice(0, topSize);
+  const topIds = new Set(topPerformers.map((c) => c.id));
 
-// Small "all clear" banner used in place of the Needs-Review panel
-// when nothing qualifies. Keeps the reassurance visible (every
-// spender is producing) without wasting a full column on an empty
-// state — the Top Performer + Best Value panels reflow to 2 cols.
-const AllClearBanner = () => (
-  <Box sx={{
-    bgcolor: `${PALETTE.healthy}0F`,
-    border: `1px solid ${PALETTE.healthy}33`,
-    borderRadius: `${RADIUS.card}px`,
-    px: 1.8, py: 1.2,
-    display: 'flex', alignItems: 'center', gap: 1.2,
-  }}>
-    <Box sx={{
-      width: 32, height: 32, borderRadius: '50%',
-      bgcolor: `${PALETTE.healthy}22`, color: PALETTE.healthy,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      flexShrink: 0,
-    }}>
-      <TrophyIcon sx={{ fontSize: 18 }} />
-    </Box>
-    <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{
-        fontSize: '0.62rem', fontWeight: 800, letterSpacing: '1px',
-        color: PALETTE.healthy, textTransform: 'uppercase',
-      }}>
-        All clear
-      </Typography>
-      <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: PALETTE.ink, lineHeight: 1.2 }}>
-        Every active spender is producing leads today.
-      </Typography>
-    </Box>
-  </Box>
-);
+  const remaining = pool.filter((c) => !topIds.has(c.id));
+  const byCpl = remaining.slice().sort((a, b) => (a.cpl || 0) - (b.cpl || 0));
+  const bestValue = byCpl.slice(0, bestSize);
+  const bestIds = new Set(bestValue.map((c) => c.id));
+
+  const needsReview = remaining
+    .filter((c) => !bestIds.has(c.id))
+    .slice()
+    .sort((a, b) => (b.cpl || 0) - (a.cpl || 0));
+
+  return { topPerformers, bestValue, needsReview };
+};
 
 const PerformanceInsights = ({ clients, onClientClick }) => {
-  const topPerformers = rankTopPerformers(clients);
-  const bestValue = rankBestValue(clients);
-  const needsReview = rankNeedsReview(clients);
-
-  // If nothing qualifies for the Needs Review bucket, don't burn a
-  // whole column on an empty panel. Reflow Top Performer + Best
-  // Value into a 2-column grid and drop a compact "all clear"
-  // banner underneath instead.
-  const showReview = needsReview.length > 0;
-  const cols = showReview ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)';
+  const { topPerformers, bestValue, needsReview } = partitionInsights(clients);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.4 }}>
-      <Box sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', md: cols },
-        gap: 1.4,
-      }}>
-        <InsightPanel
-          eyebrow="Top Performer"
-          title="Highest lead volume today"
-          subtitle="Ranked by leads generated. Great candidates to increase budget on."
-          icon={<TrophyIcon />}
-          tone={PALETTE.gold}
-          clients={topPerformers}
-          emptyMessage="No leads recorded yet today."
-          onClientClick={onClientClick}
-          buildMetrics={(c) => ({
-            headline: `${fmtNum(c.leads)} leads`,
-            detail: `${fmtINR(c.spend)} spent · ${c.cpl > 0 ? fmtINR(c.cpl) + ' CPL' : '—'}`,
-          })}
-        />
-        <InsightPanel
-          eyebrow="Best Value"
-          title="Lowest cost per lead"
-          subtitle="These accounts convert cheapest — replicate their targeting."
-          icon={<ValueIcon />}
-          tone={PALETTE.healthy}
-          clients={bestValue}
-          emptyMessage="No CPL data available yet."
-          onClientClick={onClientClick}
-          buildMetrics={(c) => ({
-            headline: fmtINR(c.cpl),
-            detail: `${fmtNum(c.leads)} leads · ${fmtINR(c.spend)} spent`,
-          })}
-        />
-        {showReview && (
-          <InsightPanel
-            eyebrow="Needs Review"
-            title="Spending but no leads"
-            subtitle="Money leaving with nothing coming back — investigate today."
-            icon={<ReviewIcon />}
-            tone={PALETTE.critical}
-            clients={needsReview}
-            emptyMessage="Nothing to review — every spender is producing."
-            onClientClick={onClientClick}
-            buildMetrics={(c) => ({
-              headline: fmtINR(c.spend),
-              detail: '0 leads · action needed',
-            })}
-          />
-        )}
-      </Box>
-      {!showReview && <AllClearBanner />}
+    <Box sx={{
+      display: 'grid',
+      gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+      gap: 1.4,
+    }}>
+      <InsightPanel
+        eyebrow="Top Performer"
+        title="Highest lead volume today"
+        subtitle="Ranked by leads generated. Great candidates to increase budget on."
+        icon={<TrophyIcon />}
+        tone={PALETTE.gold}
+        clients={topPerformers}
+        emptyMessage="No leads recorded yet today."
+        onClientClick={onClientClick}
+        buildMetrics={(c) => ({
+          headline: `${fmtNum(c.leads)} leads`,
+          detail: `${fmtINR(c.spend)} spent · ${c.cpl > 0 ? fmtINR(c.cpl) + ' CPL' : '—'}`,
+        })}
+      />
+      <InsightPanel
+        eyebrow="Best Value"
+        title="Lowest cost per lead"
+        subtitle="These accounts convert cheapest — replicate their targeting."
+        icon={<ValueIcon />}
+        tone={PALETTE.healthy}
+        clients={bestValue}
+        emptyMessage="No CPL data available yet."
+        onClientClick={onClientClick}
+        buildMetrics={(c) => ({
+          headline: fmtINR(c.cpl),
+          detail: `${fmtNum(c.leads)} leads · ${fmtINR(c.spend)} spent`,
+        })}
+      />
+      <InsightPanel
+        eyebrow="Needs Review"
+        title="Highest cost per lead"
+        subtitle="These accounts spend the most per conversion — investigate targeting."
+        icon={<ReviewIcon />}
+        tone={PALETTE.critical}
+        clients={needsReview}
+        emptyMessage="No CPL data available yet."
+        onClientClick={onClientClick}
+        buildMetrics={(c) => ({
+          headline: fmtINR(c.cpl),
+          detail: `${fmtNum(c.leads)} leads · ${fmtINR(c.spend)} spent`,
+        })}
+      />
     </Box>
   );
 };

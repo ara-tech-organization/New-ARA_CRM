@@ -85,6 +85,9 @@ const ClientAdDetails = () => {
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState(null);
   const [spendOverview, setSpendOverview] = useState(null);
+  // Same shape as spendOverview — Meta side. Kept as its own state so
+  // tab switches don't wipe the other platform's data.
+  const [metaSpendOverview, setMetaSpendOverview] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
   const [dateFrom, setDateFrom] = useState(today);
@@ -313,6 +316,12 @@ const ClientAdDetails = () => {
         .catch(() => {});
     } else if (tab === 1 && clientId) {
       fetchMetaAnalytics();
+      // Ad Spend card (Today / Yesterday / Week / Month) — matches
+      // the Google tab's card. Silent on failure so the rest of the
+      // Meta tab still renders if the endpoint hiccups.
+      api.get(`/meta/client/${clientId}/spend-overview`)
+        .then(r => setMetaSpendOverview(r.data))
+        .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, clientId, dateFrom, dateTo]);
@@ -1181,6 +1190,31 @@ const ClientAdDetails = () => {
                           </Grid>
                         </Grid>
                       )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Ad Spend across periods — mirrors the same card on
+                    the Google tab so both platforms answer "how much
+                    have we spent today / this week / this month?"
+                    without opening the campaign table. */}
+                {metaSpendOverview && (
+                  <Card variant="outlined" sx={{ borderLeft: `3px solid ${META_BLUE}`, mb: 2 }}>
+                    <CardContent>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', mb: 1.5 }}>Ad Spend</Typography>
+                      <Grid container spacing={1.5}>
+                        {[
+                          { label: 'Today',      value: metaSpendOverview.today },
+                          { label: 'Yesterday',  value: metaSpendOverview.yesterday },
+                          { label: 'This Week',  value: metaSpendOverview.thisWeek },
+                          { label: 'This Month', value: metaSpendOverview.thisMonth },
+                        ].map(({ label, value }) => (
+                          <Grid key={label} size={{ xs: 6, md: 3 }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase' }}>{label}</Typography>
+                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: value > 0 ? META_BLUE : 'text.secondary' }}>{fmtINR(value)}</Typography>
+                          </Grid>
+                        ))}
+                      </Grid>
                     </CardContent>
                   </Card>
                 )}

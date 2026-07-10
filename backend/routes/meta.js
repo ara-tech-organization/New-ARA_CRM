@@ -39,6 +39,7 @@ import {
   deleteClientLead,
   getClientsAdsComparison,
   getMetaDashboardOverview,
+  getMetaSpendOverview,
   getMetaDailyMetrics,
   getTelecallingReport,
   getMonthlyAbstract,
@@ -104,6 +105,9 @@ router.delete(
 
 // Per-client analytics (Meta-only; sibling to /api/analytics/client/:clientId for Google)
 router.get("/client/:clientId/analytics", getClientAnalytics);
+// Meta spend across today / yesterday / this week / this month.
+// Mirrors /api/analytics/client/:clientId/spend-overview for Google.
+router.get("/client/:clientId/spend-overview", getMetaSpendOverview);
 
 // Multi-client comparison — sibling to /api/analytics/clients for Google.
 // Powers the Meta tab on the AdsDashboard ("Ads Comparison") page.

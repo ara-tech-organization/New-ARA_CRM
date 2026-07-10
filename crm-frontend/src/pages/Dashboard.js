@@ -21,7 +21,6 @@ import ClientSummaryCard from '../components/dashboard/ClientSummaryCard';
 import BalanceWatch from '../components/dashboard/BalanceWatch';
 import PerformanceInsights from '../components/dashboard/PerformanceInsights';
 import ClientOverviewCards from '../components/dashboard/ClientOverviewCards';
-import ActiveCampaigns from '../components/dashboard/ActiveCampaigns';
 import ClientListModal from '../components/dashboard/ClientListModal';
 import { AlertsWidget, RecentActivity } from '../components/dashboard/SideWidgets';
 import { PALETTE, RADIUS, SHADOW, balanceTier, fmtINR } from '../components/dashboard/theme';
@@ -124,74 +123,6 @@ const Dashboard = () => {
     return () => { cancelled = true; };
   }, [clients, selectedDate]);
 
-  // ── Per-client analytics fetch → top ACTIVE campaign name ────────
-  // /meta/dashboard-overview only carries per-client aggregates, so
-  // to surface the real campaign name in the Active Campaigns table
-  // we hit /meta/client/:id/analytics per client and cherry-pick the
-  // highest-spend ACTIVE campaign from its `campaigns[]`. Fired only
-  // for clients that actually have Meta spend today (otherwise the
-  // response would just show zero-spend historical campaigns and we
-  // waste requests).
-  const [metaCampaignsMap, setMetaCampaignsMap] = useState({});
-  useEffect(() => {
-    const metaClients = clients.filter((c) => c.metaEnabled);
-    if (metaClients.length === 0) { setMetaCampaignsMap({}); return; }
-    let cancelled = false;
-
-    const pickTop = (arr) => {
-      // Prefer ACTIVE campaigns with positive spend. Fall back to the
-      // largest-spender regardless of status, then to the first row
-      // with a real name — never return null once we have data.
-      if (!Array.isArray(arr) || arr.length === 0) return null;
-      const activeSpenders = arr.filter(
-        (r) => String(r.effective_status || r.status || '').toUpperCase() === 'ACTIVE'
-          && (Number(r.spend) || 0) > 0
-      );
-      const pool = activeSpenders.length ? activeSpenders : arr;
-      const top = pool
-        .slice()
-        .sort((a, b) => (Number(b.spend) || 0) - (Number(a.spend) || 0))[0];
-      return top ? {
-        campaign_id: top.campaign_id || '',
-        name: top.name || '',
-        status: top.status || '',
-        effective_status: top.effective_status || '',
-        objective: top.objective || '',
-        spend: Number(top.spend) || 0,
-        leads: Number(top.form_leads || top.leads || 0),
-      } : null;
-    };
-
-    // Fire in parallel but limit which clients we ask about — no point
-    // hammering the API for clients that haven't spent today. Result
-    // map is populated incrementally so partial renders show as they
-    // arrive.
-    const targets = metaClients.filter((c) => {
-      const m = metaDataMap[c._id];
-      return m && Number(m.spend) > 0;
-    });
-    if (targets.length === 0) { setMetaCampaignsMap({}); return; }
-
-    Promise.allSettled(
-      targets.map((c) =>
-        api.get(`/meta/client/${c._id}/analytics`, {
-          params: { from: selectedDate, to: selectedDate },
-        }).then((res) => ({ clientId: String(c._id), payload: res.data }))
-      )
-    ).then((results) => {
-      if (cancelled) return;
-      const map = {};
-      results.forEach((r) => {
-        if (r.status !== 'fulfilled') return;
-        const { clientId, payload } = r.value;
-        const top = pickTop(payload?.campaigns);
-        if (top) map[clientId] = top;
-      });
-      setMetaCampaignsMap(map);
-    });
-    return () => { cancelled = true; };
-  }, [clients, metaDataMap, selectedDate]);
-
   // ── Google analytics/clients fetch ──────────────────────────────
   const [googleDataMap, setGoogleDataMap] = useState({});
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -240,12 +171,6 @@ const Dashboard = () => {
           campaigns: Number(acc.activeCampaigns || acc.campaignsCount || acc.campaigns || 0),
           adAccount: acc.metaAdAccountId || '',
           lastSync: acc.fetched_at || acc.updatedAt || null,
-          // Top ACTIVE campaign for this client in the current window.
-          // Prefer the per-client analytics fetch (metaCampaignsMap)
-          // — it always carries the real name — then fall back to
-          // /meta/dashboard-overview's top_campaign for environments
-          // where the analytics call didn't run (no spend today).
-          topCampaign: metaCampaignsMap[String(c._id)] || m.top_campaign || null,
         });
       }
       if (c.googleAdsEnabled) {
@@ -268,7 +193,7 @@ const Dashboard = () => {
     });
     rows.forEach((r) => { r.tier = balanceTier(r.balance); });
     return rows;
-  }, [clients, metaDataMap, metaAccountsMap, googleDataMap, metaCampaignsMap]);
+  }, [clients, metaDataMap, metaAccountsMap, googleDataMap]);
 
   // Combined per-client rows for Client Overview cards.
   const combinedClientRows = useMemo(() => {
@@ -345,57 +270,6 @@ const Dashboard = () => {
         campaigns: r.campaigns,
         tier: r.tier,
       }));
-  }, [platformRows]);
-
-  // ── Active Campaigns list (synthesized from platform rows) ────
-  // No per-campaign endpoint on the dashboard fetch path — each
-  // client contributes one aggregate row that stands in for its
-  // active campaigns. Real per-campaign data replaces this whenever
-  // a /meta/campaigns/live and /google-ads/campaigns/live endpoint
-  // are wired up; the Active Campaigns widget expects the same
-  // shape either way.
-  const activeCampaigns = useMemo(() => {
-    return platformRows
-      .filter((r) => r.spend > 0 || r.campaigns > 0)
-      .map((r) => {
-        // Prefer the real campaign name (top-spending campaign for
-        // this client in the window). Falls back to "Meta · Client"
-        // when the backend hasn't hydrated a top campaign yet — e.g.
-        // clients with no per-campaign insight rows for the day.
-        const tc = r.platform === 'meta' ? r.topCampaign : null;
-        const displayName = tc?.name
-          ? tc.name
-          : (r.platform === 'meta' ? `Meta · ${r.name}` : `Google · ${r.name}`);
-        // Paused vs active — pull straight from the campaign's
-        // effective_status so the row's status pill actually reflects
-        // Meta's state instead of a hard-coded 'active'.
-        const effStatus = String(tc?.effective_status || '').toUpperCase();
-        const isPaused = effStatus === 'PAUSED'
-          || effStatus === 'CAMPAIGN_PAUSED'
-          || effStatus === 'ADSET_PAUSED';
-        return {
-          id: r.id,
-          // clientId is what ActiveCampaigns uses to route on row-click
-          // (via the onCampaignClick callback the Dashboard hands it).
-          // r.id is `${clientId}-meta` — not a valid Client _id, so we
-          // pass r.clientId here explicitly.
-          clientId: r.clientId,
-          name: displayName,
-          clientName: r.name,
-          platform: r.platform,
-          type: r.platform === 'meta'
-            ? (tc?.objective || 'Lead Generation')
-            : 'Search',
-          status: isPaused ? 'paused' : 'active',
-          leads: r.leads,
-          spend: r.spend,
-          cpl: r.cpl,
-          budget: null,
-          createdAt: r.lastSync,
-          updatedAt: r.lastSync,
-          lastLeadAt: (r.leads || 0) > 0 ? r.lastSync : null,
-        };
-      });
   }, [platformRows]);
 
   // ── Alerts synthesis ─────────────────────────────────────────
@@ -504,8 +378,8 @@ const Dashboard = () => {
   // ─── Platform-filtered views ─────────────────────────────────
   // Everything below the toggle reads from these instead of the
   // full cross-platform data. Kept as separate memos so the source
-  // of truth (platformRows / activeCampaigns / alerts) stays intact
-  // for the modal + client-summary card, which show both platforms.
+  // of truth (platformRows / alerts) stays intact for the modal +
+  // client-summary card, which show both platforms.
   const viewPlatformRows = useMemo(
     () => platformRows.filter((r) => r.platform === platform),
     [platformRows, platform],
@@ -513,10 +387,6 @@ const Dashboard = () => {
   const viewBalanceClients = useMemo(
     () => balanceClients.filter((r) => r.platform === platform),
     [balanceClients, platform],
-  );
-  const viewActiveCampaigns = useMemo(
-    () => activeCampaigns.filter((c) => c.platform === platform),
-    [activeCampaigns, platform],
   );
   const viewAlerts = useMemo(
     () => alerts.filter((a) => a.platform === platform),
@@ -540,6 +410,7 @@ const Dashboard = () => {
       campaignDetails: [],
     }))
   ), [viewPlatformRows]);
+
 
   // ── Modal + section state ────────────────────────────────────
   const [modalOpen, setModalOpen] = useState(false);
@@ -814,26 +685,18 @@ const Dashboard = () => {
                 onClientClick={openClientAds}
               />
 
-              {/* ── Active Campaigns (main) + Side widgets ─────────── */}
-              {/* minmax(0, …) on both columns — without it, a wide child
-                  (e.g. the campaigns table's intrinsic content-width)
-                  stretches its grid cell past 100%, dragging the whole
-                  page into a horizontal scroll. */}
+              {/* ── Alerts + Recent Activity ────────────────────────
+                  Previously the right-hand sidebar next to Active
+                  Campaigns. With Campaigns removed we lay them out
+                  side-by-side so they share the full row width. */}
               <Box sx={{
                 display: 'grid',
-                gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(0, 1fr)' },
+                gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) minmax(0, 1fr)' },
                 gap: 1.4,
                 minWidth: 0,
               }}>
-                <ActiveCampaigns
-                  campaigns={viewActiveCampaigns}
-                  platform={platform}
-                  onCampaignClick={openClientAds}
-                />
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                  <AlertsWidget alerts={viewAlerts} onAlertClick={openClientAds} />
-                  <RecentActivity items={activity} />
-                </Box>
+                <AlertsWidget alerts={viewAlerts} onAlertClick={openClientAds} />
+                <RecentActivity items={activity} />
               </Box>
             </>
           )}

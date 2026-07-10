@@ -1602,6 +1602,78 @@ export const getMetaDashboardOverview = async (req, res) => {
   }
 };
 
+// GET /api/meta/client/:clientId/spend-overview
+// Returns Meta ad spend for today / yesterday / this week / this month.
+// Mirrors the Google Ads endpoint at /analytics/client/:id/spend-overview
+// so both platforms surface the same "Ad Spend" card on the client
+// detail page.
+//
+// All date math in IST (UTC+5:30) to match the rest of the reporting
+// stack. Sources MetaInsights at level='campaign' — same convention
+// used across other Meta aggregations, avoids double-counting rows
+// that exist at multiple levels for the same date.
+export const getMetaSpendOverview = async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    if (!/^[0-9a-fA-F]{24}$/.test(String(clientId || ''))) {
+      return res.status(400).json({ error: 'Invalid clientId' });
+    }
+    // Portal token scoping — if the request came in with a scoped
+    // clientId (client portal user), reject cross-client access.
+    if (req.clientId && String(req.clientId) !== String(clientId)) {
+      return res.status(403).json({ error: 'Portal token cannot access another client' });
+    }
+
+    const IST = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(Date.now() + IST);
+    const y = nowIST.getUTCFullYear();
+    const mo = nowIST.getUTCMonth();
+    const d = nowIST.getUTCDate();
+    const dow = nowIST.getUTCDay(); // 0 = Sunday
+
+    const startOfDay = (yr, m, dy) => new Date(Date.UTC(yr, m, dy) - IST);
+    const today      = startOfDay(y, mo, d);
+    const yesterday  = startOfDay(y, mo, d - 1);
+    // Week starts Monday (Mon..Sun). Sunday collapses to 6 days back
+    // so the week doesn't reset mid-Sunday for a manager watching
+    // the current week's totals.
+    const weekStart  = startOfDay(y, mo, d - (dow === 0 ? 6 : dow - 1));
+    const monthStart = startOfDay(y, mo, 1);
+    const tomorrow   = startOfDay(y, mo, d + 1);
+
+    const rows = await MetaInsights.aggregate([
+      {
+        $match: {
+          client_id: new mongoose.Types.ObjectId(clientId),
+          level: 'campaign',
+          date: { $gte: monthStart, $lt: tomorrow },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          today:     { $sum: { $cond: [{ $and: [{ $gte: ['$date', today] },     { $lt: ['$date', tomorrow] }] }, '$spend', 0] } },
+          yesterday: { $sum: { $cond: [{ $and: [{ $gte: ['$date', yesterday] }, { $lt: ['$date', today]    }] }, '$spend', 0] } },
+          thisWeek:  { $sum: { $cond: [{ $gte: ['$date', weekStart] }, '$spend', 0] } },
+          thisMonth: { $sum: '$spend' },
+        },
+      },
+    ]);
+
+    const r = rows[0] || { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0 };
+    const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+    res.json({
+      today:     round2(r.today),
+      yesterday: round2(r.yesterday),
+      thisWeek:  round2(r.thisWeek),
+      thisMonth: round2(r.thisMonth),
+    });
+  } catch (error) {
+    console.error('Meta spend overview error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // GET /api/meta/daily-metrics?from=YYYY-MM-DD&to=YYYY-MM-DD[&clientId=ObjectId]
 // Date-wise totals of Leads / Messages / Calls across all Meta-enabled clients
 // (or one client when clientId is supplied). Powers the 3-row metrics band.
