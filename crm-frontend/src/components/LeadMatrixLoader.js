@@ -2,23 +2,22 @@ import React from 'react';
 import { Box, Typography } from '@mui/material';
 import leadMatrixLogo from '../assets/Lead-Matrix-Logo.png';
 
-// LeadMatrixLoader — branded loading state shown while the app
-// boots / hydrates session / fetches its first payload. Matches the
-// reference: a central brand badge with three orbiting dots and a
-// soft cream→copper background gradient.
+// LeadMatrixLoader — branded loading state shown while the app boots
+// / hydrates session / fetches its first payload. Refreshed for the
+// Navy + Slate + Gold identity: soft off-white → indigo gradient
+// ground, blue orbit ring, gold accent dot.
 //
 // Props:
-//   message    — optional override for the line below the loader.
-//                Defaults to "Loading your workspace…".
-//   subMessage — small grey line for extra context.
-//   fullScreen — when true (default) covers the whole viewport with
-//                position:fixed. Set to false for in-page use where
-//                the loader should fill its parent (e.g. inside a
-//                Card or after the page header).
+//   message    — line below the loader ("Loading your workspace…")
+//   subMessage — optional secondary line
+//   fullScreen — true = fixed overlay; false = fills parent block
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
-const CREAM = '#FFF8F0';
+const PRIMARY = '#1F3966';
+const PRIMARY_DEEP = '#15294D';
+const ACCENT = '#F4B929';
+const INK = '#0F172A';
+const GROUND = '#F8FAFC';
+const GROUND_TINT = '#F1F5F9';
 
 const LeadMatrixLoader = ({
   message = 'Loading your workspace…',
@@ -27,14 +26,11 @@ const LeadMatrixLoader = ({
 }) => (
   <Box
     sx={{
-      // Two positioning modes — `fixed` for the boot curtain & route
-      // transitions, plain (full-block) for inline placement so the
-      // page header stays visible above it.
       ...(fullScreen
         ? { position: 'fixed', inset: 0, zIndex: 9999 }
         : { position: 'relative', width: '100%', minHeight: 480 }),
-      bgcolor: CREAM,
-      background: `linear-gradient(135deg, ${CREAM} 0%, #FBEFE0 100%)`,
+      bgcolor: GROUND,
+      background: `radial-gradient(circle at 30% 20%, ${GROUND_TINT} 0%, ${GROUND} 60%)`,
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -42,45 +38,53 @@ const LeadMatrixLoader = ({
       gap: 3,
     }}
   >
-    {/* CSS-only orbit. Three dots ride a 110px circle around a centred
-        logo at three different speeds — clean and brand-safe. The
-        keyframes live in a <style> tag so we don't have to touch
-        global CSS. */}
     <style>{`
-      @keyframes lmx-orbit-a { from { transform: rotate(0deg) translateX(55px) rotate(0deg); } to { transform: rotate(360deg) translateX(55px) rotate(-360deg); } }
-      @keyframes lmx-orbit-b { from { transform: rotate(120deg) translateX(55px) rotate(-120deg); } to { transform: rotate(480deg) translateX(55px) rotate(-480deg); } }
-      @keyframes lmx-orbit-c { from { transform: rotate(240deg) translateX(55px) rotate(-240deg); } to { transform: rotate(600deg) translateX(55px) rotate(-600deg); } }
-      @keyframes lmx-pulse  { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: 0.85; } }
+      @keyframes lmx-orbit-a { from { transform: rotate(0deg) translateX(58px) rotate(0deg); } to { transform: rotate(360deg) translateX(58px) rotate(-360deg); } }
+      @keyframes lmx-orbit-b { from { transform: rotate(120deg) translateX(58px) rotate(-120deg); } to { transform: rotate(480deg) translateX(58px) rotate(-480deg); } }
+      @keyframes lmx-orbit-c { from { transform: rotate(240deg) translateX(58px) rotate(-240deg); } to { transform: rotate(600deg) translateX(58px) rotate(-600deg); } }
+      @keyframes lmx-pulse   { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: 0.85; } }
+      @keyframes lmx-ring    { 0% { opacity: 0.7; transform: scale(1); } 100% { opacity: 0; transform: scale(1.35); } }
     `}</style>
 
     <Box
       sx={{
         position: 'relative',
-        width: 140,
-        height: 140,
+        width: 160,
+        height: 160,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      {/* Faint guide circle the dots ride on */}
+      {/* Outer expanding ring — subtle radar sweep */}
       <Box
         sx={{
           position: 'absolute',
-          inset: 14,
+          inset: 0,
           borderRadius: '50%',
-          border: `1px dashed ${COPPER}50`,
+          border: `2px solid ${PRIMARY}55`,
+          animation: 'lmx-ring 1.8s ease-out infinite',
         }}
       />
 
-      {/* Centre badge — Lead Matrix logo on a copper tint */}
+      {/* Guide circle the dots ride on */}
       <Box
         sx={{
-          width: 64,
-          height: 64,
+          position: 'absolute',
+          inset: 20,
+          borderRadius: '50%',
+          border: `1px dashed ${PRIMARY}40`,
+        }}
+      />
+
+      {/* Centre badge */}
+      <Box
+        sx={{
+          width: 70,
+          height: 70,
           borderRadius: '50%',
           bgcolor: '#fff',
-          boxShadow: `0 4px 20px ${COPPER}55`,
+          boxShadow: `0 12px 32px ${PRIMARY}44, 0 2px 6px ${PRIMARY}22`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -93,25 +97,21 @@ const LeadMatrixLoader = ({
           src={leadMatrixLogo}
           alt="Lead Matrix"
           sx={{
-            width: 50,
-            height: 50,
+            width: 54,
+            height: 54,
             objectFit: 'contain',
             objectPosition: 'left center',
-            // Crop to the symbol side of the wordmark so the small disc
-            // shows the icon, not the text.
             transform: 'scale(2.1)',
             transformOrigin: 'left center',
           }}
         />
       </Box>
 
-      {/* Three orbiting dots. Each is absolutely positioned at the
-          centre, then translated outward and rotated by its keyframe.
-          Different sizes give the orbit visual rhythm. */}
+      {/* Three orbiting dots — navy, slate, gold accent */}
       {[
-        { sz: 12, color: COPPER, dur: 2.2, anim: 'lmx-orbit-a' },
-        { sz: 8, color: BROWN, dur: 2.8, anim: 'lmx-orbit-b' },
-        { sz: 6, color: `${COPPER}AA`, dur: 3.4, anim: 'lmx-orbit-c' },
+        { sz: 12, color: PRIMARY, dur: 2.2, anim: 'lmx-orbit-a' },
+        { sz: 8,  color: INK,     dur: 2.8, anim: 'lmx-orbit-b' },
+        { sz: 7,  color: ACCENT,  dur: 3.4, anim: 'lmx-orbit-c' },
       ].map((d, i) => (
         <Box
           key={i}
@@ -125,18 +125,25 @@ const LeadMatrixLoader = ({
             ml: `${-d.sz / 2}px`,
             borderRadius: '50%',
             bgcolor: d.color,
+            boxShadow: `0 0 12px ${d.color}66`,
             animation: `${d.anim} ${d.dur}s linear infinite`,
           }}
         />
       ))}
     </Box>
 
-    <Box sx={{ textAlign: 'center' }}>
-      <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', color: BROWN, letterSpacing: 0.2 }}>
+    <Box sx={{ textAlign: 'center', maxWidth: 360, px: 3 }}>
+      <Typography sx={{
+        fontWeight: 800, fontSize: '1rem', color: INK,
+        letterSpacing: '-0.005em',
+      }}>
         {message}
       </Typography>
       {subMessage && (
-        <Typography sx={{ fontWeight: 500, fontSize: '0.78rem', color: 'text.secondary', mt: 0.5 }}>
+        <Typography sx={{
+          fontWeight: 500, fontSize: '0.8rem',
+          color: 'text.secondary', mt: 0.6,
+        }}>
           {subMessage}
         </Typography>
       )}

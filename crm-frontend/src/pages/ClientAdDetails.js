@@ -33,8 +33,8 @@ import {
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
+const COPPER = '#1F3966';
+const BROWN = '#0F172A';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
 
@@ -1628,10 +1628,10 @@ const AdminEodReportPanel = ({ clientId, clientName, apiInstance, onJumpToLeads 
 // Derives `fu_count` + `latest_followup` client-side from
 // `lead.follow_ups[]` so we can reuse the existing /analytics endpoint.
 const AdminLeadsTablePanel = ({ clientId, apiInstance }) => {
-  const TBL_BROWN = '#3E2723';
-  const TBL_COPPER = '#C08552';
-  const TBL_CREAM = '#FFF4ED';
-  const TBL_BORDER = '#E8D5C4';
+  const TBL_BROWN = '#0F172A';
+  const TBL_COPPER = '#1F3966';
+  const TBL_CREAM = '#F1F5F9';
+  const TBL_BORDER = '#E2E8F0';
 
   const today = new Date().toISOString().slice(0, 10);
   const [from, setFrom] = useState(today);

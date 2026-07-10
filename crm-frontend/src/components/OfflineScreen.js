@@ -1,91 +1,137 @@
-import React from 'react';
-import { Box, Typography, Button } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Box, Typography, Button, CircularProgress } from '@mui/material';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
+import WifiIcon from '@mui/icons-material/Wifi';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import leadMatrixLogo from '../assets/Lead-Matrix--02.png';
 
-// OfflineScreen — full-screen overlay shown when the browser reports
-// it has lost its network connection. Matches the brand palette so it
-// doesn't feel like a system error. Includes a Retry button that
-// triggers a hard reload — useful when the user's network is back but
-// the React app hasn't re-fetched yet.
+// Network Lost screen — shown when the browser reports it's lost the
+// connection. Auto-retries every 4 seconds by pinging navigator.onLine
+// and calls onRetry as soon as the browser reports the network is
+// back. Explicit "Try again" button is available for impatient users.
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
-const CREAM = '#FFF8F0';
+const PRIMARY = '#1F3966';
+const PRIMARY_DEEP = '#15294D';
+const ACCENT = '#F4B929';
+const INK = '#0F172A';
+const INK_MUTED = '#475569';
+const GROUND = '#F8FAFC';
+const GROUND_TINT = '#F1F5F9';
 
-const OfflineScreen = ({ onRetry }) => (
-  <Box
-    sx={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 10000,
-      background: `linear-gradient(135deg, ${CREAM} 0%, #FBEFE0 100%)`,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 3,
-      p: 3,
-      textAlign: 'center',
-    }}
-  >
-    {/* Brand mark at the top so the user knows this is still our app
-        and not a generic browser error page. */}
-    <Box
-      component="img"
-      src={leadMatrixLogo}
-      alt="Lead Matrix"
-      sx={{ height: 44, objectFit: 'contain', mb: 1 }}
-    />
+const OfflineScreen = ({ onRetry }) => {
+  const [autoRetrying, setAutoRetrying] = useState(false);
+  const [onlineDetected, setOnlineDetected] = useState(false);
 
+  // Poll navigator.onLine every 4s. As soon as it flips true, mark
+  // "reconnected" and fire onRetry after a short delay so the user
+  // sees the state briefly (feels less flickery).
+  useEffect(() => {
+    let cancelled = false;
+    const check = () => {
+      if (cancelled) return;
+      setAutoRetrying(true);
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        setOnlineDetected(true);
+        setTimeout(() => { if (!cancelled) onRetry?.(); }, 600);
+        return;
+      }
+      setTimeout(() => setAutoRetrying(false), 900);
+    };
+    const id = setInterval(check, 4000);
+    // Also listen for the browser's 'online' event for instant recovery.
+    const onOnline = () => check();
+    window.addEventListener('online', onOnline);
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener('online', onOnline); };
+  }, [onRetry]);
+
+  return (
     <Box
       sx={{
-        width: 88,
-        height: 88,
-        borderRadius: '50%',
-        bgcolor: '#fff',
-        boxShadow: `0 6px 24px ${COPPER}33`,
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10000,
+        background: `radial-gradient(circle at 30% 20%, ${GROUND_TINT} 0%, ${GROUND} 60%)`,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        border: `2px solid ${COPPER}40`,
+        gap: 3,
+        p: 3,
+        textAlign: 'center',
       }}
     >
-      <WifiOffIcon sx={{ fontSize: 44, color: COPPER }} />
+      <style>{`
+        @keyframes off-pulse { 0%,100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.15); opacity: 0.3; } }
+      `}</style>
+
+      <Box
+        component="img"
+        src={leadMatrixLogo}
+        alt="Lead Matrix"
+        sx={{ height: 46, objectFit: 'contain', mb: 1 }}
+      />
+
+      {/* Icon disc with pulsing halo */}
+      <Box sx={{ position: 'relative', width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box sx={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          bgcolor: onlineDetected ? `${ACCENT}22` : `${PRIMARY}22`,
+          animation: 'off-pulse 2s ease-in-out infinite',
+        }} />
+        <Box sx={{
+          width: 76, height: 76, borderRadius: '50%',
+          bgcolor: '#fff',
+          border: `1px solid ${onlineDetected ? `${ACCENT}55` : `${PRIMARY}55`}`,
+          boxShadow: `0 12px 32px ${(onlineDetected ? ACCENT : PRIMARY)}33`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: onlineDetected ? ACCENT : PRIMARY,
+        }}>
+          {onlineDetected ? <WifiIcon sx={{ fontSize: 36 }} /> : <WifiOffIcon sx={{ fontSize: 36 }} />}
+        </Box>
+      </Box>
+
+      <Box sx={{ maxWidth: 480 }}>
+        <Typography sx={{
+          fontSize: '1.5rem', fontWeight: 800, color: INK,
+          letterSpacing: '-0.01em', mb: 1,
+        }}>
+          {onlineDetected ? 'Back online' : 'You’re offline'}
+        </Typography>
+        <Typography sx={{ fontSize: '0.92rem', color: INK_MUTED, lineHeight: 1.55 }}>
+          {onlineDetected
+            ? 'Reconnecting to the workspace…'
+            : 'Leadmatrix couldn’t reach the internet. We’ll retry automatically the moment your connection is back.'}
+        </Typography>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mt: 1.8 }}>
+          {autoRetrying && !onlineDetected && (
+            <>
+              <CircularProgress size={14} sx={{ color: PRIMARY }} />
+              <Typography sx={{ fontSize: '0.78rem', color: INK_MUTED, fontWeight: 500 }}>
+                Auto-retrying…
+              </Typography>
+            </>
+          )}
+        </Box>
+
+        <Button
+          onClick={onRetry}
+          disabled={onlineDetected}
+          startIcon={<RefreshIcon />}
+          variant="contained"
+          sx={{
+            mt: 2.4,
+            bgcolor: PRIMARY, color: '#fff', fontWeight: 800,
+            px: 3, py: 1, borderRadius: 2,
+            boxShadow: `0 6px 20px ${PRIMARY}44`,
+            '&:hover': { bgcolor: PRIMARY_DEEP },
+          }}
+        >
+          Try again
+        </Button>
+      </Box>
     </Box>
-
-    <Box sx={{ maxWidth: 440 }}>
-      <Typography sx={{ fontWeight: 800, fontSize: '1.5rem', color: BROWN, mb: 1 }}>
-        You're offline
-      </Typography>
-      <Typography sx={{ fontSize: '0.92rem', color: 'text.secondary', lineHeight: 1.55 }}>
-        Lead Matrix can't reach the network right now. Check your Wi-Fi or mobile data — the
-        page will reconnect automatically once you're back online.
-      </Typography>
-    </Box>
-
-    <Button
-      variant="contained"
-      startIcon={<RefreshIcon />}
-      onClick={onRetry || (() => window.location.reload())}
-      sx={{
-        bgcolor: COPPER,
-        color: '#fff',
-        fontWeight: 700,
-        textTransform: 'none',
-        px: 3,
-        py: 1,
-        '&:hover': { bgcolor: COPPER, filter: 'brightness(0.92)' },
-      }}
-    >
-      Retry connection
-    </Button>
-
-    <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 1 }}>
-      You can leave this tab open — we'll reconnect automatically.
-    </Typography>
-  </Box>
-);
+  );
+};
 
 export default OfflineScreen;

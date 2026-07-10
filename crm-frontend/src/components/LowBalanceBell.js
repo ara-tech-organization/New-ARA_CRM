@@ -28,9 +28,9 @@ import api from '../api/axios';
 
 const CRIT = '#ef4444';
 const WATCH = '#f59e0b';
-const BROWN = '#3E2723';
-const COPPER = '#C08552';
-const CREAM = '#FFF4ED';
+const BROWN = '#0F172A';
+const COPPER = '#1F3966';
+const CREAM = '#F1F5F9';
 
 const REFRESH_MS = 90_000;
 

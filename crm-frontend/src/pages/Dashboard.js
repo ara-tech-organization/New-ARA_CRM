@@ -1,1582 +1,881 @@
-import React, { useEffect, useMemo, useState, useContext, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { Box, Card, CardContent, Typography, Chip, CircularProgress, Snackbar, Alert, Tabs, Tab } from '@mui/material';
 import {
-  Grid, Card, CardContent, Typography, Box, CircularProgress,
-  Chip, Avatar, Button, Divider, TextField, InputAdornment, InputBase,
-  IconButton, Paper,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Alert as MuiAlert,
-  Tooltip,
-} from '@mui/material';
-import {
-  Facebook, Google, People, Refresh as RefreshIcon,
-  Search as SearchIcon,
-  Clear as ClearIcon,
-  Warning as WarningIcon,
-  ArrowForward as ArrowForwardIcon,
-  EmojiEvents as TrophyIcon,
-  Savings as SavingsIcon,
-  ReportProblem as ReportProblemIcon,
+  Refresh as RefreshIcon,
+  CalendarMonth as DateIcon,
+  DashboardOutlined as DashboardTabIcon,
+  PeopleAltOutlined as ClientsTabIcon,
 } from '@mui/icons-material';
-import api from '../api/axios';
-import { PageLoader } from '../components/Loading';
-import { ThemeContext } from '../contexts/ThemeContext';
-import { useDataCache } from '../contexts/DataCacheContext';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { enGB } from 'date-fns/locale';
 import { format as fmtDate, parseISO, isValid as isValidDate } from 'date-fns';
-import {
-  PieChart, Pie, Cell,
-  Tooltip as RechartsTooltip, ResponsiveContainer,
-} from 'recharts';
-const CLIENT_COLORS = ['#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723', '#C08552', '#3E2723'];
+import { PageLoader } from '../components/Loading';
+import { useDataCache } from '../contexts/DataCacheContext';
+import api from '../api/axios';
 
-// --- Client Performance Card — clickable, navigates to client ads detail page ---
-const ClientCard = ({ client, data, color, dateStr, onClick, adsData, metaApi, metaBalanceValue, adsLoading, metaLoading }) => {
-  // Prefer live Meta API summary when available; fall back to DailyEntry tracking.
-  const metaForm = metaApi?.form_leads != null ? metaApi.form_leads : (data.metaForm || 0);
-  const metaWhats = metaApi?.whatsapp_leads != null ? metaApi.whatsapp_leads : (data.metaWhatsapp || 0);
-  const metaSpent = metaApi?.spend != null ? metaApi.spend : (data.metaFund || 0);
-  const metaCpl = metaApi?.cpl != null ? metaApi.cpl : (data.metaCPL || 0);
-  const metaLeads = metaApi?.total_leads != null ? metaApi.total_leads : (metaForm + metaWhats);
-  const googleLeads = (data.googleCall || 0) + (data.googleWebsite || 0);
-  const totalLeads = metaLeads + googleLeads;
-  const isLinked = client.googleAdsEnabled && adsData;
-  // Meta ad-account balance. Prefer the dedicated /meta/clients batch
-  // (already deployed on Azure), fall back to dashboard-overview's
-  // available_balance (once that endpoint update ships). Suppress the
-  // chip when neither source has answered yet — no false alarms.
-  const rawBalance = metaBalanceValue != null
-    ? metaBalanceValue
-    : (metaApi?.available_balance != null ? metaApi.available_balance : null);
-  const metaBalance = client.metaEnabled && rawBalance != null ? Number(rawBalance) : null;
-  const isLowBalance = metaBalance != null && metaBalance < 1000;
+import ClientSummaryCard from '../components/dashboard/ClientSummaryCard';
+import BalanceWatch from '../components/dashboard/BalanceWatch';
+import PerformanceInsights from '../components/dashboard/PerformanceInsights';
+import ClientOverviewCards from '../components/dashboard/ClientOverviewCards';
+import ActiveCampaigns from '../components/dashboard/ActiveCampaigns';
+import ClientListModal from '../components/dashboard/ClientListModal';
+import { AlertsWidget, RecentActivity } from '../components/dashboard/SideWidgets';
+import { PALETTE, RADIUS, SHADOW, balanceTier, fmtINR } from '../components/dashboard/theme';
 
-  const MetricBox = ({ value, label }) => (
-    <Box sx={{ flex: 1, textAlign: 'center', py: 0.8, px: 1, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1.5 }}>
-      <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: 'text.primary', lineHeight: 1.2 }}>
-        {value}
-      </Typography>
-      <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', fontWeight: 500 }}>
-        {label}
-      </Typography>
-    </Box>
-  );
-
-  return (
-    <Card
-      onClick={onClick}
-      sx={{
-        height: '100%',
-        overflow: 'hidden',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        '&:hover': {
-          transform: 'translateY(-2px)',
-          boxShadow: '0 4px 16px rgba(192, 133, 82, 0.25)',
-          borderColor: color,
-        },
-      }}>
-      {/* Colored header with client name.
-          The name wraps to a second line when needed so long client
-          names ("Advanced GroHair & GloSkin Karaikal") stay readable
-          instead of truncating to "Advanced GroHair & GloSkin K...".
-          Date + low-balance sit on a compact metadata row underneath
-          so they never compete for horizontal space with the title. */}
-      <Box sx={{
-        background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`,
-        px: 1.8, py: 1.1,
-        display: 'flex', alignItems: 'flex-start', gap: 1,
-      }}>
-        <Avatar sx={{
-          width: 32, height: 32,
-          bgcolor: 'rgba(255,255,255,0.28)',
-          fontSize: '0.86rem', fontWeight: 800, color: 'white',
-          flexShrink: 0, mt: 0.2,
-          border: '1px solid rgba(255,255,255,0.35)',
-        }}>
-          {client.name?.charAt(0)}
-        </Avatar>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            title={client.name}
-            sx={{
-              fontWeight: 700,
-              fontSize: '0.9rem',
-              color: 'white',
-              lineHeight: 1.25,
-              // Wrap onto a second line rather than truncating; cap at
-              // two lines so a runaway string can't stretch the card.
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              wordBreak: 'break-word',
-              textWrap: 'balance',
-            }}
-          >
-            {client.name}
-          </Typography>
-          {/* Metadata row — date + low-balance flag on their own line
-              so the title above always has the full header width. */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.5, flexWrap: 'wrap' }}>
-            <Typography sx={{
-              fontSize: '0.66rem', fontWeight: 700,
-              color: 'rgba(255,255,255,0.85)',
-              letterSpacing: '0.3px',
-              fontVariantNumeric: 'tabular-nums',
-            }}>
-              {dateStr}
-            </Typography>
-            {isLowBalance && (
-              <>
-                <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.5)' }} />
-                <Chip
-                  label={`LOW ₹${Math.round(metaBalance).toLocaleString('en-IN')}`}
-                  size="small"
-                  sx={{
-                    bgcolor: '#ef4444',
-                    color: '#fff',
-                    fontWeight: 800,
-                    fontSize: '0.58rem',
-                    height: 17,
-                    letterSpacing: 0.3,
-                    border: '1px solid #ffffff66',
-                    '& .MuiChip-label': { px: 0.6 },
-                  }}
-                  title={`Meta account balance ₹${metaBalance.toLocaleString('en-IN')} — below ₹1,000 threshold`}
-                />
-              </>
-            )}
-          </Box>
-        </Box>
-      </Box>
-
-      <CardContent sx={{ px: 2, py: 1.5, '&:last-child': { pb: 1.5 } }}>
-        {/* META row */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
-            <Facebook sx={{ color: '#C08552', fontSize: 18 }} />
-            <Typography sx={{ fontWeight: 700, color: '#C08552', fontSize: '0.78rem' }}>META</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', flex: 1, gap: 0.8, alignItems: 'center' }}>
-            {client.metaEnabled && metaLoading && !metaApi ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', justifyContent: 'center', py: 0.5 }}>
-                <CircularProgress size={14} sx={{ color: '#C08552' }} />
-                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Loading Meta data…</Typography>
-              </Box>
-            ) : (
-              <>
-                <MetricBox value={metaForm} label="Form" />
-                <MetricBox value={metaWhats} label="WhatsApp" />
-                <MetricBox value={`₹${Number(metaSpent).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} label="Spent" />
-                <MetricBox value={`₹${Number(metaCpl).toFixed(0)}`} label="CPL" />
-              </>
-            )}
-          </Box>
-        </Box>
-
-        <Divider sx={{ mb: 1.5 }} />
-
-        {/* GOOGLE row */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 70 }}>
-            <Google sx={{ color: '#3E2723', fontSize: 18 }} />
-            <Typography sx={{ fontWeight: 700, color: '#3E2723', fontSize: '0.78rem' }}>GOOGLE</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', flex: 1, gap: 0.8, alignItems: 'center' }}>
-            {isLinked ? (() => {
-              // Prefer the API's precomputed CTR / CPC; fall back to a
-              // local derivation so the card still renders sensible
-              // numbers if the summary endpoint doesn't include them.
-              const clicks = Number(adsData.totalClicks) || 0;
-              const impressions = Number(adsData.totalImpressions) || 0;
-              const cost = Number(adsData.totalCost ?? adsData.fund ?? 0);
-              const ctr = adsData.ctr != null
-                ? Number(adsData.ctr)
-                : (impressions > 0 ? (clicks / impressions) * 100 : 0);
-              const cpc = adsData.cpc != null
-                ? Number(adsData.cpc)
-                : (clicks > 0 ? cost / clicks : 0);
-              return (
-                <>
-                  <MetricBox value={`${ctr.toFixed(2)}%`} label="CTR" />
-                  <MetricBox value={`₹${cpc.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`} label="Avg CPC" />
-                  <MetricBox value={clicks.toLocaleString()} label="Clicks" />
-                  <MetricBox value={impressions.toLocaleString()} label="Impr." />
-                </>
-              );
-            })() : client.googleAdsEnabled && adsLoading ? (
-              // Linked but the analytics fetch is still in flight — show a
-              // loader instead of the misleading "Not linked" message.
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', justifyContent: 'center', py: 0.5 }}>
-                <CircularProgress size={14} sx={{ color: '#3E2723' }} />
-                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Loading Google data…</Typography>
-              </Box>
-            ) : (
-              <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', fontStyle: 'italic', textAlign: 'center', width: '100%', py: 0.5 }}>
-                Not linked to Google Ads
-              </Typography>
-            )}
-          </Box>
-        </Box>
-
-        {/* Total bar at bottom */}
-        {totalLeads > 0 && (
-          <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px dashed', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>Total Leads</Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Chip label={`Meta: ${metaLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#C0855212', color: '#C08552', fontWeight: 600 }} />
-              <Chip label={`Google: ${googleLeads}`} size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: '#3E272312', color: '#3E2723', fontWeight: 600 }} />
-              <Chip label={totalLeads} size="small" sx={{ height: 22, fontSize: '0.75rem', bgcolor: `${color}18`, color: color, fontWeight: 700 }} />
-            </Box>
-          </Box>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+// ─────────────────────────────────────────────────────────────────
+// Performance Marketing Command Center — redesigned dashboard.
+//
+// Data flow overview:
+//   1. Clients list comes from DataCacheContext (fetched once).
+//   2. `/meta/dashboard-overview` per-day feeds spend / leads / cpl
+//      / available_balance per client (Meta side).
+//   3. `/meta/clients` (Ads Comparison endpoint) gives Meta ad-
+//      account id + cached balance for the modal columns.
+//   4. `/analytics/clients` per-day feeds Google spend / clicks /
+//      conversions per client + Google customer id.
+//
+// From those four sources we derive:
+//   - Balance Watch tiers
+//   - Performance Insights rankings (Top Performer / Best Value /
+//     Needs Review)
+//   - Meta + Google platform summaries
+//   - Client cards + expandable campaign detail
+//   - Active Campaigns feed
+//   - Recent Activity synthesis (from client createdAt + last sync
+//     stamps)
+//   - Smart Alerts (balance + spend-no-leads + campaign paused)
+// ─────────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { accentColor } = useContext(ThemeContext);
-  const tealAccent = accentColor?.secondary || '#C08552';
-  const { todayLeads, clients: cachedClients, todayLeadsLoading: leadsLoading, clientsLoading, refreshAll, fetchTodayLeads, fetchClients } = useDataCache();
-  // Trigger fetches now that the cache no longer auto-loads on app mount.
-  useEffect(() => {
-    fetchTodayLeads();
-    fetchClients();
-  }, [fetchTodayLeads, fetchClients]);
-  // Pull the logged-in user so the hero strip can address them by
-  // name; fall back to "there" so the banner never reads "Welcome, "
-  // with a blank trailer.
-  const { user } = useSelector((state) => state.auth || {});
+  const user = useSelector((state) => state.auth.user);
 
-  // Auto-refresh today's data + clients ONCE per Dashboard mount so the
-  // Client-wise Performance cards show fresh today's numbers without the
-  // user having to click the Refresh button.
-  //
-  // Important: we deliberately use the empty-deps form with a
-  // stable-ref pattern instead of `[fetchTodayLeads, fetchClients]`.
-  // Those callbacks are recreated by `useDataCache` whenever the
-  // underlying state changes (todayLeads / clients arrays update on
-  // every fetch). Putting them in the dep array caused the effect to
-  // fire on every fetch — so each successful fetch immediately kicked
-  // off another one, and the page would never settle into a stable
-  // state. Pinning the callbacks via refs keeps the effect to a single
-  // boot-time call while still allowing the rest of the component to
-  // call the latest version of the function on demand.
-  const fetchTodayLeadsRef = useRef(fetchTodayLeads);
-  const fetchClientsRef = useRef(fetchClients);
-  fetchTodayLeadsRef.current = fetchTodayLeads;
-  fetchClientsRef.current = fetchClients;
-  useEffect(() => {
-    fetchTodayLeadsRef.current(true);
-    fetchClientsRef.current();
-  }, []);
-
-  const [clientSearch, setClientSearch] = useState('');
-
-  const today = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  }, []);
+  // Selected date drives per-day queries (defaults to today).
+  const today = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(today);
 
-  // Transform clients to simple format
-  const clients = useMemo(() =>
-    cachedClients.map(c => ({
-      _id: c._id,
-      name: c.clientName,
-      status: c.status,
-      googleAdsEnabled: c.googleAdsEnabled || c.google_ads_enabled,
-      metaEnabled: c.meta_enabled || c.metaEnabled,
-    })),
-  [cachedClients]);
+  // Dashboard is Meta-only: Balance Watch, Performance Insights, and
+  // Active Campaigns all filter to Meta. Google is intentionally not
+  // surfaced here — clients working Google should open their client
+  // detail page or the dedicated Ads Comparison module.
+  const platform = 'meta';
 
-  // If the user picks today, use the eager today cache; otherwise fetch on demand.
-  const [otherDateLeads, setOtherDateLeads] = useState([]);
-  const [otherDateLoading, setOtherDateLoading] = useState(false);
-  useEffect(() => {
-    if (selectedDate === today) {
-      setOtherDateLeads([]);
-      return;
-    }
-    setOtherDateLoading(true);
-    api.get('/leads', { params: { date: selectedDate, limit: 10000 } })
-      .then(res => {
-        const data = res.data?.data || res.data || [];
-        setOtherDateLeads(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setOtherDateLeads([]))
-      .finally(() => setOtherDateLoading(false));
-  }, [selectedDate, today]);
+  // Clients from cache
+  const { clients: cachedClients, clientsLoading, fetchClients } = useDataCache();
+  useEffect(() => { fetchClients(); }, [fetchClients]);
 
-  const dateLeads = useMemo(
-    () => (selectedDate === today ? todayLeads : otherDateLeads),
-    [selectedDate, today, todayLeads, otherDateLeads]
-  );
+  // Normalise the clients we care about (agency-facing "active" list,
+  // dropped clients hidden).
+  const clients = useMemo(() => (
+    (cachedClients || [])
+      .filter((c) => c.status !== 'dropped')
+      .map((c) => ({
+        _id: c._id,
+        name: c.clientName,
+        place: c.place,
+        status: c.status || 'active',
+        metaEnabled: !!c.meta_enabled,
+        googleAdsEnabled: !!c.google_ads_enabled,
+        createdAt: c.createdAt,
+      }))
+  ), [cachedClients]);
 
-  // Fetch Google Ads summary for linked accounts (keyed by clientId)
-  const [adsDataMap, setAdsDataMap] = useState({});
-  const [adsLoading, setAdsLoading] = useState(false);
-  useEffect(() => {
-    const hasLinked = cachedClients.some(c => c.googleAdsEnabled || c.google_ads_enabled);
-    if (!hasLinked) return;
-    setAdsLoading(true);
-    api.get('/analytics/clients', { params: { start_date: selectedDate, end_date: selectedDate } })
-      .then(res => {
-        const list = res.data?.clients || res.data?.data || res.data || [];
-        const map = {};
-        (Array.isArray(list) ? list : []).forEach(c => { if (c.clientId) map[c.clientId] = c; });
-        setAdsDataMap(map);
-      })
-      .catch(() => {})
-      .finally(() => setAdsLoading(false));
-  }, [cachedClients, selectedDate]);
-
-  // Fetch Meta Ads summary across all Meta-enabled clients in ONE call.
-  // /meta/dashboard-overview aggregates server-side and returns the exact
-  // snake_case shape the cards consume. Was previously one analytics call
-  // per client (N+1) — see the AdsDashboard-style /meta/clients sibling.
+  // ── Meta dashboard-overview fetch ───────────────────────────────
   const [metaDataMap, setMetaDataMap] = useState({});
   const [metaLoading, setMetaLoading] = useState(false);
   useEffect(() => {
-    const metaClients = cachedClients.filter(c => c.meta_enabled || c.metaEnabled);
+    const metaClients = clients.filter((c) => c.metaEnabled);
     if (metaClients.length === 0) { setMetaDataMap({}); return; }
     let cancelled = false;
     setMetaLoading(true);
     api.get('/meta/dashboard-overview', { params: { from: selectedDate, to: selectedDate } })
-      .then(res => {
+      .then((res) => {
         if (cancelled) return;
         const list = res.data?.clients || [];
         const map = {};
-        list.forEach(c => { if (c.clientId) map[String(c.clientId)] = c; });
+        list.forEach((c) => { if (c.clientId) map[String(c.clientId)] = c; });
         setMetaDataMap(map);
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setMetaLoading(false); });
     return () => { cancelled = true; };
-  }, [cachedClients, selectedDate]);
+  }, [clients, selectedDate]);
 
-  // Balance-only fetch — separate from dashboard-overview because the
-  // /meta/clients endpoint (Ads Comparison sibling) already exposes
-  // Client.meta_ad_account_balance in a batch call that's LIVE on Azure
-  // today. Using it decouples the low-balance alert from any pending
-  // backend deploy that adds `available_balance` to dashboard-overview.
-  const [balanceByClientId, setBalanceByClientId] = useState({});
+  // ── /meta/clients — for cached balances + ad-account IDs ────────
+  const [metaAccountsMap, setMetaAccountsMap] = useState({});
   useEffect(() => {
-    const metaClients = cachedClients.filter(c => c.meta_enabled || c.metaEnabled);
-    if (metaClients.length === 0) { setBalanceByClientId({}); return; }
+    if (clients.length === 0) return;
     let cancelled = false;
     api.get('/meta/clients', { params: { from: selectedDate, to: selectedDate } })
-      .then(res => {
+      .then((res) => {
         if (cancelled) return;
         const list = res.data?.clients || [];
         const map = {};
-        list.forEach(c => {
-          if (c.clientId != null && c.availableBalance != null) {
-            map[String(c.clientId)] = Number(c.availableBalance);
-          }
+        list.forEach((c) => {
+          if (c.clientId) map[String(c.clientId)] = c;
         });
-        setBalanceByClientId(map);
+        setMetaAccountsMap(map);
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [cachedClients, selectedDate]);
+  }, [clients, selectedDate]);
 
-  // Only block the page on essentials (clients list). Everything else loads progressively.
-  const initialLoading = clientsLoading && cachedClients.length === 0;
-  const loading = leadsLoading || clientsLoading || adsLoading || metaLoading || otherDateLoading;
+  // ── Per-client analytics fetch → top ACTIVE campaign name ────────
+  // /meta/dashboard-overview only carries per-client aggregates, so
+  // to surface the real campaign name in the Active Campaigns table
+  // we hit /meta/client/:id/analytics per client and cherry-pick the
+  // highest-spend ACTIVE campaign from its `campaigns[]`. Fired only
+  // for clients that actually have Meta spend today (otherwise the
+  // response would just show zero-spend historical campaigns and we
+  // waste requests).
+  const [metaCampaignsMap, setMetaCampaignsMap] = useState({});
+  useEffect(() => {
+    const metaClients = clients.filter((c) => c.metaEnabled);
+    if (metaClients.length === 0) { setMetaCampaignsMap({}); return; }
+    let cancelled = false;
 
-  const dateByClient = useMemo(() => {
-    const map = {};
-    dateLeads.forEach(lead => {
-      map[lead.clientId] = {
-        metaForm: lead.metaFormLead || 0, metaWhatsapp: lead.metaWhatsappLead || 0,
-        metaFund: lead.metaFund || 0, metaCPL: lead.metaCpl || 0,
-        googleCall: lead.googleCallLead || 0, googleWebsite: lead.googleWebsiteLead || 0,
-        googleFund: lead.googleFund || 0, googleCPL: lead.googleCpl || 0,
-      };
+    const pickTop = (arr) => {
+      // Prefer ACTIVE campaigns with positive spend. Fall back to the
+      // largest-spender regardless of status, then to the first row
+      // with a real name — never return null once we have data.
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const activeSpenders = arr.filter(
+        (r) => String(r.effective_status || r.status || '').toUpperCase() === 'ACTIVE'
+          && (Number(r.spend) || 0) > 0
+      );
+      const pool = activeSpenders.length ? activeSpenders : arr;
+      const top = pool
+        .slice()
+        .sort((a, b) => (Number(b.spend) || 0) - (Number(a.spend) || 0))[0];
+      return top ? {
+        campaign_id: top.campaign_id || '',
+        name: top.name || '',
+        status: top.status || '',
+        effective_status: top.effective_status || '',
+        objective: top.objective || '',
+        spend: Number(top.spend) || 0,
+        leads: Number(top.form_leads || top.leads || 0),
+      } : null;
+    };
+
+    // Fire in parallel but limit which clients we ask about — no point
+    // hammering the API for clients that haven't spent today. Result
+    // map is populated incrementally so partial renders show as they
+    // arrive.
+    const targets = metaClients.filter((c) => {
+      const m = metaDataMap[c._id];
+      return m && Number(m.spend) > 0;
     });
-    return map;
-  }, [dateLeads]);
+    if (targets.length === 0) { setMetaCampaignsMap({}); return; }
 
-  const emptyData = { metaForm: 0, metaWhatsapp: 0, metaFund: 0, metaCPL: 0, googleCall: 0, googleWebsite: 0, googleFund: 0, googleCPL: 0 };
-
-  // Aggregated totals removed — used to drive the per-platform KPI
-  // strip. The two per-client pie charts below carry that breakdown
-  // now, so the rollup is unnecessary.
-
-  // `clientsForDisplay` is the subset used by charts / spotlights /
-  // ranked client lists. Dropped clients are EXCLUDED here so they
-  // don't appear as data points anywhere on the page. The headline
-  // KPI cards still count them (via the full `clients` array) so the
-  // Inactive Clients card includes dropped — the team treats
-  // dropped as a flavor of inactive for the count.
-  const clientsForDisplay = useMemo(
-    () => clients.filter((c) => c?.status !== 'dropped'),
-    [clients]
-  );
-
-  // Client mix — used to fill the Total/Active KPI cards with the
-  // breakdown of who is connected to which platform. Uses the display
-  // list so dropped clients' platform connections don't inflate the
-  // Meta / Google / Both chip counts.
-  const clientMix = useMemo(() => {
-    const metaCount = clientsForDisplay.filter(c => c.metaEnabled).length;
-    const googleCount = clientsForDisplay.filter(c => c.googleAdsEnabled).length;
-    const bothCount = clientsForDisplay.filter(c => c.metaEnabled && c.googleAdsEnabled).length;
-    return { metaCount, googleCount, bothCount };
-  }, [clientsForDisplay]);
-
-  // Per-platform pie data — one slice per client whose platform-specific
-  // lead count is > 0. Sorted descending so the largest slice anchors
-  // the top-right and the labels read nicely. We use a copper-brown
-  // alternating palette so the slices feel on-brand rather than
-  // generic Recharts default colours.
-  const PIE_COLORS = ['#C08552', '#8B1F2F', '#3E2723', '#A0522D', '#D2691E', '#7B3F00', '#B87333', '#5D4037', '#6F4E37', '#996633'];
-
-  // Same fallback chain ClientCard uses: prefer live API counts, then
-  // fall back to the DailyEntry tracking docs in dateByClient. Without
-  // this the pies would always show 0 on days no one filled in a
-  // DailyEntry, even though Meta itself returned leads.
-  const metaPieData = useMemo(() => {
-    return clientsForDisplay.map((c) => {
-      const api = metaDataMap[c._id];
-      const d = dateByClient[c._id] || emptyData;
-      const value = api?.total_leads != null
-        ? Number(api.total_leads) || 0
-        : (api?.form_leads != null || api?.whatsapp_leads != null)
-          ? (Number(api?.form_leads) || 0) + (Number(api?.whatsapp_leads) || 0)
-          : (d.metaForm || 0) + (d.metaWhatsapp || 0);
-      return { name: c.name, value };
-    }).filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientsForDisplay, dateByClient, metaDataMap]);
-
-  const googlePieData = useMemo(() => {
-    return clientsForDisplay.map((c) => {
-      const ads = adsDataMap[c._id];
-      const d = dateByClient[c._id] || emptyData;
-      // /analytics/clients returns totalClicks/totalImpressions/totalCost
-      // but NOT a "leads" field for Google — conversions are exposed
-      // as totalConversions when tracking is set up. Fall through the
-      // chain: explicit totalConversions → conversions → total_leads
-      // → DailyEntry tracking (call + website lead counts).
-      const apiVal = ads?.totalConversions != null
-        ? Number(ads.totalConversions) || 0
-        : ads?.conversions != null
-          ? Number(ads.conversions) || 0
-          : ads?.total_leads != null
-            ? Number(ads.total_leads) || 0
-            : null;
-      const value = apiVal != null
-        ? apiVal
-        : (d.googleCall || 0) + (d.googleWebsite || 0);
-      return { name: c.name, value };
-    }).filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientsForDisplay, dateByClient, adsDataMap]);
-
-  // Top clients for table
-  const topClients = useMemo(() => {
-    return clientsForDisplay.map(c => {
-      const d = dateByClient[c._id] || emptyData;
-      const meta = (d.metaForm || 0) + (d.metaWhatsapp || 0);
-      const google = (d.googleCall || 0) + (d.googleWebsite || 0);
-      const total = meta + google;
-      const spend = (d.metaFund || 0) + (d.googleFund || 0);
-      return { name: c.name, meta, google, total, spend, cpl: total > 0 ? Math.round(spend / total) : 0 };
-    }).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
-  }, [clientsForDisplay, dateByClient]);
-
-  if (initialLoading) {
-    return <PageLoader message="Loading dashboard..." />;
-  }
-
-  const activeClients = clients.filter(c => c.status === 'Active' || c.status === 'active').length;
-  // Inactive Clients card bundles together everything that isn't active:
-  // 'inactive' / 'pending' / 'suspended' AND 'dropped'. The team treats
-  // dropped as a flavor of inactive for the headline count — they're
-  // off the active book, the audit trail is the only difference.
-  // `clientsForDisplay` (defined above) is the dropped-excluded subset
-  // used by charts / spotlights / per-client lists below.
-  const inactiveClients = clients.length - activeClients;
-  const selDateObj = new Date(selectedDate + 'T00:00:00');
-  const dateStr = selDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const dateLong = selDateObj.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-  const isToday = selectedDate === today;
-
-  // ── Today's Spotlights ──────────────────────────────────────────
-  // Per-client analytical highlights — surface who's winning and
-  // who needs intervention without showing aggregate totals.
-  // Computed inline from the data we already fetch (metaDataMap +
-  // adsDataMap + DailyEntry tracking).
-  const clientStats = clients.map((c) => {
-    const meta = metaDataMap[c._id];
-    const ads = adsDataMap[c._id];
-    const tracking = dateByClient[c._id] || emptyData;
-    const metaLeads = meta?.total_leads != null
-      ? Number(meta.total_leads) || 0
-      : (meta?.form_leads != null || meta?.whatsapp_leads != null)
-        ? (Number(meta?.form_leads) || 0) + (Number(meta?.whatsapp_leads) || 0)
-        : (tracking.metaForm || 0) + (tracking.metaWhatsapp || 0);
-    const googleLeads = ads?.totalConversions != null
-      ? Number(ads.totalConversions) || 0
-      : (tracking.googleCall || 0) + (tracking.googleWebsite || 0);
-    const metaSpend = meta?.spend != null
-      ? Number(meta.spend) || 0
-      : Number(tracking.metaFund) || 0;
-    const googleSpend = ads?.totalCost != null
-      ? Number(ads.totalCost) || 0
-      : Number(tracking.googleFund) || 0;
-    const leads = metaLeads + googleLeads;
-    const spend = metaSpend + googleSpend;
-    const cpl = leads > 0 ? spend / leads : 0;
-    return { id: c._id, name: c.name, leads, spend, cpl };
-  });
-  // Standout calculations — only consider clients with real activity
-  // (leads or spend) so a quiet client doesn't accidentally win.
-  const activeStats = clientStats.filter((c) => c.leads > 0 || c.spend > 0);
-  const topPerformer = activeStats
-    .slice().sort((a, b) => b.leads - a.leads)[0];
-  const bestCpl = activeStats
-    .filter((c) => c.cpl > 0)
-    .slice().sort((a, b) => a.cpl - b.cpl)[0];
-  // Needs review: highest CPL among those who got leads, OR a client
-  // spending money with zero leads back (the worst case scenario).
-  const zeroLeadSpender = activeStats
-    .filter((c) => c.leads === 0 && c.spend > 0)
-    .slice().sort((a, b) => b.spend - a.spend)[0];
-  const worstCpl = activeStats
-    .filter((c) => c.cpl > 0)
-    .slice().sort((a, b) => b.cpl - a.cpl)[0];
-  const needsReview = zeroLeadSpender || worstCpl;
-
-  // ── Needs Attention list ─────────────────────────────────────────
-  // Performance alerts only — anything balance-related now lives in the
-  // dedicated Low Balance card below. Rule: Meta-linked client with
-  // spend today but zero leads back.
-  const attentionItems = clients.flatMap((c) => {
-    const items = [];
-    const meta = metaDataMap[c._id];
-    const tracking = dateByClient[c._id] || emptyData;
-    const metaLeadsToday = meta?.total_leads != null
-      ? Number(meta.total_leads) || 0
-      : (tracking.metaForm || 0) + (tracking.metaWhatsapp || 0);
-    const metaSpendToday = meta?.spend != null
-      ? Number(meta.spend) || 0
-      : Number(tracking.metaFund) || 0;
-    if (c.metaEnabled && metaSpendToday > 0 && metaLeadsToday === 0) {
-      items.push({
-        clientId: c._id,
-        client: c.name,
-        severity: 'warning',
-        message: `${c.name} — Meta spend ₹${Math.round(metaSpendToday)} today but 0 leads`,
+    Promise.allSettled(
+      targets.map((c) =>
+        api.get(`/meta/client/${c._id}/analytics`, {
+          params: { from: selectedDate, to: selectedDate },
+        }).then((res) => ({ clientId: String(c._id), payload: res.data }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const map = {};
+      results.forEach((r) => {
+        if (r.status !== 'fulfilled') return;
+        const { clientId, payload } = r.value;
+        const top = pickTop(payload?.campaigns);
+        if (top) map[clientId] = top;
       });
-    }
-    return items;
-  }).slice(0, 4);
+      setMetaCampaignsMap(map);
+    });
+    return () => { cancelled = true; };
+  }, [clients, metaDataMap, selectedDate]);
 
-  // ── Low Balance list ─────────────────────────────────────────────
-  // Every Meta-linked client whose ad account balance is below ₹2,000.
-  // Splits into two visual tiers in the card below:
-  //   * Critical  — balance < ₹1,000. Red border + red badge. Ads are
-  //                 at real risk of auto-pausing.
-  //   * Watch     — ₹1,000 ≤ balance < ₹2,000. Amber border + amber
-  //                 badge. Not urgent, but top-up soon.
-  // Clients with balance = null (never synced) are excluded so we don't
-  // spam the panel with false alarms before the first sync writes a
-  // real value.
-  const lowBalanceClients = clients
-    .map((c) => {
-      // Prefer the batch balance endpoint (deployed today), fall back
-      // to whatever dashboard-overview returns (once the new backend
-      // ships). Either source is fine — the alert renders when EITHER
-      // one shows a non-null value under ₹2,000.
-      const balFromBatch = balanceByClientId[c._id];
-      const balFromOverview = metaDataMap[c._id]?.available_balance;
-      const bal = balFromBatch != null ? balFromBatch : balFromOverview;
+  // ── Google analytics/clients fetch ──────────────────────────────
+  const [googleDataMap, setGoogleDataMap] = useState({});
+  const [googleLoading, setGoogleLoading] = useState(false);
+  useEffect(() => {
+    const gClients = clients.filter((c) => c.googleAdsEnabled);
+    if (gClients.length === 0) { setGoogleDataMap({}); return; }
+    let cancelled = false;
+    setGoogleLoading(true);
+    api.get('/analytics/clients', { params: { start_date: selectedDate, end_date: selectedDate } })
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data?.clients || res.data?.data || res.data || [];
+        const arr = Array.isArray(list) ? list : [];
+        const map = {};
+        arr.forEach((c) => { if (c.clientId) map[String(c.clientId)] = c; });
+        setGoogleDataMap(map);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setGoogleLoading(false); });
+    return () => { cancelled = true; };
+  }, [clients, selectedDate]);
+
+  const loading = clientsLoading || metaLoading || googleLoading;
+
+  // ── Derive per-client "row" (used everywhere on the dashboard) ─
+  // Each client can have Meta side + Google side. For sections that
+  // are strictly per-platform (Balance Watch, Insights, etc.) we
+  // emit a separate row per platform. For the Client Overview cards
+  // we combine both into a single "both" row.
+  const platformRows = useMemo(() => {
+    const rows = [];
+    clients.forEach((c) => {
+      if (c.metaEnabled) {
+        const m = metaDataMap[c._id] || {};
+        const acc = metaAccountsMap[c._id] || {};
+        rows.push({
+          id: `${c._id}-meta`,
+          clientId: c._id,
+          name: c.name,
+          status: c.status,
+          platform: 'meta',
+          spend: Number(m.spend) || 0,
+          leads: Number(m.total_leads) || 0,
+          cpl: Number(m.cpl) || 0,
+          balance: m.available_balance != null ? Number(m.available_balance) : (acc.availableBalance != null ? Number(acc.availableBalance) : null),
+          campaigns: Number(acc.activeCampaigns || acc.campaignsCount || acc.campaigns || 0),
+          adAccount: acc.metaAdAccountId || '',
+          lastSync: acc.fetched_at || acc.updatedAt || null,
+          // Top ACTIVE campaign for this client in the current window.
+          // Prefer the per-client analytics fetch (metaCampaignsMap)
+          // — it always carries the real name — then fall back to
+          // /meta/dashboard-overview's top_campaign for environments
+          // where the analytics call didn't run (no spend today).
+          topCampaign: metaCampaignsMap[String(c._id)] || m.top_campaign || null,
+        });
+      }
+      if (c.googleAdsEnabled) {
+        const g = googleDataMap[c._id] || {};
+        rows.push({
+          id: `${c._id}-google`,
+          clientId: c._id,
+          name: c.name,
+          status: c.status,
+          platform: 'google',
+          spend: Number(g.totalCost) || 0,
+          leads: Number(g.totalConversions) || 0,
+          cpl: Number(g.totalConversions) > 0 ? Number(g.totalCost) / Number(g.totalConversions) : 0,
+          balance: null,
+          campaigns: Number(g.activeCampaigns || g.campaignsCount || 0),
+          customerId: g.googleAdsCustomerId || '',
+          lastSync: g.updatedAt || null,
+        });
+      }
+    });
+    rows.forEach((r) => { r.tier = balanceTier(r.balance); });
+    return rows;
+  }, [clients, metaDataMap, metaAccountsMap, googleDataMap, metaCampaignsMap]);
+
+  // Combined per-client rows for Client Overview cards.
+  const combinedClientRows = useMemo(() => {
+    return clients.map((c) => {
+      const meta = platformRows.find((r) => r.clientId === c._id && r.platform === 'meta');
+      const google = platformRows.find((r) => r.clientId === c._id && r.platform === 'google');
+      const spend = (meta?.spend || 0) + (google?.spend || 0);
+      const leads = (meta?.leads || 0) + (google?.leads || 0);
+      const cpl = leads > 0 ? spend / leads : 0;
+      const balance = meta?.balance ?? google?.balance ?? null;
+      const campaigns = (meta?.campaigns || 0) + (google?.campaigns || 0);
+      const lastSync = [meta?.lastSync, google?.lastSync].filter(Boolean).sort().pop() || null;
       return {
         id: c._id,
         name: c.name,
-        balance: bal != null ? Number(bal) : null,
-        metaEnabled: !!c.metaEnabled,
+        status: c.status,
+        platform: (c.metaEnabled && c.googleAdsEnabled) ? 'both' : (c.metaEnabled ? 'meta' : 'google'),
+        spend, leads, cpl, balance, campaigns, lastSync,
+        campaignDetails: [], // populated on expand — placeholder for now
+      };
+    });
+  }, [clients, platformRows]);
+
+  // ── Aggregates for KPI card ──────────────────────────────────
+  // The KPI strip has been collapsed into a single Total Clients
+  // card that shows the Meta / Google / Both connected breakdown
+  // with cumulative Meta balance where applicable.
+  const kpi = useMemo(() => {
+    let metaConnected = 0;
+    let googleConnected = 0;
+    let bothConnected = 0;
+    let metaBalanceTotal = 0;
+    let bothBalanceTotal = 0;
+    let metaBalanceCount = 0;
+    let bothBalanceCount = 0;
+
+    clients.forEach((c) => {
+      const hasMeta = !!c.metaEnabled;
+      const hasGoogle = !!c.googleAdsEnabled;
+      if (hasMeta) metaConnected += 1;
+      if (hasGoogle) googleConnected += 1;
+      if (hasMeta && hasGoogle) bothConnected += 1;
+
+      const metaRow = platformRows.find((r) => r.clientId === c._id && r.platform === 'meta');
+      const bal = metaRow?.balance;
+      if (bal != null) {
+        if (hasMeta) { metaBalanceTotal += bal; metaBalanceCount += 1; }
+        if (hasMeta && hasGoogle) { bothBalanceTotal += bal; bothBalanceCount += 1; }
+      }
+    });
+
+    return {
+      totalClients: clients.length,
+      metaConnected,
+      googleConnected,
+      bothConnected,
+      metaBalanceTotal: metaBalanceCount > 0 ? metaBalanceTotal : null,
+      bothBalanceTotal: bothBalanceCount > 0 ? bothBalanceTotal : null,
+    };
+  }, [clients, platformRows]);
+
+
+
+  // ── Balance Watch data ────────────────────────────────────────
+  const balanceClients = useMemo(() => {
+    return platformRows
+      .filter((r) => r.balance != null)
+      .map((r) => ({
+        id: r.id,
+        clientId: r.clientId,
+        name: r.name,
+        platform: r.platform,
+        balance: r.balance,
+        campaigns: r.campaigns,
+        tier: r.tier,
+      }));
+  }, [platformRows]);
+
+  // ── Active Campaigns list (synthesized from platform rows) ────
+  // No per-campaign endpoint on the dashboard fetch path — each
+  // client contributes one aggregate row that stands in for its
+  // active campaigns. Real per-campaign data replaces this whenever
+  // a /meta/campaigns/live and /google-ads/campaigns/live endpoint
+  // are wired up; the Active Campaigns widget expects the same
+  // shape either way.
+  const activeCampaigns = useMemo(() => {
+    return platformRows
+      .filter((r) => r.spend > 0 || r.campaigns > 0)
+      .map((r) => {
+        // Prefer the real campaign name (top-spending campaign for
+        // this client in the window). Falls back to "Meta · Client"
+        // when the backend hasn't hydrated a top campaign yet — e.g.
+        // clients with no per-campaign insight rows for the day.
+        const tc = r.platform === 'meta' ? r.topCampaign : null;
+        const displayName = tc?.name
+          ? tc.name
+          : (r.platform === 'meta' ? `Meta · ${r.name}` : `Google · ${r.name}`);
+        // Paused vs active — pull straight from the campaign's
+        // effective_status so the row's status pill actually reflects
+        // Meta's state instead of a hard-coded 'active'.
+        const effStatus = String(tc?.effective_status || '').toUpperCase();
+        const isPaused = effStatus === 'PAUSED'
+          || effStatus === 'CAMPAIGN_PAUSED'
+          || effStatus === 'ADSET_PAUSED';
+        return {
+          id: r.id,
+          // clientId is what ActiveCampaigns uses to route on row-click
+          // (via the onCampaignClick callback the Dashboard hands it).
+          // r.id is `${clientId}-meta` — not a valid Client _id, so we
+          // pass r.clientId here explicitly.
+          clientId: r.clientId,
+          name: displayName,
+          clientName: r.name,
+          platform: r.platform,
+          type: r.platform === 'meta'
+            ? (tc?.objective || 'Lead Generation')
+            : 'Search',
+          status: isPaused ? 'paused' : 'active',
+          leads: r.leads,
+          spend: r.spend,
+          cpl: r.cpl,
+          budget: null,
+          createdAt: r.lastSync,
+          updatedAt: r.lastSync,
+          lastLeadAt: (r.leads || 0) > 0 ? r.lastSync : null,
+        };
+      });
+  }, [platformRows]);
+
+  // ── Alerts synthesis ─────────────────────────────────────────
+  // Each alert carries a `platform` field so the platform toggle
+  // above the widgets can filter alerts down to the active view.
+  const alerts = useMemo(() => {
+    const arr = [];
+    platformRows.forEach((r) => {
+      if (r.balance != null && r.balance < 1000) {
+        arr.push({
+          id: `bal-${r.id}`,
+          platform: r.platform,
+          text: `${r.name} — Meta balance ${fmtINR(r.balance)}, ads may auto-pause`,
+          color: PALETTE.critical,
+          clientId: r.clientId,
+          rightText: fmtINR(r.balance),
+        });
+      } else if (r.balance != null && r.balance < 2000) {
+        arr.push({
+          id: `bal-${r.id}`,
+          platform: r.platform,
+          text: `${r.name} — balance in watch band`,
+          color: PALETTE.warning,
+          clientId: r.clientId,
+          rightText: fmtINR(r.balance),
+        });
+      }
+      if (r.spend > 0 && r.leads === 0) {
+        arr.push({
+          id: `zero-${r.id}`,
+          platform: r.platform,
+          text: `${r.name} spending on ${r.platform === 'meta' ? 'Meta' : 'Google'} but 0 leads back`,
+          color: PALETTE.warning,
+          clientId: r.clientId,
+          rightText: fmtINR(r.spend),
+        });
+      }
+    });
+    // Sort critical first
+    arr.sort((a, b) => (a.color === PALETTE.critical ? -1 : 1) - (b.color === PALETTE.critical ? -1 : 1));
+    return arr.slice(0, 12);
+  }, [platformRows]);
+
+  // ── Recent Activity synthesis ────────────────────────────────
+  const activity = useMemo(() => {
+    const items = [];
+    // Newest clients created
+    clients
+      .slice()
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .slice(0, 3)
+      .forEach((c) => {
+        if (c.createdAt) {
+          items.push({
+            id: `create-${c._id}`,
+            kind: 'client_connected',
+            text: `${c.name} connected to the CRM`,
+            at: c.createdAt,
+          });
+        }
+      });
+    // Latest Meta sync
+    const metaLastSync = platformRows
+      .filter((r) => r.platform === 'meta' && r.lastSync)
+      .slice().sort((a, b) => new Date(b.lastSync) - new Date(a.lastSync))[0];
+    if (metaLastSync) {
+      items.push({
+        id: `meta-sync-${metaLastSync.id}`,
+        kind: 'meta_sync',
+        text: `Meta sync completed for ${metaLastSync.name}`,
+        at: metaLastSync.lastSync,
+      });
+    }
+    // Latest Google sync
+    const googleLastSync = platformRows
+      .filter((r) => r.platform === 'google' && r.lastSync)
+      .slice().sort((a, b) => new Date(b.lastSync) - new Date(a.lastSync))[0];
+    if (googleLastSync) {
+      items.push({
+        id: `google-sync-${googleLastSync.id}`,
+        kind: 'google_sync',
+        text: `Google sync completed for ${googleLastSync.name}`,
+        at: googleLastSync.lastSync,
+      });
+    }
+    // Balance updates (any client whose live balance is populated)
+    platformRows
+      .filter((r) => r.balance != null && r.lastSync)
+      .slice().sort((a, b) => new Date(b.lastSync) - new Date(a.lastSync))
+      .slice(0, 4)
+      .forEach((r) => {
+        items.push({
+          id: `bal-${r.id}`,
+          kind: 'balance_updated',
+          text: `${r.name} balance now ${fmtINR(r.balance)}`,
+          at: r.lastSync,
+        });
+      });
+    // Deduplicate + sort newest first
+    const seen = new Set();
+    return items
+      .filter((i) => { if (seen.has(i.id)) return false; seen.add(i.id); return true; })
+      .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
+  }, [clients, platformRows]);
+
+  // ─── Platform-filtered views ─────────────────────────────────
+  // Everything below the toggle reads from these instead of the
+  // full cross-platform data. Kept as separate memos so the source
+  // of truth (platformRows / activeCampaigns / alerts) stays intact
+  // for the modal + client-summary card, which show both platforms.
+  const viewPlatformRows = useMemo(
+    () => platformRows.filter((r) => r.platform === platform),
+    [platformRows, platform],
+  );
+  const viewBalanceClients = useMemo(
+    () => balanceClients.filter((r) => r.platform === platform),
+    [balanceClients, platform],
+  );
+  const viewActiveCampaigns = useMemo(
+    () => activeCampaigns.filter((c) => c.platform === platform),
+    [activeCampaigns, platform],
+  );
+  const viewAlerts = useMemo(
+    () => alerts.filter((a) => a.platform === platform),
+    [alerts, platform],
+  );
+  // Per-client cards for the collapsible Client Overview section:
+  // one row per client that's actually on the selected platform,
+  // metrics narrowed to that platform only.
+  const viewClientRows = useMemo(() => (
+    viewPlatformRows.map((r) => ({
+      id: r.clientId,
+      name: r.name,
+      status: r.status,
+      platform: r.platform,
+      spend: r.spend,
+      leads: r.leads,
+      cpl: r.cpl,
+      balance: r.balance,
+      campaigns: r.campaigns,
+      lastSync: r.lastSync,
+      campaignDetails: [],
+    }))
+  ), [viewPlatformRows]);
+
+  // ── Modal + section state ────────────────────────────────────
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalFilter, setModalFilter] = useState('all'); // all|meta|google|both
+  // 0 = Overview (hero + balance + insights + campaigns + alerts)
+  // 1 = Clients (the searchable Client Overview list)
+  // Split into a proper tab because users kept missing the Client
+  // Overview when it lived at the bottom as a collapsible section.
+  const [dashboardTab, setDashboardTab] = useState(0);
+
+  const openClientList = useCallback((filter = 'all') => {
+    setModalFilter(filter);
+    setModalOpen(true);
+  }, []);
+
+  // One row per client — each row carries both Meta and Google
+  // balance columns so the modal can render an em-dash where a
+  // platform isn't linked. Google balance stays null (not tracked)
+  // for now — set it here when a Google balance source lands.
+  const modalRows = useMemo(() => (
+    clients.map((c) => {
+      const meta = platformRows.find((r) => r.clientId === c._id && r.platform === 'meta');
+      const google = platformRows.find((r) => r.clientId === c._id && r.platform === 'google');
+      const platform = c.metaEnabled && c.googleAdsEnabled ? 'both'
+        : c.metaEnabled ? 'meta'
+        : c.googleAdsEnabled ? 'google' : '';
+      return {
+        id: c._id,
+        name: c.name,
+        status: c.status,
+        platform,
+        metaBalance: meta?.balance ?? null,
+        googleBalance: null, // Google balance concept isn't tracked in the CRM yet
+        campaigns: (meta?.campaigns || 0) + (google?.campaigns || 0),
+        lastSync: [meta?.lastSync, google?.lastSync].filter(Boolean).sort().pop() || null,
       };
     })
-    .filter((c) => c.metaEnabled && c.balance != null && c.balance < 2000)
-    .sort((a, b) => a.balance - b.balance);
+  ), [clients, platformRows]);
 
-  // Greeting changes with the hour so it feels alive.
+  // ── Actions ──────────────────────────────────────────────────
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+
+  const showSnack = (message, severity = 'info') => setSnackbar({ open: true, message, severity });
+
+  const handleRefresh = useCallback(() => {
+    // Re-trigger fetches by touching selectedDate briefly.
+    const stamp = selectedDate;
+    setSelectedDate('');
+    setTimeout(() => setSelectedDate(stamp), 40);
+    showSnack('Dashboard refreshed', 'success');
+  }, [selectedDate]);
+
+  const openClientAds = (client) => {
+    const id = client.clientId || client.id;
+    if (id) navigate(`/client-ads/${id}`);
+  };
+
+  // Metadata for the hero strip
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const userName = user?.name || user?.email?.split('@')[0] || 'there';
+  const isToday = selectedDate === today;
+
+  if (clientsLoading && cachedClients.length === 0) {
+    return <PageLoader message="Loading dashboard…" />;
+  }
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={enGB}>
-    <Box>
-      {/* ── Welcome Hero Strip ─────────────────────────────────────
-          Sets the tone for the page: personalised greeting on the
-          left, controls on the right, and three inline mini-stats
-          underneath so the "did today happen" check takes 1 second. */}
-      <Card
-        variant="outlined"
-        sx={{
-          mb: 2,
-          background: `linear-gradient(135deg, ${tealAccent}10 0%, ${tealAccent}05 50%, transparent 100%)`,
-          borderLeft: `4px solid ${tealAccent}`,
-        }}
-      >
-        <CardContent sx={{ py: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, flexWrap: 'wrap', gap: 1.5 }}>
-            <Box>
-              <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', lineHeight: 1.1 }}>
-                {greeting}, <Box component="span" sx={{ color: tealAccent }}>{userName}</Box>
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.3 }}>
-                {isToday ? "Here's what's happening today" : 'Showing performance for'} — {dateLong}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              {/* MUI X DatePicker in en-GB / dd-MM-yyyy. maxDate stops
-                  future selections; state still stores ISO YYYY-MM-DD
-                  so the rest of the page doesn't need to change. */}
-              <Tooltip arrow title="Pick a date to view that day's performance">
-                <Box>
-                  <DatePicker
-                    value={selectedDate ? parseISO(selectedDate) : null}
-                    onChange={(d) => {
-                      if (!d || !isValidDate(d)) return;
-                      const iso = fmtDate(d, 'yyyy-MM-dd');
-                      setSelectedDate(iso > today ? today : iso);
-                    }}
-                    maxDate={parseISO(today)}
-                    format="dd/MM/yyyy"
-                    slotProps={{
-                      textField: {
-                        size: 'small',
-                        placeholder: 'DD/MM/YYYY',
-                        sx: { minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: '0.85rem', bgcolor: 'background.paper' } },
-                      },
-                    }}
-                  />
-                </Box>
-              </Tooltip>
-              {!isToday && (
-                <Tooltip arrow title="Jump back to today's view">
-                  <Button size="small" variant="outlined" onClick={() => setSelectedDate(today)}>Today</Button>
-                </Tooltip>
-              )}
-              <Tooltip arrow title="Re-fetch latest data from the server">
-                <Button
-                  variant="contained" size="small"
-                  startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
-                  onClick={refreshAll}
-                  disabled={loading}
-                  sx={{ bgcolor: tealAccent, '&:hover': { bgcolor: tealAccent, filter: 'brightness(0.92)' } }}
-                >
-                  Refresh
-                </Button>
-              </Tooltip>
-            </Box>
-          </Box>
+      <Box sx={{ bgcolor: PALETTE.ground, minHeight: '100vh', pb: 3 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.4 }}>
 
-        </CardContent>
-      </Card>
-
-      {/* ── Top-of-page search ─────────────────────────────────────
-          Elevated from the "Client-wise Performance" section header
-          so it's the first thing after the welcome hero. Compact
-          single-row layout keeps it discoverable without dominating
-          the fold. Same `clientSearch` state drives the card grid
-          filter further down. */}
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 2,
-          px: 1.5,
-          borderRadius: 1.5,
-          border: '1px solid',
-          borderColor: '#C0855222',
-          background: `linear-gradient(90deg, #FFF4ED 0%, #ffffff 60%)`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          height: 42,
-        }}
-      >
-        <SearchIcon sx={{ color: '#C08552', fontSize: 20, flexShrink: 0 }} />
-        <InputBase
-          fullWidth
-          placeholder={`Search ${clients.length} client${clients.length === 1 ? '' : 's'}…`}
-          value={clientSearch}
-          onChange={(e) => setClientSearch(e.target.value)}
-          sx={{
-            fontSize: '0.88rem',
-            fontWeight: 500,
-            '& input::placeholder': { color: '#3E272377', opacity: 1 },
-          }}
-          inputProps={{ 'aria-label': 'Search clients' }}
-        />
-        {clientSearch && (
-          <>
-            <Chip
-              size="small"
-              label={`${clients.filter(c => c.name?.toLowerCase().includes(clientSearch.toLowerCase())).length} match${clients.filter(c => c.name?.toLowerCase().includes(clientSearch.toLowerCase())).length === 1 ? '' : 'es'}`}
-              sx={{
-                height: 20, fontSize: '0.66rem', fontWeight: 700,
-                bgcolor: '#C0855218', color: '#C08552', border: '1px solid #C0855230',
-                flexShrink: 0,
-              }}
-            />
-            <IconButton
-              size="small"
-              onClick={() => setClientSearch('')}
-              aria-label="Clear search"
-              sx={{
-                color: '#3E272388', p: 0.3, flexShrink: 0,
-                '&:hover': { color: '#3E2723', bgcolor: '#3E272308' },
-              }}
-            >
-              <ClearIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </>
-        )}
-      </Paper>
-
-      {/* ── Balance Watch (conditional) ─────────────────────────────
-          Fuel-gauge tiles for every Meta ad account under ₹2,000.
-          Reads /meta/clients (already deployed) with a fallback to
-          dashboard-overview once that ships. Each tile encodes tier
-          three ways for fast scanning: a left severity stripe, the
-          amount typed in tier colour, and a depletion bar with the
-          ₹1,000 auto-pause threshold marked. */}
-      {lowBalanceClients.length > 0 && (() => {
-        const CRIT = '#ef4444';
-        const WATCH = '#f59e0b';
-        const BROWN_C = '#3E2723';
-        const COPPER_C = '#C08552';
-        const CREAM_C = '#FFF4ED';
-        const TRACK = '#EAE1D5';
-        const criticalCount = lowBalanceClients.filter((c) => c.balance < 1000).length;
-        const watchCount = lowBalanceClients.length - criticalCount;
-        const totalExposure = lowBalanceClients.reduce((s, c) => s + (c.balance || 0), 0);
-        const accent = criticalCount > 0 ? CRIT : WATCH;
-        const fmtINR0 = (n) => `₹${Math.round(n).toLocaleString('en-IN')}`;
-        return (
+          {/* ── Top strip: Hero (left, wide) + Client Summary (right, compact) ── */}
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 300px' },
+            gap: 1.4,
+            alignItems: 'stretch',
+          }}>
           <Card
             variant="outlined"
             sx={{
-              mb: 2,
+              borderRadius: `${RADIUS.card}px`,
+              border: `1px solid ${PALETTE.border}`,
+              boxShadow: SHADOW.card,
               overflow: 'hidden',
+              background: `linear-gradient(120deg, ${PALETTE.navy} 0%, ${PALETTE.navyDeep} 100%)`,
+              color: '#fff',
               position: 'relative',
-              background: `linear-gradient(180deg, ${CREAM_C} 0%, #fff 65%)`,
-              borderColor: `${accent}55`,
-              '&::before': {
-                content: '""',
-                position: 'absolute', left: 0, top: 0, bottom: 0,
-                width: 5, backgroundColor: accent,
-              },
-              '@keyframes bwPulse': {
-                '0%,100%': { opacity: 1 },
-                '50%': { opacity: 0.55 },
-              },
-              '@media (prefers-reduced-motion: reduce)': {
-                '& .bw-pulse': { animation: 'none !important' },
-              },
+              // Stretches to match the ClientSummaryCard sibling on
+              // wide viewports; contents are vertically centered so
+              // the card doesn't feel top-heavy with empty space.
+              display: 'flex', flexDirection: 'column',
             }}
           >
-            <CardContent sx={{ p: 2.5, pl: 3, '&:last-child': { pb: 2.5 } }}>
-              {/* ── Header — three balanced blocks ────────────────── */}
+            {/* Decorative gold gradient orb — kept subtle so it
+                doesn't fight the content on the right side. */}
+            <Box sx={{
+              position: 'absolute', top: -50, right: -30,
+              width: 180, height: 180, borderRadius: '50%',
+              background: `radial-gradient(circle, ${PALETTE.gold}33 0%, transparent 65%)`,
+              filter: 'blur(14px)', pointerEvents: 'none',
+            }} />
+            <CardContent sx={{
+              py: 1.8, px: 2.2, position: 'relative',
+              flex: 1,
+              display: 'flex', alignItems: 'center',
+              '&:last-child': { pb: 1.8 },
+            }}>
               <Box sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', md: '1.4fr 1.6fr 1fr' },
-                gap: { xs: 1.5, md: 2 },
-                alignItems: 'center',
-                mb: 2,
+                width: '100%',
+                display: 'flex', alignItems: { xs: 'flex-start', md: 'center' },
+                justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.2,
               }}>
-                {/* Block 1 — title */}
                 <Box>
                   <Typography sx={{
-                    fontSize: '0.66rem', fontWeight: 800, letterSpacing: '1.5px',
-                    color: COPPER_C, textTransform: 'uppercase', lineHeight: 1,
-                    mb: 0.7,
+                    fontSize: '0.66rem', fontWeight: 800, letterSpacing: '1.6px',
+                    color: PALETTE.gold, textTransform: 'uppercase', mb: 0.6,
                   }}>
-                    Balance Watch
+                    Performance Marketing · Command Center
                   </Typography>
-                  <Typography sx={{
-                    fontWeight: 800, fontSize: '1.05rem', color: BROWN_C, lineHeight: 1.2,
-                  }}>
-                    {lowBalanceClients.length} account{lowBalanceClients.length === 1 ? '' : 's'} under ₹2,000
+                  <Typography sx={{ fontWeight: 900, fontSize: '1.5rem', lineHeight: 1.1 }}>
+                    {greeting}, <Box component="span" sx={{ color: PALETTE.gold }}>{userName}</Box>
                   </Typography>
-                  <Typography sx={{
-                    fontSize: '0.7rem', color: `${BROWN_C}99`, fontWeight: 500, mt: 0.3,
-                  }}>
-                    Top-up before ads auto-pause at ₹1,000
+                  <Typography sx={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.75)', mt: 0.5 }}>
+                    {isToday ? "Here's what's happening today" : 'Reviewing performance for'}
+                    {' — '}{selectedDate ? fmtDate(parseISO(selectedDate), 'EEEE, dd MMM yyyy') : ''}
                   </Typography>
                 </Box>
-
-                {/* Block 2 — tier counters as balanced pill-stats */}
-                <Box sx={{
-                  display: 'grid',
-                  gridTemplateColumns: (criticalCount > 0 && watchCount > 0) ? '1fr 1fr' : '1fr',
-                  gap: 1,
-                }}>
-                  {criticalCount > 0 && (
-                    <Box sx={{
-                      display: 'flex', alignItems: 'center', gap: 1.2,
-                      px: 1.4, py: 0.9,
-                      borderRadius: 1.5,
-                      bgcolor: `${CRIT}10`,
-                      border: `1px solid ${CRIT}30`,
-                    }}>
-                      <Box sx={{
-                        width: 34, height: 34, borderRadius: '50%',
-                        bgcolor: CRIT, color: '#fff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 900, fontSize: '1rem',
-                        fontVariantNumeric: 'tabular-nums',
-                        flexShrink: 0,
-                      }}>
-                        {criticalCount}
-                      </Box>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{
-                          fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.6px',
-                          color: CRIT, textTransform: 'uppercase', lineHeight: 1,
-                        }}>
-                          Critical
-                        </Typography>
-                        <Typography sx={{
-                          fontSize: '0.7rem', color: `${BROWN_C}AA`, fontWeight: 500, mt: 0.3,
-                        }}>
-                          Below ₹1,000
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )}
-                  {watchCount > 0 && (
-                    <Box sx={{
-                      display: 'flex', alignItems: 'center', gap: 1.2,
-                      px: 1.4, py: 0.9,
-                      borderRadius: 1.5,
-                      bgcolor: `${WATCH}10`,
-                      border: `1px solid ${WATCH}30`,
-                    }}>
-                      <Box sx={{
-                        width: 34, height: 34, borderRadius: '50%',
-                        bgcolor: WATCH, color: '#fff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 900, fontSize: '1rem',
-                        fontVariantNumeric: 'tabular-nums',
-                        flexShrink: 0,
-                      }}>
-                        {watchCount}
-                      </Box>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{
-                          fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.6px',
-                          color: WATCH, textTransform: 'uppercase', lineHeight: 1,
-                        }}>
-                          Watch
-                        </Typography>
-                        <Typography sx={{
-                          fontSize: '0.7rem', color: `${BROWN_C}AA`, fontWeight: 500, mt: 0.3,
-                        }}>
-                          ₹1,000 – ₹1,999
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )}
-                </Box>
-
-                {/* Block 3 — combined exposure */}
-                <Box sx={{
-                  textAlign: { xs: 'left', md: 'right' },
-                  borderLeft: { md: `1px solid ${BROWN_C}18` },
-                  pl: { md: 2 },
-                }}>
-                  <Typography sx={{
-                    fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.8px',
-                    color: `${BROWN_C}99`, textTransform: 'uppercase',
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Box sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.6,
+                    bgcolor: 'rgba(255,255,255,0.1)',
+                    borderRadius: 1.4, px: 1.2, py: 0.4,
+                    border: '1px solid rgba(255,255,255,0.15)',
                   }}>
-                    Combined exposure
-                  </Typography>
-                  <Typography sx={{
-                    fontWeight: 900, fontSize: '1.4rem', color: BROWN_C,
-                    fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, mt: 0.4,
-                  }}>
-                    {fmtINR0(totalExposure)}
-                  </Typography>
-                </Box>
-              </Box>
-
-              {/* ── Fuel-gauge grid ─────────────────────────────────── */}
-              <Grid container spacing={1.5}>
-                {lowBalanceClients.map((c) => {
-                  const isCritical = c.balance < 1000;
-                  const tierColor = isCritical ? CRIT : WATCH;
-                  const tierLabel = isCritical ? 'Critical' : 'Watch';
-                  const fillPct = Math.max(2, Math.min(100, (c.balance / 2000) * 100));
-                  return (
-                    <Grid key={c.id} size={{ xs: 12, sm: 6, lg: 4 }}>
-                      <Box
-                        onClick={() => navigate(`/client-ads/${c.id}`)}
-                        tabIndex={0}
-                        role="button"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            navigate(`/client-ads/${c.id}`);
-                          }
-                        }}
-                        sx={{
-                          position: 'relative',
-                          bgcolor: '#fff',
-                          border: `1px solid ${tierColor}30`,
-                          borderRadius: 1.5,
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
-                          '&:hover': {
-                            transform: 'translateY(-2px)',
-                            boxShadow: `0 10px 22px ${tierColor}22`,
-                            borderColor: `${tierColor}80`,
+                    <DateIcon sx={{ fontSize: 16, color: PALETTE.gold }} />
+                    <DatePicker
+                      value={selectedDate ? parseISO(selectedDate) : null}
+                      onChange={(d) => {
+                        if (!d || !isValidDate(d)) return;
+                        const iso = fmtDate(d, 'yyyy-MM-dd');
+                        setSelectedDate(iso > today ? today : iso);
+                      }}
+                      maxDate={parseISO(today)}
+                      format="dd/MM/yyyy"
+                      slotProps={{
+                        textField: {
+                          size: 'small',
+                          variant: 'standard',
+                          InputProps: { disableUnderline: true },
+                          sx: {
+                            width: 130,
+                            // MUI's DatePicker sometimes renders the
+                            // populated value through .MuiInputBase-input
+                            // (or as a section span in the newer
+                            // Field renderer). Cover every selector
+                            // with !important so the value stays white
+                            // against the navy hero background.
+                            '& input, & .MuiInputBase-input, & .MuiPickersInputBase-input, & .MuiPickersInputBase-sectionsContainer, & .MuiPickersSectionList-root': {
+                              color: '#fff !important',
+                              WebkitTextFillColor: '#fff',
+                              caretColor: '#fff',
+                              fontWeight: 700,
+                              fontSize: '0.86rem',
+                              padding: '0 !important',
+                            },
+                            '& .MuiPickersSectionList-section': { color: '#fff !important' },
+                            '& .MuiIconButton-root': { color: PALETTE.gold },
                           },
-                          '&:focus-visible': {
-                            outline: `2px solid ${tierColor}`,
-                            outlineOffset: 2,
-                          },
-                        }}
-                      >
-                        {/* Left severity stripe */}
-                        <Box sx={{
-                          position: 'absolute', left: 0, top: 0, bottom: 0,
-                          width: 3, bgcolor: tierColor,
-                        }} />
-
-                        {/* Tile body — strict two-row grid inside a
-                            padded content area for clean vertical
-                            rhythm regardless of name length */}
-                        <Box sx={{ pl: 2.2, pr: 2, py: 1.6 }}>
-                          {/* Row 1 — identity + amount, baseline-aligned */}
-                          <Box sx={{
-                            display: 'grid',
-                            gridTemplateColumns: 'auto 1fr auto',
-                            gap: 1.2,
-                            alignItems: 'center',
-                            mb: 1.4,
-                          }}>
-                            <Box sx={{
-                              width: 34, height: 34, borderRadius: '50%',
-                              bgcolor: `${tierColor}18`,
-                              color: tierColor,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontWeight: 900, fontSize: '0.9rem',
-                              border: `1px solid ${tierColor}45`,
-                            }}>
-                              {c.name?.charAt(0) || '?'}
-                            </Box>
-                            <Box sx={{ minWidth: 0 }}>
-                              <Typography sx={{
-                                fontWeight: 800, fontSize: '0.85rem', color: BROWN_C,
-                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                lineHeight: 1.15,
-                              }}>
-                                {c.name}
-                              </Typography>
-                              <Box sx={{
-                                display: 'inline-flex', alignItems: 'center',
-                                mt: 0.4,
-                                px: 0.7, py: 0.15,
-                                borderRadius: 0.6,
-                                bgcolor: `${tierColor}18`,
-                                border: `1px solid ${tierColor}35`,
-                              }}>
-                                <Typography sx={{
-                                  fontSize: '0.6rem', fontWeight: 800, color: tierColor,
-                                  textTransform: 'uppercase', letterSpacing: '0.6px',
-                                  lineHeight: 1,
-                                }}>
-                                  {tierLabel}
-                                </Typography>
-                              </Box>
-                            </Box>
-                            <Typography
-                              className={isCritical ? 'bw-pulse' : ''}
-                              sx={{
-                                fontWeight: 900, fontSize: '1.25rem', color: tierColor,
-                                fontVariantNumeric: 'tabular-nums',
-                                lineHeight: 1,
-                                animation: isCritical ? 'bwPulse 2s ease-in-out infinite' : 'none',
-                              }}
-                            >
-                              {fmtINR0(c.balance)}
-                            </Typography>
-                          </Box>
-
-                          {/* Row 2 — depletion bar */}
-                          <Box sx={{
-                            position: 'relative',
-                            height: 6, borderRadius: 3,
-                            bgcolor: TRACK,
-                            overflow: 'visible',
-                          }}>
-                            <Box sx={{
-                              position: 'absolute', left: 0, top: 0, bottom: 0,
-                              width: `${fillPct}%`,
-                              background: `linear-gradient(90deg, ${tierColor}D0 0%, ${tierColor} 100%)`,
-                              borderRadius: 3,
-                              transition: 'width 0.6s ease',
-                            }} />
-                            {/* ₹1K threshold marker — 50% of the 0-2K
-                                range. A vertical tick, no floating
-                                label (endpoint labels below carry the
-                                context so nothing overlaps the bar). */}
-                            <Box sx={{
-                              position: 'absolute',
-                              left: '50%', top: -3, bottom: -3,
-                              width: 2, bgcolor: BROWN_C,
-                              transform: 'translateX(-1px)',
-                              borderRadius: 1,
-                              opacity: 0.55,
-                            }} />
-                          </Box>
-
-                          {/* Row 3 — endpoint scale, 3-column grid so
-                              labels don't collide with the bar or
-                              each other regardless of tile width */}
-                          <Box sx={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr 1fr',
-                            mt: 0.7,
-                            fontSize: '0.58rem',
-                            fontWeight: 700,
-                            letterSpacing: '0.4px',
-                            color: `${BROWN_C}88`,
-                            textTransform: 'uppercase',
-                          }}>
-                            <Typography sx={{ fontSize: 'inherit', fontWeight: 'inherit', textAlign: 'left' }}>
-                              ₹0
-                            </Typography>
-                            <Typography sx={{ fontSize: 'inherit', fontWeight: 'inherit', textAlign: 'center', color: `${BROWN_C}AA` }}>
-                              ₹1K pause
-                            </Typography>
-                            <Typography sx={{ fontSize: 'inherit', fontWeight: 'inherit', textAlign: 'right' }}>
-                              ₹2K
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Grid>
-                  );
-                })}
-              </Grid>
-            </CardContent>
-          </Card>
-        );
-      })()}
-
-      {/* ── Needs Attention (conditional) ──────────────────────────
-          Only shows when at least one client meets an alert rule
-          (e.g. Meta spending but no leads back). Saves "is anything
-          on fire" from being a manual scan through every client card. */}
-      {attentionItems.length > 0 && (
-        <MuiAlert
-          severity="warning"
-          icon={<WarningIcon />}
-          sx={{
-            mb: 2,
-            borderLeft: '4px solid #f59e0b',
-            '& .MuiAlert-message': { width: '100%' },
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8, flexWrap: 'wrap', gap: 1 }}>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
-              {attentionItems.length} client{attentionItems.length === 1 ? '' : 's'} need{attentionItems.length === 1 ? 's' : ''} attention
-            </Typography>
-            <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
-              Click any item to open that client's ads page
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {attentionItems.map((item, i) => {
-              const isError = item.severity === 'error';
-              const dotColor = isError ? '#ef4444' : '#f59e0b';
-              const hoverBg = isError ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.10)';
-              return (
-                <Box
-                  key={i}
-                  onClick={() => navigate(`/client-ads/${item.clientId}`)}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 1,
-                    py: 0.5, px: 1, borderRadius: 1, cursor: 'pointer',
-                    '&:hover': { bgcolor: hoverBg },
-                  }}
-                >
-                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: dotColor, flexShrink: 0 }} />
-                  <Typography sx={{ fontSize: '0.82rem', flex: 1, fontWeight: isError ? 600 : 400 }}>
-                    {item.message}
-                  </Typography>
-                  <ArrowForwardIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                </Box>
-              );
-            })}
-          </Box>
-        </MuiAlert>
-      )}
-
-
-      {/* ── Row 1: Headline KPIs (big cards) — Total Clients, Active
-          Clients, Total Leads. Per-platform totals and spend used to
-          live here as small cards but were dropped; the charts below
-          already show the Meta vs Google split per client, so a flat
-          "Meta Leads: N / Google Leads: N / Spend ₹" row was just
-          repeating the same info less usefully. */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <Tooltip arrow placement="top" title="Every client on your books, with their platform mix">
-          <Card variant="outlined" sx={{ borderLeft: `4px solid ${tealAccent}`, height: '100%', cursor: 'help' }}>
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-              <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: `${tealAccent}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <People sx={{ color: tealAccent, fontSize: 30 }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Total Clients
-                </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', color: tealAccent, lineHeight: 1.1 }}>
-                  {clients.length}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1.2, mt: 0.5, flexWrap: 'wrap' }}>
-                  <Tooltip arrow title="Clients with a linked Meta ad account"><Chip size="small" label={`Meta: ${clientMix.metaCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#C0855215', color: '#C08552', fontWeight: 600 }} /></Tooltip>
-                  <Tooltip arrow title="Clients with a linked Google ad account"><Chip size="small" label={`Google: ${clientMix.googleCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600 }} /></Tooltip>
-                  <Tooltip arrow title="Clients linked to both Meta and Google"><Chip size="small" label={`Both: ${clientMix.bothCount}`} sx={{ height: 22, fontSize: '0.7rem', bgcolor: `${tealAccent}15`, color: tealAccent, fontWeight: 600 }} /></Tooltip>
+                        },
+                      }}
+                    />
+                  </Box>
+                  <Chip
+                    label={loading ? 'Loading…' : 'Live'}
+                    size="small"
+                    icon={loading ? <CircularProgress size={12} sx={{ color: '#fff !important' }} /> : undefined}
+                    sx={{
+                      bgcolor: loading ? PALETTE.warning : PALETTE.healthy,
+                      color: '#fff', fontWeight: 800, fontSize: '0.7rem',
+                      height: 26, px: 0.6,
+                    }}
+                  />
+                  <Box
+                    onClick={handleRefresh}
+                    role="button"
+                    tabIndex={0}
+                    sx={{
+                      display: 'inline-flex', alignItems: 'center', gap: 0.6,
+                      cursor: 'pointer',
+                      bgcolor: PALETTE.gold, color: PALETTE.navy,
+                      borderRadius: 1.4, px: 1.4, height: 34,
+                      fontWeight: 800, fontSize: '0.82rem',
+                      boxShadow: `0 6px 16px ${PALETTE.gold}66`,
+                      transition: 'all 0.15s ease',
+                      '&:hover': { bgcolor: PALETTE.goldDeep, transform: 'translateY(-1px)' },
+                    }}
+                  >
+                    <RefreshIcon sx={{ fontSize: 16 }} /> Refresh
+                  </Box>
                 </Box>
               </Box>
             </CardContent>
           </Card>
-          </Tooltip>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <Tooltip arrow placement="top" title="Clients currently in an Active status">
-          <Card variant="outlined" sx={{ borderLeft: `4px solid #10b981`, height: '100%', cursor: 'help' }}>
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-              <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: '#10b98115', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <People sx={{ color: '#10b981', fontSize: 30 }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Active Clients
-                </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', color: '#10b981', lineHeight: 1.1 }}>
-                  {activeClients}
-                </Typography>
-                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.5 }}>
-                  {clients.length > 0 ? `${Math.round((activeClients / clients.length) * 100)}% of total` : 'No clients yet'}
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-          </Tooltip>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <Tooltip arrow placement="top" title="Clients paused or otherwise not Active (dropped clients are excluded entirely)">
-          <Card variant="outlined" sx={{ borderLeft: `4px solid #C08552`, height: '100%', cursor: 'help' }}>
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-              <Box sx={{ width: 56, height: 56, borderRadius: 2, bgcolor: '#C0855215', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <People sx={{ color: '#C08552', fontSize: 30 }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Inactive Clients
-                </Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', color: '#C08552', lineHeight: 1.1 }}>
-                  {inactiveClients}
-                </Typography>
-                <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mt: 0.5 }}>
-                  {clients.length > 0 ? `${Math.round((inactiveClients / clients.length) * 100)}% of total` : 'No inactive clients'}
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-          </Tooltip>
-        </Grid>
-      </Grid>
 
-      {/* ── Today's Spotlights ─────────────────────────────────────
-          Three analytical cards that surface the standout clients
-          right now: who's generating the most leads, who's getting
-          them cheapest, and who's burning spend without results.
-          Each card is clickable and routes straight to that client's
-          ads detail page so the user can act in one step. */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        {[
-          {
-            key: 'top',
-            label: 'Top Performer Today',
-            sub: 'Most leads received',
-            tip: 'Client with the highest lead count today',
-            icon: <TrophyIcon />,
-            color: '#10b981',
-            client: topPerformer,
-            metric: topPerformer ? `${topPerformer.leads}` : '—',
-            metricSub: topPerformer ? 'leads today' : 'No client active yet',
-          },
-          {
-            key: 'cpl',
-            label: 'Best Value Today',
-            sub: 'Lowest cost per lead',
-            tip: 'Client paying the least per lead today',
-            icon: <SavingsIcon />,
-            color: '#C08552',
-            client: bestCpl,
-            metric: bestCpl ? `₹${Math.round(bestCpl.cpl).toLocaleString('en-IN')}` : '—',
-            metricSub: bestCpl ? `for ${bestCpl.leads} lead${bestCpl.leads === 1 ? '' : 's'}` : 'No spend data yet',
-          },
-          {
-            key: 'review',
-            label: 'Needs Review',
-            sub: zeroLeadSpender ? 'Spending but no leads back' : 'Highest cost per lead',
-            tip: 'Client losing money or paying the most per lead',
-            icon: <ReportProblemIcon />,
-            color: '#ef4444',
-            client: needsReview,
-            metric: needsReview
-              ? (zeroLeadSpender
-                  ? `₹${Math.round(zeroLeadSpender.spend).toLocaleString('en-IN')}`
-                  : `₹${Math.round(needsReview.cpl).toLocaleString('en-IN')}`)
-              : '—',
-            metricSub: needsReview
-              ? (zeroLeadSpender ? 'spent, 0 leads' : 'per lead')
-              : 'Nothing to flag',
-          },
-        ].map((s) => (
-          <Grid key={s.key} size={{ xs: 12, md: 4 }}>
-            <Tooltip arrow placement="top" title={s.tip}>
-            <Card
-              variant="outlined"
-              onClick={() => s.client && navigate(`/client-ads/${s.client.id}`)}
+          {/* Compact Client Summary — right-side card in the top strip */}
+          <ClientSummaryCard
+            totalClients={kpi.totalClients}
+            metaConnected={kpi.metaConnected}
+            bothConnected={kpi.bothConnected}
+            onOpenList={(filter) => openClientList(filter)}
+          />
+          </Box>
+
+          {/* ── Section tabs — Overview vs Clients ───────────────
+              Client Overview used to sit at the bottom as a collapsed
+              card and most people missed it. Promoting it to a proper
+              tab makes the "full client list" discoverable at a
+              glance. */}
+          <Box sx={{
+            bgcolor: PALETTE.surface,
+            border: `1px solid ${PALETTE.border}`,
+            borderRadius: `${RADIUS.card}px`,
+            boxShadow: SHADOW.card,
+            px: 0.5,
+          }}>
+            <Tabs
+              value={dashboardTab}
+              onChange={(_, v) => setDashboardTab(v)}
               sx={{
-                height: '100%',
-                borderLeft: `4px solid ${s.color}`,
-                cursor: s.client ? 'pointer' : 'default',
-                transition: 'transform 0.15s, box-shadow 0.15s',
-                opacity: s.client ? 1 : 0.6,
-                '&:hover': s.client
-                  ? { transform: 'translateY(-2px)', boxShadow: '0 6px 16px rgba(0,0,0,0.08)' }
-                  : {},
+                minHeight: 44,
+                '& .MuiTab-root': {
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.86rem',
+                  minHeight: 44,
+                  color: PALETTE.inkMuted,
+                  gap: 0.6,
+                },
+                '& .Mui-selected': { color: PALETTE.navy },
+                '& .MuiTabs-indicator': {
+                  backgroundColor: PALETTE.gold, height: 3, borderRadius: 3,
+                },
               }}
             >
-              <CardContent sx={{ py: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.2 }}>
-                  <Box sx={{
-                    width: 40, height: 40, borderRadius: 2,
-                    bgcolor: `${s.color}15`, color: s.color,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    {React.cloneElement(s.icon, { sx: { fontSize: 22 } })}
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: 'text.primary', lineHeight: 1.1 }}>
-                      {s.label}
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
-                      {s.sub}
-                    </Typography>
-                  </Box>
-                  {s.client && (
-                    <ArrowForwardIcon sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
-                  )}
+              <Tab
+                iconPosition="start"
+                icon={<DashboardTabIcon sx={{ fontSize: 18 }} />}
+                label="Overview"
+              />
+              <Tab
+                iconPosition="start"
+                icon={<ClientsTabIcon sx={{ fontSize: 18 }} />}
+                label={`Clients · ${combinedClientRows.length}`}
+              />
+            </Tabs>
+          </Box>
+
+          {dashboardTab === 0 && (
+            <>
+              {/* ── Balance Watch (Meta ad-account balance tiers) ── */}
+              <BalanceWatch
+                clients={viewBalanceClients}
+                onClientClick={openClientAds}
+                onViewAll={() => openClientList('all')}
+              />
+
+              {/* ── Performance Insights ──────────────────────────── */}
+              <PerformanceInsights
+                clients={viewPlatformRows}
+                onClientClick={openClientAds}
+              />
+
+              {/* ── Active Campaigns (main) + Side widgets ─────────── */}
+              {/* minmax(0, …) on both columns — without it, a wide child
+                  (e.g. the campaigns table's intrinsic content-width)
+                  stretches its grid cell past 100%, dragging the whole
+                  page into a horizontal scroll. */}
+              <Box sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(0, 1fr)' },
+                gap: 1.4,
+                minWidth: 0,
+              }}>
+                <ActiveCampaigns
+                  campaigns={viewActiveCampaigns}
+                  platform={platform}
+                  onCampaignClick={openClientAds}
+                />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+                  <AlertsWidget alerts={viewAlerts} onAlertClick={openClientAds} />
+                  <RecentActivity items={activity} />
                 </Box>
-                {s.client ? (
-                  <>
-                    <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', mb: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.client.name}>
-                      {s.client.name}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.8 }}>
-                      <Typography sx={{ fontWeight: 800, fontSize: '1.6rem', color: s.color, lineHeight: 1 }}>
-                        {s.metric}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary' }}>
-                        {s.metricSub}
-                      </Typography>
-                    </Box>
-                  </>
-                ) : (
-                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.8 }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: '1.2rem', color: 'text.disabled' }}>
-                      {s.metric}
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.74rem', color: 'text.secondary' }}>
-                      {s.metricSub}
-                    </Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-            </Tooltip>
-          </Grid>
-        ))}
-      </Grid>
+              </Box>
+            </>
+          )}
 
-      {/* ── Row 2: Per-platform donuts — Meta + Google, one slice per
-          client. Layout: clean donut on the left with the total in the
-          centre, ranked client list on the right (color dot, name,
-          count, percentage). Old on-pie labels were unreadable with
-          15+ clients; this layout scales cleanly. */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {[
-          {
-            key: 'meta',
-            title: 'Meta Leads by Client',
-            sub: "Today's Meta leads split per client",
-            tip: 'Share of today\'s Meta leads contributed by each client',
-            data: metaPieData,
-            icon: <Facebook sx={{ fontSize: 16, color: '#C08552' }} />,
-            empty: 'No Meta leads today',
-          },
-          {
-            key: 'google',
-            title: 'Google Leads by Client',
-            sub: "Today's Google leads split per client",
-            tip: 'Share of today\'s Google leads contributed by each client',
-            data: googlePieData,
-            icon: <Google sx={{ fontSize: 16, color: '#3E2723' }} />,
-            // Google leads aren't pulled live the way Meta forms are —
-            // they come from either the Google Ads `totalConversions`
-            // field (needs conversion tracking) or the Daily Entry
-            // form (Google Call + Google Website). When both are
-            // empty the pie has nothing to draw, so be explicit about
-            // where the user would add data.
-            empty: 'No Google leads tracked today — add via Daily Entry or set up Google Ads conversion tracking',
-          },
-        ].map((p) => {
-          const total = p.data.reduce((s, x) => s + x.value, 0);
-          // `p.data` is already filtered to clients with value > 0, so
-          // its length is exactly the count of clients contributing
-          // leads today — what the centre label and subtitle show.
-          const clientCount = p.data.length;
-          return (
-            <Grid key={p.key} size={{ xs: 12, lg: 6 }}>
-              <Card sx={{ height: '100%' }}>
-                <CardContent>
-                  <Tooltip arrow placement="top" title={p.tip}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3, cursor: 'help', width: 'fit-content' }}>
-                      {p.icon}
-                      <Typography sx={{ fontWeight: 700, fontSize: '0.92rem' }}>{p.title}</Typography>
-                    </Box>
-                  </Tooltip>
-                  <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', mb: 1.5 }}>
-                    {p.sub} · <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{clientCount} client{clientCount === 1 ? '' : 's'} with leads</Box>
-                  </Typography>
-                  {p.data.length > 0 ? (
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-                      {/* Donut — fixed-width column so the right-side
-                          list always has room to breathe. */}
-                      <Box sx={{ position: 'relative', width: 220, height: 220, flexShrink: 0, mx: { xs: 'auto', sm: 0 } }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={p.data}
-                              dataKey="value"
-                              nameKey="name"
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={62}
-                              outerRadius={100}
-                              paddingAngle={2}
-                              stroke="none"
-                            >
-                              {p.data.map((_, i) => (
-                                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <RechartsTooltip
-                              formatter={(v, n) => [`${v} lead${v === 1 ? '' : 's'}`, n]}
-                              contentStyle={{ borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 6px 18px rgba(0,0,0,0.12)', fontSize: '0.82rem' }}
-                              // wrapperStyle lifts the tooltip above the absolutely-
-                              // positioned center label below; without it the donut
-                              // total ("58 LEADS") sits on top of the tooltip.
-                              wrapperStyle={{ zIndex: 20 }}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        {/* Centre label — total leads, big and bold.
-                            z-index: 1 sits above the SVG fill but below
-                            the tooltip (wrapperStyle z-index 20). */}
-                        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 1 }}>
-                          <Typography sx={{ fontWeight: 800, fontSize: '1.9rem', lineHeight: 1, color: 'text.primary' }}>
-                            {clientCount}
-                          </Typography>
-                          <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5, mt: 0.3 }}>
-                            {clientCount === 1 ? 'client' : 'clients'}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      {/* Ranked client list — color dot, name (truncated),
-                          count, % of total. Scrolls vertically when there
-                          are more than ~8 clients so the card height stays
-                          fixed. */}
-                      <Box sx={{ flex: 1, minWidth: 0, maxHeight: 220, overflowY: 'auto', pr: 0.5 }}>
-                        {p.data.map((row, i) => {
-                          const pct = total > 0 ? (row.value / total) * 100 : 0;
-                          const color = PIE_COLORS[i % PIE_COLORS.length];
-                          return (
-                            <Box
-                              key={row.name}
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1.2,
-                                py: 0.6,
-                                borderBottom: i === p.data.length - 1 ? 'none' : '1px solid',
-                                borderColor: 'divider',
-                              }}
-                            >
-                              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
-                              <Typography
-                                sx={{
-                                  flex: 1, minWidth: 0,
-                                  fontSize: '0.78rem',
-                                  fontWeight: 500,
-                                  color: 'text.primary',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                                title={row.name}
-                              >
-                                {row.name}
-                              </Typography>
-                              <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: 'text.primary', minWidth: 28, textAlign: 'right' }}>
-                                {row.value}
-                              </Typography>
-                              <Typography sx={{ fontWeight: 600, fontSize: '0.7rem', color: 'text.secondary', minWidth: 42, textAlign: 'right' }}>
-                                {pct.toFixed(1)}%
-                              </Typography>
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    </Box>
-                  ) : (
-                    <Box sx={{ py: 6, textAlign: 'center' }}>
-                      <Typography sx={{ color: 'text.secondary' }}>{p.empty}</Typography>
-                    </Box>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-          );
-        })}
-      </Grid>
-
-      {/* ── Row 3: Client Performance Cards ── */}
-      {/* Search moved to the top of the page as a full-width Quick
-          Find bar — this heading now just labels the section. Row
-          count reflects the active filter so users can see whether
-          they're looking at the whole list or a filtered slice. */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Client-wise Performance
-          <Typography component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary', ml: 1 }}>
-            {clientSearch
-              ? `${clients.filter(c => c.name?.toLowerCase().includes(clientSearch.toLowerCase())).length} of ${clients.length} clients · filtered by "${clientSearch}"`
-              : `${clients.length} clients`}
-          </Typography>
-        </Typography>
-      </Box>
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {[...clients].filter(c => !clientSearch || c.name?.toLowerCase().includes(clientSearch.toLowerCase())).sort((a, b) => {
-          const aLeads = dateByClient[a._id] ? ((dateByClient[a._id].metaForm || 0) + (dateByClient[a._id].metaWhatsapp || 0) + (dateByClient[a._id].googleCall || 0) + (dateByClient[a._id].googleWebsite || 0)) : 0;
-          const bLeads = dateByClient[b._id] ? ((dateByClient[b._id].metaForm || 0) + (dateByClient[b._id].metaWhatsapp || 0) + (dateByClient[b._id].googleCall || 0) + (dateByClient[b._id].googleWebsite || 0)) : 0;
-          return bLeads - aLeads;
-        }).map((client, i) => (
-          <Grid key={client._id} size={{ xs: 12, md: 6, lg: 4 }}>
-            <ClientCard
-              client={client}
-              data={dateByClient[client._id] || emptyData}
-              color={CLIENT_COLORS[i % CLIENT_COLORS.length]}
-              dateStr={dateStr}
-              onClick={() => navigate(`/client-ads/${client._id}`)}
-              adsData={adsDataMap[client._id]}
-              metaApi={metaDataMap[client._id]}
-              metaBalanceValue={balanceByClientId[client._id]}
-              adsLoading={adsLoading}
-              metaLoading={metaLoading}
+          {dashboardTab === 1 && (
+            /* Client Overview is deliberately cross-platform — every
+               client shows up once with Meta + Google metrics merged,
+               independent of the Meta/Google filter that scopes the
+               Overview tab's widgets. Managers use this list to see
+               the entire book at once. */
+            <ClientOverviewCards
+              clients={combinedClientRows}
+              onOpenClient={openClientAds}
             />
-          </Grid>
-        ))}
-        {clients.length === 0 && (
-          <Grid size={12}>
-            <Card><CardContent sx={{ textAlign: 'center', py: 4 }}><Typography color="text.secondary">No clients found</Typography></CardContent></Card>
-          </Grid>
-        )}
-      </Grid>
+          )}
 
-      {/* ── Row 4: Top Performing Clients Table ── */}
-      {topClients.length > 0 && (
-        <Card>
-          <CardContent>
-            <Tooltip arrow placement="top-start" title="Top clients today, ranked by total leads">
-              <Typography sx={{ fontWeight: 600, fontSize: '0.92rem', mb: 1.5, cursor: 'help', display: 'inline-block' }}>
-                Top Performing Clients
-                <Typography component="span" sx={{ fontSize: '0.72rem', color: 'text.secondary', ml: 1 }}>Ranked by today's leads</Typography>
-              </Typography>
-            </Tooltip>
-            <TableContainer sx={{ overflowX: "auto" }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <Tooltip arrow title="Rank by total leads"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>#</TableCell></Tooltip>
-                    <Tooltip arrow title="Client name"><TableCell sx={{ fontWeight: 600, cursor: 'help' }}>Client</TableCell></Tooltip>
-                    <Tooltip arrow title="Meta leads today (Form + WhatsApp)"><TableCell sx={{ fontWeight: 600, color: '#C08552', cursor: 'help' }} align="right">Meta</TableCell></Tooltip>
-                    <Tooltip arrow title="Google leads today (Call + Website)"><TableCell sx={{ fontWeight: 600, color: '#3E2723', cursor: 'help' }} align="right">Google</TableCell></Tooltip>
-                    <Tooltip arrow title="All leads from this client today"><TableCell sx={{ fontWeight: 600, cursor: 'help' }} align="right">Total</TableCell></Tooltip>
-                    <Tooltip arrow title="Total ad spend today (₹)"><TableCell sx={{ fontWeight: 600, cursor: 'help' }} align="right">Spend</TableCell></Tooltip>
-                    <Tooltip arrow title="Cost per lead = spend ÷ leads"><TableCell sx={{ fontWeight: 600, cursor: 'help' }} align="right">CPL</TableCell></Tooltip>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {topClients.map((c, i) => (
-                    <TableRow key={i} hover>
-                      <TableCell>
-                        <Chip label={i + 1} size="small" sx={{
-                          height: 22, minWidth: 28, fontWeight: 700,
-                          bgcolor: i === 0 ? '#ffd70025' : i === 1 ? '#c0c0c025' : i === 2 ? '#cd7f3225' : 'transparent',
-                          color: i === 0 ? '#b8860b' : i === 1 ? '#808080' : i === 2 ? '#8b4513' : 'text.secondary',
-                          border: i > 2 ? '1px solid' : 'none', borderColor: 'divider',
-                        }} />
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Avatar sx={{ width: 26, height: 26, fontSize: '0.68rem', fontWeight: 700, bgcolor: CLIENT_COLORS[i % CLIENT_COLORS.length] }}>
-                            {c.name?.charAt(0)}
-                          </Avatar>
-                          <Typography sx={{ fontWeight: 500 }}>{c.name}</Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: '#C08552', fontWeight: 600 }}>{c.meta}</TableCell>
-                      <TableCell align="right" sx={{ color: '#3E2723', fontWeight: 600 }}>{c.google}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 700, color: tealAccent }}>{c.total}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600 }}>₹{c.spend.toLocaleString()}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600, color: c.cpl > 500 ? '#ef4444' : '#10b981' }}>₹{c.cpl}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
-      )}
-    </Box>
+        </Box>
+
+        {/* ── Modal ────────────────────────────────────────── */}
+        <ClientListModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          rows={modalRows}
+          defaultFilter={modalFilter}
+        />
+
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={3200}
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            severity={snackbar.severity}
+            onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+            variant="filled"
+            sx={{ fontWeight: 600 }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </Box>
     </LocalizationProvider>
   );
 };

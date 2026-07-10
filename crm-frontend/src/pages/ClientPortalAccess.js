@@ -23,8 +23,8 @@ import {
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
+const COPPER = '#1F3966';
+const BROWN = '#0F172A';
 const GREEN = '#10b981';
 const AMBER = '#f59e0b';
 const SLATE = '#64748b';
@@ -34,7 +34,7 @@ const GOOGLE = '#34a853';
 // Used by the row avatar — picks a stable swatch from the client name
 // so the same client always gets the same chip-coloured initial.
 const AVATAR_SWATCHES = [
-  '#C08552', '#3E2723', '#0ea5e9', '#7c3aed', '#10b981',
+  '#1F3966', '#0F172A', '#0ea5e9', '#7c3aed', '#10b981',
   '#f59e0b', '#ef4444', '#0891b2', '#db2777', '#475569',
 ];
 const swatchFor = (str = '') => {

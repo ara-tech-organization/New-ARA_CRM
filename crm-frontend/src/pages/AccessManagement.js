@@ -102,7 +102,7 @@ const DEFAULT_ROLE_SUGGESTIONS = ['admin', 'PMM', 'SMM'];
 // so no custom role ever paints itself like a built-in or a state.
 const CUSTOM_ROLE_SWATCHES = [
   '#a855f7',  // violet
-  '#0d9488',  // teal
+  '#C68C0A',  // teal
   '#f97316',  // orange
   '#ec4899',  // pink
   '#f59e0b',  // amber
@@ -151,8 +151,8 @@ const labelForRole = (role) => roleLabelMap[role] || role || '—';
 // which accent the user has set in the legacy ThemeContext. The light
 // copper preset was painting the Add User button white-on-cream and
 // hiding the label completely.
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
+const COPPER = '#1F3966';
+const BROWN = '#0F172A';
 
 const AccessManagement = () => {
   const primaryColor = COPPER;

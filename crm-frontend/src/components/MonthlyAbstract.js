@@ -19,10 +19,10 @@ import EditIcon from '@mui/icons-material/Edit';
 
 // Software palette — same constants the EOD report and Client Portal
 // Access page use, so the three reports read as one product.
-const BROWN = '#3E2723';
-const COPPER = '#C08552';
-const CREAM = '#FFF4ED';
-const BORDER = '#E8D5C4';
+const BROWN = '#0F172A';
+const COPPER = '#1F3966';
+const CREAM = '#F1F5F9';
+const BORDER = '#E2E8F0';
 const SOFT_HL = '#FCE7C8';      // amber-cream highlight for emphasis columns
 // Editable-cell paint — same warm yellow-cream the EOD report uses,
 // plus a slightly warmer hover state. Pairs with a tiny ✏️ corner

@@ -129,8 +129,8 @@ const emptyForm = {
 
 const ContentManagement = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.secondary || '#C08552';
-  const secondaryColor = accentColor?.primary || '#3E2723';
+  const primaryColor = accentColor?.secondary || '#1F3966';
+  const secondaryColor = accentColor?.primary || '#0F172A';
 
   const [entries, setEntries] = useState([]);
   const [clients, setClients] = useState([]);

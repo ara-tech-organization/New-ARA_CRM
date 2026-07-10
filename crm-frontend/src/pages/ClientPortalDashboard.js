@@ -34,9 +34,9 @@ import TelecallingReport from '../components/TelecallingReport';
 import MonthlyAbstract from '../components/MonthlyAbstract';
 import PortalDashboardToday from '../components/PortalDashboardToday';
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
-const CREAM = '#FFF8F0';
+const COPPER = '#1F3966';
+const BROWN = '#0F172A';
+const CREAM = '#F8FAFC';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
 const MAROON = '#8B1F2F';
@@ -1263,15 +1263,15 @@ const MetaAdsKpiGrid = ({ metaData }) => {
   // black accents on the left border + icon background.
   const tiles = [
     { label: 'TOTAL LEADS', value: fmt(totalLeads), sub: `${fmtINR(cplOverall)}/lead`, color: '#1877F2', symbol: '👥' },
-    { label: 'FORM LEADS', value: fmt(formLeads), sub: `${fmtINR(cplForm)}/lead`, color: '#C08552', symbol: '👤' },
+    { label: 'FORM LEADS', value: fmt(formLeads), sub: `${fmtINR(cplForm)}/lead`, color: '#1F3966', symbol: '👤' },
     { label: 'WHATSAPP LEADS', value: fmt(whatsappLeads), sub: '₹0/lead', color: '#111827', symbol: '💬' },
     { label: 'CPL (OVERALL)', value: fmtINR(cplOverall), sub: 'spend ÷ total leads', color: '#1877F2', symbol: '₹' },
-    { label: 'REACH', value: fmt(reach), sub: 'unique users', color: '#C08552', symbol: '👤' },
+    { label: 'REACH', value: fmt(reach), sub: 'unique users', color: '#1F3966', symbol: '👤' },
     { label: 'IMPRESSIONS', value: fmt(impressions), sub: 'ad views', color: '#7C3AED', symbol: '👁' },
-    { label: 'CLICKS', value: fmt(clicks), sub: 'on ads', color: '#C08552', symbol: '📈' },
+    { label: 'CLICKS', value: fmt(clicks), sub: 'on ads', color: '#1F3966', symbol: '📈' },
     { label: 'CTR', value: fmtPct(ctrPct), sub: 'click-through rate', color: '#111827', symbol: '📉' },
     { label: 'CPC', value: fmtINR(cpc), sub: 'cost per click', color: '#1877F2', symbol: '₹' },
-    { label: 'CPM', value: fmtINR(cpm), sub: 'cost per 1k impressions', color: '#C08552', symbol: '₹' },
+    { label: 'CPM', value: fmtINR(cpm), sub: 'cost per 1k impressions', color: '#1F3966', symbol: '₹' },
   ];
 
   return (

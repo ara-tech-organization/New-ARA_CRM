@@ -23,9 +23,9 @@ import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
 // Navigated to either from the Home launcher (no state) or from the
 // EOD report's click-through (location.state.filterPreset set).
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
-const CREAM = '#FFF8F0';
+const COPPER = '#1F3966';
+const BROWN = '#0F172A';
+const CREAM = '#F8FAFC';
 const META_BLUE = '#1877f2';
 
 const API_URL = process.env.REACT_APP_API_URL

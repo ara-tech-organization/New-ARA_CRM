@@ -80,8 +80,8 @@ const safeOpenUrl = (raw) => {
 
 const ClientVault = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.secondary || '#C08552';
-  const secondaryColor = accentColor?.primary || '#3E2723';
+  const primaryColor = accentColor?.secondary || '#1F3966';
+  const secondaryColor = accentColor?.primary || '#0F172A';
 
   // Main API state - only source of clients
   const [clients, setClients] = useState([]);
@@ -169,12 +169,12 @@ const ClientVault = () => {
   // Get platform icon and color
   const getPlatformConfig = (type) => {
     const configs = {
-      'Facebook': { icon: <FacebookIcon />, color: '#C08552' },
+      'Facebook': { icon: <FacebookIcon />, color: '#1F3966' },
       'Instagram': { icon: <InstagramIcon />, color: '#E4405F' },
-      'Google Ads': { icon: <GoogleIcon />, color: '#C08552' },
-      'Email': { icon: <EmailIcon />, color: '#C08552' },
+      'Google Ads': { icon: <GoogleIcon />, color: '#1F3966' },
+      'Email': { icon: <EmailIcon />, color: '#1F3966' },
       'Website': { icon: <WebsiteIcon />, color: '#10b981' },
-      'Other': { icon: <VpnKeyIcon />, color: '#3E2723' },
+      'Other': { icon: <VpnKeyIcon />, color: '#0F172A' },
     };
     return configs[type] || configs['Other'];
   };
@@ -183,9 +183,9 @@ const ClientVault = () => {
   const getPasswordStrength = (password) => {
     if (!password) return { strength: 'none', color: '#94a3b8', label: 'No Password' };
     if (password.length < 8) return { strength: 'weak', color: '#ef4444', label: 'Weak' };
-    if (password.length < 12) return { strength: 'medium', color: '#C08552', label: 'Medium' };
+    if (password.length < 12) return { strength: 'medium', color: '#1F3966', label: 'Medium' };
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-      return { strength: 'medium', color: '#C08552', label: 'Medium' };
+      return { strength: 'medium', color: '#1F3966', label: 'Medium' };
     }
     return { strength: 'strong', color: '#10b981', label: 'Strong' };
   };
@@ -382,8 +382,8 @@ const ClientVault = () => {
       {/* Stats Cards */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {[
-          { label: 'Total Credentials', value: stats.totalCredentials, color: '#C08552', icon: <LockIcon /> },
-          { label: 'Clients Secured', value: stats.totalClients, color: '#C08552', icon: <SecurityIcon /> },
+          { label: 'Total Credentials', value: stats.totalCredentials, color: '#1F3966', icon: <LockIcon /> },
+          { label: 'Clients Secured', value: stats.totalClients, color: '#1F3966', icon: <SecurityIcon /> },
           { label: 'Weak Passwords', value: stats.weakPasswords, color: '#ef4444', icon: <WarningIcon /> },
           { label: 'Recently Updated', value: stats.recentlyUpdated, color: '#10b981', icon: <EditIcon /> },
         ].map((s, i) => (

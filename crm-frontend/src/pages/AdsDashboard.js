@@ -29,8 +29,8 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { enGB } from 'date-fns/locale';
 import { format as fmtDateFn, parseISO, isValid as isValidDate } from 'date-fns';
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
+const COPPER = '#1F3966';
+const BROWN = '#0F172A';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
 

@@ -38,8 +38,8 @@ import api from '../api/axios';
 
 const Leads = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.secondary || '#C08552';
-  const secondaryColor = accentColor?.primary || '#3E2723';
+  const primaryColor = accentColor?.secondary || '#1F3966';
+  const secondaryColor = accentColor?.primary || '#0F172A';
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -639,7 +639,7 @@ const Leads = () => {
                             align="center"
                             sx={{
                               fontWeight: value > 0 ? 600 : 400,
-                              color: value > 0 ? '#1e293b' : '#94a3b8',
+                              color: value > 0 ? '#0F172A' : '#94a3b8',
                               fontSize: '0.85rem',
                               borderRight: '1px solid #f1f5f9',
                               bgcolor: value > 10 ? 'rgba(16, 185, 129, 0.1)' : value > 5 ? `${primaryColor}14` : 'inherit',

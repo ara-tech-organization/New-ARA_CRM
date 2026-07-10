@@ -315,10 +315,10 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads, t
   // Software palette — brown banners, copper sub-banners, cream rows.
   // Red highlight stays red on purpose: it marks the worst metric
   // (Achieved / Projection %) and the warning colour reads instantly.
-  const BROWN = '#3E2723';
-  const COPPER = '#C08552';
-  const CREAM = '#FFF4ED';
-  const BORDER = '#E8D5C4';
+  const BROWN = '#0F172A';
+  const COPPER = '#1F3966';
+  const CREAM = '#F1F5F9';
+  const BORDER = '#E2E8F0';
   const RED_HL = '#D9534F';
   const RED_HL_BG = '#FBE4E2';
   // Editable-cell paint — a warm yellow-cream that's visibly different
@@ -343,7 +343,7 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads, t
           sx={{
             display: 'inline-flex', alignItems: 'center', gap: 0.5,
             cursor: 'pointer', px: 0.5, borderRadius: 0.5,
-            '&:hover': { backgroundColor: 'rgba(192,133,82,0.12)' },
+            '&:hover': { backgroundColor: 'rgba(37,99,235,0.12)' },
           }}
         >
           <Typography sx={{ fontWeight: 700, fontSize: '0.86rem' }}>{value ?? 0}</Typography>

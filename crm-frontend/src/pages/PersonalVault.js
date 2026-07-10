@@ -65,13 +65,13 @@ const categories = ['Email', 'Social Media', 'Banking', 'Cloud Service', 'Websit
 
 const getCategoryConfig = (category) => {
   const configs = {
-    'Email': { icon: <EmailIcon />, color: '#C08552' },
-    'Social Media': { icon: <ShareIcon />, color: '#C08552' },
+    'Email': { icon: <EmailIcon />, color: '#1F3966' },
+    'Social Media': { icon: <ShareIcon />, color: '#1F3966' },
     'Banking': { icon: <AccountBalanceIcon />, color: '#10b981' },
-    'Cloud Service': { icon: <CloudIcon />, color: '#C08552' },
-    'Website': { icon: <WebsiteIcon />, color: '#C08552' },
-    'App': { icon: <AppsIcon />, color: '#3E2723' },
-    'Other': { icon: <VpnKeyIcon />, color: '#3E2723' },
+    'Cloud Service': { icon: <CloudIcon />, color: '#1F3966' },
+    'Website': { icon: <WebsiteIcon />, color: '#1F3966' },
+    'App': { icon: <AppsIcon />, color: '#0F172A' },
+    'Other': { icon: <VpnKeyIcon />, color: '#0F172A' },
   };
   return configs[category] || configs['Other'];
 };
@@ -79,9 +79,9 @@ const getCategoryConfig = (category) => {
 const getPasswordStrength = (password) => {
   if (!password) return { strength: 'none', color: '#94a3b8', label: 'No Password' };
   if (password.length < 8) return { strength: 'weak', color: '#ef4444', label: 'Weak' };
-  if (password.length < 12) return { strength: 'medium', color: '#C08552', label: 'Medium' };
+  if (password.length < 12) return { strength: 'medium', color: '#1F3966', label: 'Medium' };
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-    return { strength: 'medium', color: '#C08552', label: 'Medium' };
+    return { strength: 'medium', color: '#1F3966', label: 'Medium' };
   }
   return { strength: 'strong', color: '#10b981', label: 'Strong' };
 };
@@ -109,8 +109,8 @@ const safeOpenUrl = (raw) => {
 
 const PersonalVault = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.secondary || '#C08552';
-  const secondaryColor = accentColor?.primary || '#3E2723';
+  const primaryColor = accentColor?.secondary || '#1F3966';
+  const secondaryColor = accentColor?.primary || '#0F172A';
   const { user } = useSelector((state) => state.auth);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -378,9 +378,9 @@ const PersonalVault = () => {
       {/* Stats Cards */}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {[
-          { label: 'Total Entries', value: stats.totalEntries, color: '#C08552', icon: <LockIcon /> },
-          { label: 'Categories', value: stats.categories, color: '#C08552', icon: <FolderIcon /> },
-          ...(isAdmin ? [{ label: 'Shared Entries', value: stats.sharedEntries, color: '#C08552', icon: <PeopleIcon /> }] : []),
+          { label: 'Total Entries', value: stats.totalEntries, color: '#1F3966', icon: <LockIcon /> },
+          { label: 'Categories', value: stats.categories, color: '#1F3966', icon: <FolderIcon /> },
+          ...(isAdmin ? [{ label: 'Shared Entries', value: stats.sharedEntries, color: '#1F3966', icon: <PeopleIcon /> }] : []),
           { label: 'Weak Passwords', value: stats.weakPasswords, color: '#ef4444', icon: <WarningIcon /> },
         ].map((s, i) => (
           <Grid key={i} size={{ xs: 12, sm: 6, md: 3 }}>
@@ -560,8 +560,8 @@ const PersonalVault = () => {
                                               sx={{
                                                 height: 20,
                                                 fontSize: '0.7rem',
-                                                bgcolor: '#C0855220',
-                                                color: '#C08552',
+                                                bgcolor: '#1F396620',
+                                                color: '#1F3966',
                                                 fontWeight: 600,
                                               }}
                                             />
@@ -572,7 +572,7 @@ const PersonalVault = () => {
                                     {isAdmin && (
                                       <Box sx={{ display: 'flex', gap: 0.5 }}>
                                         <Tooltip title="Share">
-                                          <IconButton size="small" onClick={() => handleOpenShareDialog(entry)} sx={{ color: '#C08552' }}>
+                                          <IconButton size="small" onClick={() => handleOpenShareDialog(entry)} sx={{ color: '#1F3966' }}>
                                             <PersonAddIcon fontSize="small" />
                                           </IconButton>
                                         </Tooltip>

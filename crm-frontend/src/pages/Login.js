@@ -20,8 +20,6 @@ import {
   VisibilityOff,
   Lock,
   Email,
-  LightMode,
-  DarkMode,
   TrendingUp,
   People,
   Assessment,
@@ -31,34 +29,34 @@ import { ThemeContext } from '../contexts/ThemeContext';
 import leadMatrixLogo from '../assets/Lead-Matrix-Logo.png';
 
 const validationSchema = Yup.object({
-  email: Yup.string()
-    .email('Invalid email address')
-    .required('Email is required'),
-  password: Yup.string()
-    .min(6, 'Password must be at least 6 characters')
-    .required('Password is required'),
+  email: Yup.string().email('Invalid email address').required('Email is required'),
+  password: Yup.string().min(6, 'Password must be at least 6 characters').required('Password is required'),
 });
 
-const COPPER = '#C08552';
-const BROWN = '#3E2723';
-const CREAM = '#FFF8F0';
+// New palette. Kept as file-local constants so this page doesn't
+// have to reach into the MUI theme for the poster / gradient panel.
+const PRIMARY = '#1F3966';       // Signature Navy
+const PRIMARY_DEEP = '#15294D';  // Deeper navy for hover / bolder accents
+const ACCENT = '#F4B929';        // Signature Gold
+const INK = '#0F172A';           // Slate ink
+const INK_MUTED = '#475569';
+const GROUND = '#F8FAFC';
+const CARD_BORDER = '#E2E8F0';
 
 const Login = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { mode, toggleTheme } = useContext(ThemeContext);
+  // ThemeContext is now light-only; we still pull it so the toggle
+  // path stays available if we bring dark mode back later.
+  useContext(ThemeContext);
   const { loading: isLoading, error: authError, isAuthenticated } = useSelector((state) => state.auth);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
-  // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/dashboard');
-    }
+    if (isAuthenticated) navigate('/dashboard');
   }, [isAuthenticated, navigate]);
 
-  // Show auth errors
   useEffect(() => {
     if (authError) {
       setError(authError);
@@ -67,30 +65,19 @@ const Login = () => {
   }, [authError, dispatch]);
 
   const formik = useFormik({
-    initialValues: {
-      email: '',
-      password: '',
-    },
-    validationSchema: validationSchema,
+    initialValues: { email: '', password: '' },
+    validationSchema,
     onSubmit: async (values) => {
       setError('');
       const result = await dispatch(loginUser({ email: values.email, password: values.password }));
-      if (!result.error) {
-        navigate('/dashboard');
-      }
+      if (!result.error) navigate('/dashboard');
     },
   });
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        position: 'relative',
-        bgcolor: mode === 'light' ? CREAM : 'grey.900',
-      }}
-    >
-      {/* Left Side - Illustration & Branding */}
+    <Box sx={{ minHeight: '100vh', display: 'flex', position: 'relative', bgcolor: GROUND }}>
+      {/* Left poster — navy → slate gradient with gold accent glow.
+          Hidden on small screens so mobile users get the plain form. */}
       <Box
         sx={{
           flex: 1,
@@ -98,125 +85,101 @@ const Login = () => {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          background: BROWN,
-          color: 'white',
+          background: `linear-gradient(135deg, ${PRIMARY_DEEP} 0%, ${INK} 100%)`,
+          color: '#fff',
           p: 6,
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* Decorative circles */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '-10%',
-            right: '-5%',
-            width: '300px',
-            height: '300px',
-            borderRadius: '50%',
-            background: alpha('#fff', 0.1),
-            filter: 'blur(80px)',
-          }}
-        />
-        <Box
-          sx={{
-            position: 'absolute',
-            bottom: '-10%',
-            left: '-5%',
-            width: '250px',
-            height: '250px',
-            borderRadius: '50%',
-            background: alpha('#fff', 0.1),
-            filter: 'blur(80px)',
-          }}
-        />
+        {/* Ambient glows — soft gold + soft navy blur discs */}
+        <Box sx={{ position: 'absolute', top: '-15%', right: '-10%', width: 380, height: 380, borderRadius: '50%', background: alpha(ACCENT, 0.28), filter: 'blur(100px)' }} />
+        <Box sx={{ position: 'absolute', bottom: '-15%', left: '-10%', width: 320, height: 320, borderRadius: '50%', background: alpha(PRIMARY, 0.45), filter: 'blur(90px)' }} />
 
-        <Box sx={{ position: 'relative', zIndex: 1, maxWidth: '500px', textAlign: 'center' }}>
-          {/* Lead Matrix logo */}
+        <Box sx={{ position: 'relative', zIndex: 1, maxWidth: 500, textAlign: 'center' }}>
           <Box
             component="img"
             src={leadMatrixLogo}
             alt="Lead Matrix"
             sx={{
               width: '100%',
-              maxWidth: 360,
+              maxWidth: 340,
               height: 'auto',
-              mb: 3,
+              mb: 4,
               mx: 'auto',
               display: 'block',
-              filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
+              filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.35))',
             }}
           />
 
-          {/* Tagline */}
-          {/* <Typography variant="h6" sx={{ mb: 4, opacity: 0.95, fontWeight: 400 }}>
-            Where every lead becomes a story.
-          </Typography> */}
+          <Typography sx={{ fontSize: '0.95rem', color: alpha('#fff', 0.85), fontWeight: 500, mb: 4, letterSpacing: '0.02em' }}>
+            The workspace for cosmetic &amp; dermatology ad operations.
+          </Typography>
 
-          {/* Features */}
-          <Stack spacing={2} alignItems="flex-start" sx={{ maxWidth: '400px', mx: 'auto' }}>
+          <Stack spacing={1.6} alignItems="flex-start" sx={{ maxWidth: 400, mx: 'auto' }}>
             {[
-              { icon: <People />, text: 'Manage contacts & leads effectively' },
-              { icon: <TrendingUp />, text: 'Track sales & revenue growth' },
-              { icon: <Assessment />, text: 'Powerful analytics & insights' },
-              { icon: <CheckCircle />, text: 'Automate workflows & tasks' },
+              { icon: <People />,     text: 'Manage contacts &amp; leads effectively' },
+              { icon: <TrendingUp />, text: 'Track sales &amp; revenue growth' },
+              { icon: <Assessment />, text: 'Powerful analytics &amp; insights' },
+              { icon: <CheckCircle/>, text: 'Automate workflows &amp; tasks' },
             ].map((feature, idx) => (
               <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box
                   sx={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 2,
-                    bgcolor: alpha('#fff', 0.2),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    width: 38, height: 38, borderRadius: '10px',
+                    bgcolor: alpha('#fff', 0.14),
+                    border: `1px solid ${alpha('#fff', 0.18)}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff',
                   }}
                 >
-                  {React.cloneElement(feature.icon, { sx: { fontSize: 20 } })}
+                  {React.cloneElement(feature.icon, { sx: { fontSize: 19 } })}
                 </Box>
-                <Typography variant="body1">{feature.text}</Typography>
+                <Typography sx={{ fontSize: '0.95rem', color: alpha('#fff', 0.94), fontWeight: 500 }}
+                  dangerouslySetInnerHTML={{ __html: feature.text }}
+                />
               </Box>
             ))}
           </Stack>
         </Box>
       </Box>
 
-      {/* Right Side - Login Form */}
-      <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          p: { xs: 3, sm: 4, md: 6 },
-          bgcolor: mode === 'light' ? CREAM : 'grey.900',
-        }}
-      >
-        <Box sx={{ width: '100%', maxWidth: '480px' }}>
-          {/* Logo for mobile */}
-          <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 4 }}>
+      {/* Right pane — sign-in card. On md+ this is a plain surface,
+          on xs we still centre the same card without the poster. */}
+      <Box sx={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        justifyContent: 'center', alignItems: 'center',
+        p: { xs: 3, sm: 4, md: 6 }, bgcolor: GROUND,
+      }}>
+        <Box
+          sx={{
+            width: '100%', maxWidth: 460,
+            bgcolor: '#fff',
+            border: `1px solid ${CARD_BORDER}`,
+            borderRadius: 3,
+            p: { xs: 3, sm: 4 },
+            boxShadow: '0 12px 40px rgba(15, 23, 42, 0.06)',
+          }}
+        >
+          {/* Mobile logo — the desktop poster owns it on md+. */}
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 3 }}>
             <Box
               component="img"
               src={leadMatrixLogo}
               alt="Lead Matrix"
-              sx={{
-                width: '100%',
-                maxWidth: 280,
-                height: 'auto',
-                filter: mode === 'light' ? 'invert(15%) saturate(0%)' : 'none',
-              }}
+              sx={{ width: '100%', maxWidth: 240, height: 'auto' }}
             />
           </Box>
 
-          {/* Header */}
-          <Box sx={{ mb: 5 }}>
-            <Typography variant="h3" fontWeight={800} gutterBottom sx={{ letterSpacing: '-0.5px' }}>
-              Welcome Back
+          <Box sx={{ mb: 3.5 }}>
+            <Typography sx={{
+              fontSize: '1.75rem', fontWeight: 800, color: INK,
+              letterSpacing: '-0.02em', mb: 0.5,
+            }}>
+              Welcome back
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1.1rem' }}>
-              Please sign in to your account to continue
+            <Typography sx={{ fontSize: '0.95rem', color: INK_MUTED }}>
+              Sign in to continue to your workspace.
             </Typography>
           </Box>
 
@@ -224,11 +187,11 @@ const Login = () => {
             <Alert
               severity="error"
               sx={{
-                mb: 3,
-                borderRadius: 2,
-                '& .MuiAlert-icon': {
-                  fontSize: 24,
-                },
+                mb: 2.5, borderRadius: 2,
+                bgcolor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#991B1B',
+                '& .MuiAlert-icon': { color: '#EF4444', fontSize: 22 },
               }}
             >
               {error}
@@ -236,15 +199,10 @@ const Login = () => {
           )}
 
           <form onSubmit={formik.handleSubmit}>
-            <Stack spacing={3}>
+            <Stack spacing={2.2}>
               <Box>
-                <Typography
-                  variant="subtitle2"
-                  fontWeight={600}
-                  gutterBottom
-                  sx={{ mb: 1, color: 'text.primary' }}
-                >
-                  Email Address
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: INK, mb: 0.8 }}>
+                  Email address
                 </Typography>
                 <TextField
                   fullWidth
@@ -253,7 +211,7 @@ const Login = () => {
                   type="email"
                   autoComplete="username"
                   inputProps={{ maxLength: 254 }}
-                  placeholder="Enter your email"
+                  placeholder="you@company.com"
                   value={formik.values.email}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
@@ -263,38 +221,27 @@ const Login = () => {
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <Email sx={{ color: 'action.active', fontSize: 22 }} />
+                        <Email sx={{ color: INK_MUTED, fontSize: 20 }} />
                       </InputAdornment>
                     ),
                   }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       borderRadius: 2,
-                      backgroundColor: mode === 'light' ? 'grey.50' : 'grey.800',
+                      backgroundColor: '#fff',
                       transition: 'all 0.2s',
-                      '&:hover': {
-                        backgroundColor: mode === 'light' ? 'grey.100' : 'grey.750',
-                      },
-                      '&.Mui-focused': {
-                        backgroundColor: mode === 'light' ? 'white' : 'grey.800',
-                        boxShadow: `0 0 0 3px ${alpha(COPPER, 0.12)}`,
-                      },
+                      '& fieldset': { borderColor: CARD_BORDER },
+                      '&:hover fieldset': { borderColor: '#CBD5E1' },
+                      '&.Mui-focused fieldset': { borderColor: PRIMARY, borderWidth: 1 },
+                      '&.Mui-focused': { boxShadow: `0 0 0 4px ${alpha(PRIMARY, 0.14)}` },
                     },
-                    '& .MuiOutlinedInput-input': {
-                      py: 1.5,
-                      fontSize: '1rem',
-                    },
+                    '& .MuiOutlinedInput-input': { py: 1.4, fontSize: '0.95rem', color: INK },
                   }}
                 />
               </Box>
 
               <Box>
-                <Typography
-                  variant="subtitle2"
-                  fontWeight={600}
-                  gutterBottom
-                  sx={{ mb: 1, color: 'text.primary' }}
-                >
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: INK, mb: 0.8 }}>
                   Password
                 </Typography>
                 <TextField
@@ -314,7 +261,7 @@ const Login = () => {
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <Lock sx={{ color: 'action.active', fontSize: 22 }} />
+                        <Lock sx={{ color: INK_MUTED, fontSize: 20 }} />
                       </InputAdornment>
                     ),
                     endAdornment: (
@@ -324,9 +271,8 @@ const Login = () => {
                           edge="end"
                           disabled={isLoading}
                           sx={{
-                            '&:hover': {
-                              backgroundColor: alpha(COPPER, 0.12),
-                            },
+                            color: INK_MUTED,
+                            '&:hover': { backgroundColor: alpha(PRIMARY, 0.08), color: PRIMARY },
                           }}
                         >
                           {showPassword ? <VisibilityOff /> : <Visibility />}
@@ -337,20 +283,14 @@ const Login = () => {
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       borderRadius: 2,
-                      backgroundColor: mode === 'light' ? 'grey.50' : 'grey.800',
+                      backgroundColor: '#fff',
                       transition: 'all 0.2s',
-                      '&:hover': {
-                        backgroundColor: mode === 'light' ? 'grey.100' : 'grey.750',
-                      },
-                      '&.Mui-focused': {
-                        backgroundColor: mode === 'light' ? 'white' : 'grey.800',
-                        boxShadow: `0 0 0 3px ${alpha(COPPER, 0.12)}`,
-                      },
+                      '& fieldset': { borderColor: CARD_BORDER },
+                      '&:hover fieldset': { borderColor: '#CBD5E1' },
+                      '&.Mui-focused fieldset': { borderColor: PRIMARY, borderWidth: 1 },
+                      '&.Mui-focused': { boxShadow: `0 0 0 4px ${alpha(PRIMARY, 0.14)}` },
                     },
-                    '& .MuiOutlinedInput-input': {
-                      py: 1.5,
-                      fontSize: '1rem',
-                    },
+                    '& .MuiOutlinedInput-input': { py: 1.4, fontSize: '0.95rem', color: INK },
                   }}
                 />
               </Box>
@@ -362,37 +302,32 @@ const Login = () => {
                 fullWidth
                 disabled={isLoading}
                 sx={{
-                  py: 1.75,
-                  mt: 2,
-                  bgcolor: BROWN,
-                  fontWeight: 700,
-                  fontSize: '1.05rem',
-                  textTransform: 'none',
-                  borderRadius: 2,
-                  boxShadow: `0 8px 24px ${COPPER}59`,
-                  transition: 'all 0.3s ease',
+                  py: 1.5, mt: 0.8,
+                  bgcolor: PRIMARY, color: '#fff',
+                  fontWeight: 700, fontSize: '0.98rem',
+                  textTransform: 'none', borderRadius: 2,
+                  boxShadow: `0 8px 20px ${alpha(PRIMARY, 0.35)}`,
+                  transition: 'all 0.2s ease',
                   '&:hover': {
-                    bgcolor: COPPER,
-                    boxShadow: `0 12px 32px ${COPPER}73`,
-                    transform: 'translateY(-2px)',
+                    bgcolor: PRIMARY_DEEP,
+                    boxShadow: `0 10px 26px ${alpha(PRIMARY, 0.42)}`,
+                    transform: 'translateY(-1px)',
                   },
-                  '&:active': {
-                    transform: 'translateY(0)',
-                  },
+                  '&:active': { transform: 'translateY(0)' },
                   '&:disabled': {
-                    bgcolor: '#9ca3af',
+                    bgcolor: alpha(PRIMARY, 0.5),
+                    color: '#fff',
                     boxShadow: 'none',
                   },
                 }}
               >
                 {isLoading ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
                     <Box
                       sx={{
-                        width: 20,
-                        height: 20,
-                        border: '3px solid rgba(255,255,255,0.3)',
-                        borderTopColor: 'white',
+                        width: 18, height: 18,
+                        border: '2.5px solid rgba(255,255,255,0.35)',
+                        borderTopColor: '#fff',
                         borderRadius: '50%',
                         animation: 'spin 0.8s linear infinite',
                         '@keyframes spin': {
@@ -401,32 +336,27 @@ const Login = () => {
                         },
                       }}
                     />
-                    Signing In...
+                    Signing in…
                   </Box>
                 ) : (
-                  'Sign In'
+                  'Sign in'
                 )}
               </Button>
             </Stack>
           </form>
 
-          {/* Footer Text */}
-          <Box sx={{ mt: 4, textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
-              Don't have an account?{' '}
+          <Box sx={{ mt: 3, textAlign: 'center' }}>
+            <Typography sx={{ fontSize: '0.85rem', color: INK_MUTED }}>
+              Don&rsquo;t have an account?{' '}
               <Typography
                 component="span"
-                variant="body2"
                 sx={{
-                  color: COPPER,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
+                  fontSize: '0.85rem',
+                  color: PRIMARY, fontWeight: 700, cursor: 'pointer',
+                  '&:hover': { color: PRIMARY_DEEP, textDecoration: 'underline' },
                 }}
               >
-                Contact Administrator
+                Contact administrator
               </Typography>
             </Typography>
           </Box>

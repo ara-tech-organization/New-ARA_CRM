@@ -58,8 +58,8 @@ import userApi from '../api/userApi';
 const Clients = () => {
   const navigate = useNavigate();
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.secondary || '#C08552';
-  const secondaryColor = accentColor?.primary || '#3E2723';
+  const primaryColor = accentColor?.secondary || '#1F3966';
+  const secondaryColor = accentColor?.primary || '#0F172A';
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -865,7 +865,7 @@ const Clients = () => {
           // noise; the underlying status enum still distinguishes them
           // for audit purposes (drop_reason / drop_history live only on
           // dropped clients).
-          { label: 'Dropped Clients', value: clients.filter(c => c.status === 'inactive' || c.status === 'dropped').length, color: '#C08552', tip: 'Clients that are no longer active — both Inactive (paused) and Dropped (soft-deleted with audit trail) are counted here' },
+          { label: 'Dropped Clients', value: clients.filter(c => c.status === 'inactive' || c.status === 'dropped').length, color: '#1F3966', tip: 'Clients that are no longer active — both Inactive (paused) and Dropped (soft-deleted with audit trail) are counted here' },
         ].map((s, i) => (
           <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
             <Tooltip arrow placement="top" title={s.tip}>

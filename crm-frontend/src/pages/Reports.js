@@ -72,22 +72,22 @@ const fmtDDMMYYYY = (iso) => {
 // Colors for different metrics
 const METRIC_CONFIG = {
   metaForm: {
-    color: '#C08552',
+    color: '#1F3966',
     label: 'Meta Form Leads',
     icon: <Facebook />,
-    bgColor: '#C0855215',
+    bgColor: '#1F396615',
   },
   metaWhatsapp: {
-    color: '#3E2723',
+    color: '#0F172A',
     label: 'Meta WhatsApp Leads',
     icon: <WhatsApp />,
-    bgColor: '#3E272315',
+    bgColor: '#0F172A15',
   },
   metaTotalLeads: {
-    color: '#C08552',
+    color: '#1F3966',
     label: 'Total Meta Leads',
     icon: <Facebook />,
-    bgColor: '#C0855215',
+    bgColor: '#1F396615',
   },
 };
 
@@ -190,7 +190,7 @@ const SummaryTile = ({ label, value, color }) => (
     <CardContent sx={{ py: 1.4, '&:last-child': { pb: 1.4 } }}>
       <Typography sx={{
         fontSize: '0.62rem', fontWeight: 800, letterSpacing: '1.1px',
-        color: '#8B7261', textTransform: 'uppercase', mb: 0.3,
+        color: '#94A3B8', textTransform: 'uppercase', mb: 0.3,
       }}>
         {label}
       </Typography>
@@ -693,15 +693,15 @@ const Reports = () => {
         variant="outlined"
         sx={{
           mb: 2,
-          background: 'linear-gradient(135deg, #C0855215 0%, #C0855205 50%, transparent 100%)',
-          borderLeft: '4px solid #C08552',
+          background: 'linear-gradient(135deg, #1F396615 0%, #1F396605 50%, transparent 100%)',
+          borderLeft: '4px solid #1F3966',
         }}
       >
         <CardContent sx={{ py: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, flexWrap: 'wrap', gap: 1.5 }}>
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.3 }}>
-                <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color: '#3E2723', lineHeight: 1.1 }}>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color: '#0F172A', lineHeight: 1.1 }}>
                   Analytics & Reports
                 </Typography>
                 <MuiTooltip
@@ -713,7 +713,7 @@ const Reports = () => {
               </Box>
               <Typography variant="body2" color="text.secondary">
                 {selectedClientName !== 'Select a Client'
-                  ? <><Box component="span" sx={{ fontWeight: 600, color: '#C08552' }}>{selectedClientName}</Box> · {fromDate && toDate ? `${fmtDDMMYYYY(fromDate)} → ${fmtDDMMYYYY(toDate)}` : 'Pick a date range below'}</>
+                  ? <><Box component="span" sx={{ fontWeight: 600, color: '#1F3966' }}>{selectedClientName}</Box> · {fromDate && toDate ? `${fmtDDMMYYYY(fromDate)} → ${fmtDDMMYYYY(toDate)}` : 'Pick a date range below'}</>
                   : 'Pick a client to start exploring performance'}
               </Typography>
             </Box>
@@ -724,7 +724,7 @@ const Reports = () => {
                 startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
                 onClick={fetchAllData}
                 disabled={loading}
-                sx={{ bgcolor: '#C08552', color: '#fff', '&:hover': { bgcolor: '#C08552', filter: 'brightness(0.92)' } }}
+                sx={{ bgcolor: '#1F3966', color: '#fff', '&:hover': { bgcolor: '#1F3966', filter: 'brightness(0.92)' } }}
               >
                 Refresh
               </Button>
@@ -808,9 +808,9 @@ const Reports = () => {
                     sx={{
                       cursor: 'pointer',
                       fontWeight: 600,
-                      bgcolor: '#C0855210',
-                      color: '#C08552',
-                      '&:hover': { bgcolor: '#C0855225' },
+                      bgcolor: '#1F396610',
+                      color: '#1F3966',
+                      '&:hover': { bgcolor: '#1F396625' },
                     }}
                   />
                 ))}
@@ -934,8 +934,8 @@ const Reports = () => {
               onChange={(_, v) => setChartTab(v)}
               sx={{
                 px: 2,
-                '& .MuiTabs-indicator': { bgcolor: '#C08552', height: 3 },
-                '& .Mui-selected': { color: '#C08552 !important' },
+                '& .MuiTabs-indicator': { bgcolor: '#1F3966', height: 3 },
+                '& .Mui-selected': { color: '#1F3966 !important' },
               }}
             >
               <Tab label="Daily Trends" sx={{ textTransform: 'none', fontWeight: 700 }} />
@@ -1187,9 +1187,9 @@ const Reports = () => {
           chart with a metric toggle. */}
       {selectedClient && (() => {
         const GOOGLE_GREEN = '#34A853';
-        const BROWN_C = '#3E2723';
-        const CREAM_C = '#FFF4ED';
-        const BORDER_C = '#E8D5C4';
+        const BROWN_C = '#0F172A';
+        const CREAM_C = '#F1F5F9';
+        const BORDER_C = '#E2E8F0';
         const summary = googleData?.summary || null;
         const dailyRaw = Array.isArray(googleData?.dailyMetrics) ? googleData.dailyMetrics : [];
         // Normalise the date to `YYYY-MM-DD` regardless of whether

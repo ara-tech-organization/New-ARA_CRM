@@ -50,7 +50,7 @@ import { format as fmtDateFn, parseISO, isValid as isValidDate } from 'date-fns'
 
 const DailyLeadData = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.secondary || '#C08552';
+  const primaryColor = accentColor?.secondary || '#1F3966';
 
   const today = new Date().toISOString().split('T')[0];
   const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -225,7 +225,7 @@ const DailyLeadData = () => {
           .header h1 { color: #333; margin-bottom: 5px; }
           .header p { color: #666; }
           .totals-row { background-color: #f5f5f5; font-weight: bold; }
-          .meta-col { background-color: #C0855210; }
+          .meta-col { background-color: #1F396610; }
           @page { size: landscape; margin: 10mm; }
         }
       </style>
@@ -564,11 +564,11 @@ const DailyLeadData = () => {
                       <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                         <Tooltip arrow title="Calendar date (DD MMM YYYY)"><TableCell sx={{ fontWeight: 700, cursor: 'help' }}>Date</TableCell></Tooltip>
                         <Tooltip arrow title="Day of week (Mon, Tue, …)"><TableCell sx={{ fontWeight: 700, cursor: 'help' }} align="center">Day</TableCell></Tooltip>
-                        <Tooltip arrow title="Meta lead-form submissions on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Leads</TableCell></Tooltip>
-                        <Tooltip arrow title="Meta click-to-WhatsApp conversations on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Messages</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta lead-form submissions on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610', cursor: 'help' }} align="center">Leads</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta click-to-WhatsApp conversations on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610', cursor: 'help' }} align="center">Messages</TableCell></Tooltip>
                         <Tooltip arrow title="Meta click-to-call button taps on this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#2e7d3215', cursor: 'help' }} align="center">Calls</TableCell></Tooltip>
-                        <Tooltip arrow title="Meta Form + Meta WhatsApp total for this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="center">Meta Total</TableCell></Tooltip>
-                        <Tooltip arrow title="Total Meta ad spend on this day (₹)"><TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210', cursor: 'help' }} align="right">Spent</TableCell></Tooltip>
+                        <Tooltip arrow title="Meta Form + Meta WhatsApp total for this day"><TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610', cursor: 'help' }} align="center">Meta Total</TableCell></Tooltip>
+                        <Tooltip arrow title="Total Meta ad spend on this day (₹)"><TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610', cursor: 'help' }} align="right">Spent</TableCell></Tooltip>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -584,21 +584,21 @@ const DailyLeadData = () => {
                               {new Date(row.date).toLocaleDateString('en-US', { weekday: 'short' })}
                             </Typography>
                           </TableCell>
-                          <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
-                            <Chip label={row.metaForm} size="small" sx={{ bgcolor: '#C0855215', color: '#C08552', fontWeight: 600, minWidth: 40 }} />
+                          <TableCell align="center" sx={{ bgcolor: '#1F396605' }}>
+                            <Chip label={row.metaForm} size="small" sx={{ bgcolor: '#1F396615', color: '#1F3966', fontWeight: 600, minWidth: 40 }} />
                           </TableCell>
-                          <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
+                          <TableCell align="center" sx={{ bgcolor: '#1F396605' }}>
                             <Chip label={row.metaWhatsapp} size="small" sx={{ bgcolor: '#1976d215', color: '#1976d2', fontWeight: 600, minWidth: 40 }} />
                           </TableCell>
                           <TableCell align="center" sx={{ bgcolor: '#2e7d3208' }}>
                             <Chip label={row.metaCalls || 0} size="small" sx={{ bgcolor: '#2e7d3215', color: '#2e7d32', fontWeight: 600, minWidth: 40 }} />
                           </TableCell>
-                          <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
+                          <TableCell align="center" sx={{ bgcolor: '#1F396605' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#1F3966' }}>
                               {row.metaTotalLeads}
                             </Typography>
                           </TableCell>
-                          <TableCell align="right" sx={{ bgcolor: '#C0855205' }}>
+                          <TableCell align="right" sx={{ bgcolor: '#1F396605' }}>
                             <Typography variant="body2" sx={{ fontWeight: 700, color: '#10b981' }}>
                               ₹{row.metaFund.toLocaleString('en-IN')}
                             </Typography>
@@ -609,21 +609,21 @@ const DailyLeadData = () => {
                       <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb' }}>
                         <TableCell sx={{ fontWeight: 700 }}>TOTAL</TableCell>
                         <TableCell></TableCell>
-                        <TableCell align="center" sx={{ bgcolor: '#C0855210', fontWeight: 700, color: '#C08552' }}>
+                        <TableCell align="center" sx={{ bgcolor: '#1F396610', fontWeight: 700, color: '#1F3966' }}>
                           {dailyTotals.metaForm}
                         </TableCell>
-                        <TableCell align="center" sx={{ bgcolor: '#C0855210', fontWeight: 700, color: '#1976d2' }}>
+                        <TableCell align="center" sx={{ bgcolor: '#1F396610', fontWeight: 700, color: '#1976d2' }}>
                           {dailyTotals.metaWhatsapp}
                         </TableCell>
                         <TableCell align="center" sx={{ bgcolor: '#2e7d3210', fontWeight: 700, color: '#2e7d32' }}>
                           {dailyTotals.metaCalls || 0}
                         </TableCell>
-                        <TableCell align="center" sx={{ bgcolor: '#C0855210' }}>
-                          <Typography variant="body1" sx={{ fontWeight: 700, color: '#C08552' }}>
+                        <TableCell align="center" sx={{ bgcolor: '#1F396610' }}>
+                          <Typography variant="body1" sx={{ fontWeight: 700, color: '#1F3966' }}>
                             {dailyTotals.metaTotalLeads}
                           </Typography>
                         </TableCell>
-                        <TableCell align="right" sx={{ bgcolor: '#C0855210' }}>
+                        <TableCell align="right" sx={{ bgcolor: '#1F396610' }}>
                           <Typography variant="h6" sx={{ fontWeight: 700, color: '#10b981' }}>
                             ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
                           </Typography>
@@ -695,10 +695,10 @@ const DailyLeadData = () => {
                   <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f8fafc' }}>
                     <TableCell sx={{ fontWeight: 700 }}>Client</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Form</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta WhatsApp</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="center">Meta Total</TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: '#C0855210' }} align="right">Spent</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610' }} align="center">Meta Form</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610' }} align="center">Meta WhatsApp</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610' }} align="center">Meta Total</TableCell>
+                    <TableCell sx={{ fontWeight: 700, bgcolor: '#1F396610' }} align="right">Spent</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -714,26 +714,26 @@ const DailyLeadData = () => {
                           {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </Typography>
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#1F396605' }}>
                         <Chip
                           label={entry.metaForm || 0}
                           size="small"
-                          sx={{ bgcolor: '#C0855215', color: '#C08552', fontWeight: 600, minWidth: 40 }}
+                          sx={{ bgcolor: '#1F396615', color: '#1F3966', fontWeight: 600, minWidth: 40 }}
                         />
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#1F396605' }}>
                         <Chip
                           label={entry.metaWhatsapp || 0}
                           size="small"
-                          sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 600, minWidth: 40 }}
+                          sx={{ bgcolor: '#0F172A15', color: '#0F172A', fontWeight: 600, minWidth: 40 }}
                         />
                       </TableCell>
-                      <TableCell align="center" sx={{ bgcolor: '#C0855205' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
+                      <TableCell align="center" sx={{ bgcolor: '#1F396605' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: '#1F3966' }}>
                           {entry.metaTotalLeads || 0}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{ bgcolor: '#C0855205' }}>
+                      <TableCell align="right" sx={{ bgcolor: '#1F396605' }}>
                         <Typography variant="body2" sx={{ fontWeight: 700, color: '#10b981' }}>
                           ₹{(entry.metaFund || 0).toLocaleString('en-IN')}
                         </Typography>
@@ -744,22 +744,22 @@ const DailyLeadData = () => {
                   <TableRow sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#f9fafb' }}>
                     <TableCell sx={{ fontWeight: 700 }}>TOTAL</TableCell>
                     <TableCell></TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#C0855210' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#C08552' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#1F396610' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#1F3966' }}>
                         {dailyTotals.metaForm}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#C0855210' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#3E2723' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#1F396610' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
                         {dailyTotals.metaWhatsapp}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center" sx={{ bgcolor: '#C0855210' }}>
-                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#C08552' }}>
+                    <TableCell align="center" sx={{ bgcolor: '#1F396610' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#1F3966' }}>
                         {dailyTotals.metaTotalLeads}
                       </Typography>
                     </TableCell>
-                    <TableCell align="right" sx={{ bgcolor: '#C0855210' }}>
+                    <TableCell align="right" sx={{ bgcolor: '#1F396610' }}>
                       <Typography variant="h6" sx={{ fontWeight: 700, color: '#10b981' }}>
                         ₹{dailyTotals.metaFund.toLocaleString('en-IN')}
                       </Typography>

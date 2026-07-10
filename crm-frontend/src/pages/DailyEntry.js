@@ -108,8 +108,8 @@ const StatCard = ({ title, value, icon, color, loading }) => (
 
 const DailyEntry = () => {
   const { accentColor } = useContext(ThemeContext);
-  const primaryColor = accentColor?.secondary || '#C08552';
-  const secondaryColor = accentColor?.primary || '#3E2723';
+  const primaryColor = accentColor?.secondary || '#1F3966';
+  const secondaryColor = accentColor?.primary || '#0F172A';
 
   const dispatch = useDispatch();
 
@@ -401,7 +401,7 @@ const DailyEntry = () => {
             title="Total Spend"
             value={`₹${(dateStats.totalSpend || 0).toLocaleString('en-IN')}`}
             icon={<CurrencyRupee />}
-            color="#C08552"
+            color="#1F3966"
             loading={loading}
           />
         </Grid>
@@ -542,11 +542,11 @@ const DailyEntry = () => {
                             <Chip
                               label={entry.metaWhatsapp || 0}
                               size="small"
-                              sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#0F172A15', color: '#0F172A', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1F3966' }}>
                               ₹{(entry.metaFund || 0).toLocaleString('en-IN')}
                             </Typography>
                           </TableCell>
@@ -559,23 +559,23 @@ const DailyEntry = () => {
                             <Chip
                               label={entry.googleCall || 0}
                               size="small"
-                              sx={{ bgcolor: '#3E272315', color: '#3E2723', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#0F172A15', color: '#0F172A', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="center">
                             <Chip
                               label={entry.googleWebsite || 0}
                               size="small"
-                              sx={{ bgcolor: '#C0855215', color: '#C08552', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#1F396615', color: '#1F3966', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1F3966' }}>
                               ₹{(entry.googleFund || 0).toLocaleString('en-IN')}
                             </Typography>
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1F3966' }}>
                               ₹{googleCPL}
                             </Typography>
                           </TableCell>
@@ -740,7 +740,7 @@ const DailyEntry = () => {
                 <Divider sx={{ my: 1 }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, mb: 1 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Campaign sx={{ color: '#C08552' }} />
+                    <Campaign sx={{ color: '#1F3966' }} />
                     META Leads
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
@@ -765,8 +765,8 @@ const DailyEntry = () => {
                         disabled={fetchingMetaData || !formik.values.client || !formik.values.date}
                         startIcon={fetchingMetaData ? <CircularProgress size={16} color="inherit" /> : <CloudDownloadIcon />}
                         sx={{
-                          bgcolor: '#C08552',
-                          '&:hover': { bgcolor: '#8B5E3C' },
+                          bgcolor: '#1F3966',
+                          '&:hover': { bgcolor: '#15294D' },
                           fontSize: '0.75rem',
                         }}
                       >
@@ -818,11 +818,11 @@ const DailyEntry = () => {
                 />
               </Grid>
               <Grid size={{xs: 12}}>
-                <Box sx={{ bgcolor: '#C0855215', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
+                <Box sx={{ bgcolor: '#1F396615', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1F3966' }}>
                     Meta Total Leads: {(parseInt(formik.values.metaForm) || 0) + (parseInt(formik.values.metaWhatsapp) || 0)}
                   </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1F3966' }}>
                     Meta CPL: ₹{calculateCPL(formik.values.metaFund, (parseInt(formik.values.metaForm) || 0) + (parseInt(formik.values.metaWhatsapp) || 0))}
                   </Typography>
                 </Box>
@@ -832,7 +832,7 @@ const DailyEntry = () => {
               <Grid size={{xs: 12}}>
                 <Divider sx={{ my: 1 }} />
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 2, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Campaign sx={{ color: '#C08552' }} />
+                  <Campaign sx={{ color: '#1F3966' }} />
                   GOOGLE Leads
                 </Typography>
               </Grid>
@@ -873,11 +873,11 @@ const DailyEntry = () => {
                 />
               </Grid>
               <Grid size={{xs: 12}}>
-                <Box sx={{ bgcolor: '#C0855215', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
+                <Box sx={{ bgcolor: '#1F396615', p: 1.5, borderRadius: 1, display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1F3966' }}>
                     Google Total Leads: {(parseInt(formik.values.googleCall) || 0) + (parseInt(formik.values.googleWebsite) || 0)}
                   </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#C08552' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1F3966' }}>
                     Google CPL: ₹{calculateCPL(formik.values.googleFund, (parseInt(formik.values.googleCall) || 0) + (parseInt(formik.values.googleWebsite) || 0))}
                   </Typography>
                 </Box>

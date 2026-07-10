@@ -338,18 +338,41 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
     return res.status(200).json({ success: true, cached: true, data: cached.data });
   }
 
-  // Source: MetaInsights (level='campaign' to avoid double-counting adset/ad rows).
-  // Google fields are always 0 — MetaInsights doesn't have Google data.
+  // Sources:
+  //   MetaInsights → spend / ad-side metrics per campaign per day.
+  //   Lead        → actual CRM leads (what the ClientAdDetails page counts).
+  //
+  // MetaInsights.messaging_conversations_started counts ad clicks that
+  // opened a chat, not leads that actually landed in the CRM. That
+  // metric can diverge from the CRM significantly (e.g. 3 conversations
+  // started but 0 WhatsApp leads reached us). ClientAdDetails already
+  // overrides its counts with CRM Lead records; this endpoint now does
+  // the same per (clientId, date) so both views agree.
   const [yr1, mo1, d1] = from.split('-').map(Number);
   const [yr2, mo2, d2] = to.split('-').map(Number);
   const rangeStart = new Date(Date.UTC(yr1, mo1 - 1, d1));
   const rangeEnd = new Date(Date.UTC(yr2, mo2 - 1, d2 + 1)); // exclusive upper bound
 
+  // Business day is IST — leads store meta_created_time in UTC. Shift
+  // the query window by IST offset when filtering Lead docs, and add
+  // the same offset when bucketing by date, so a lead submitted at
+  // 23:30 IST lands in that IST day, not the next UTC day.
+  const IST_MS = 5.5 * 60 * 60 * 1000;
+  const leadRangeStart = new Date(rangeStart.getTime() - IST_MS);
+  const leadRangeEnd = new Date(rangeEnd.getTime() - IST_MS);
+
   const objectIdClient = clientId && /^[0-9a-fA-F]{24}$/.test(clientId)
     ? new mongoose.Types.ObjectId(clientId)
     : null;
 
-  const [pivotRows, allClients] = await Promise.all([
+  const leadDateFilter = {
+    $or: [
+      { meta_created_time: { $gte: leadRangeStart, $lt: leadRangeEnd } },
+      { meta_created_time: null, createdAt: { $gte: leadRangeStart, $lt: leadRangeEnd } },
+    ],
+  };
+
+  const [pivotRows, crmRows, allClients] = await Promise.all([
     MetaInsights.aggregate([
       {
         $match: {
@@ -372,10 +395,74 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
       },
       { $sort: { '_id.date': 1 } },
     ]).allowDiskUse(true),
+    Lead.aggregate([
+      {
+        $match: {
+          // MUST match ClientAdDetails' Lead query (metaController's
+          // leads_in_range) — restrict to Meta-source leads, otherwise
+          // any manual "other" / Google leads flagged with
+          // platform='whatsapp' inflate the count and this endpoint
+          // disagrees with the client-ads page again.
+          source: 'meta',
+          ...leadDateFilter,
+          ...(objectIdClient ? { client: objectIdClient } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: {
+            clientId: '$client',
+            // Bucket by IST calendar date, not UTC.
+            date: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: {
+                  $add: [
+                    { $ifNull: ['$meta_created_time', '$createdAt'] },
+                    IST_MS,
+                  ],
+                },
+              },
+            },
+          },
+          crmForm: {
+            $sum: {
+              $cond: [
+                { $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] },
+                0,
+                1,
+              ],
+            },
+          },
+          crmWhatsapp: {
+            $sum: {
+              $cond: [
+                { $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]).allowDiskUse(true),
     Client.find({}, { clientName: 1 }).lean(),
   ]);
 
   const clientNameById = new Map(allClients.map(c => [String(c._id), c.clientName || '']));
+
+  // Lookup for the CRM-based overrides. Key is `${clientId}|${date}`
+  // so per-day per-client counts can be applied straight in the map
+  // step below. When a key is absent (no CRM leads for that day) we
+  // fall back to MetaInsights values, matching ClientAdDetails.
+  const crmByKey = new Map();
+  crmRows.forEach((r) => {
+    const cid = r._id.clientId == null ? '' : String(r._id.clientId);
+    crmByKey.set(`${cid}|${r._id.date}`, {
+      form: r.crmForm || 0,
+      whatsapp: r.crmWhatsapp || 0,
+    });
+  });
 
   // Re-shape into the same row format the controller previously produced from
   // Lead. Sort by clientName + date so the table reads naturally.
@@ -414,8 +501,13 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
   const entries = rows.map(r => {
     const cid = r._id.clientId == null ? '' : String(r._id.clientId);
     const date = r._id.date;
-    const metaForm = r.metaForm || 0;
-    const metaWhatsapp = r.metaWhatsapp || 0;
+    // CRM Lead counts are authoritative when present. If CRM has ANY
+    // leads for this (client, date), use its bucketed counts for both
+    // form + WhatsApp. Otherwise fall back to MetaInsights so days
+    // where the CRM hasn't ingested yet aren't silently zeroed out.
+    const crm = crmByKey.get(`${cid}|${date}`);
+    const metaForm = crm ? crm.form : (r.metaForm || 0);
+    const metaWhatsapp = crm ? crm.whatsapp : (r.metaWhatsapp || 0);
     const metaCalls = r.metaCalls || 0;
     const metaFund = round2(r.metaFund || 0);
     const googleCall = r.googleCall || 0;

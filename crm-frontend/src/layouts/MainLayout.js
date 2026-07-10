@@ -115,8 +115,8 @@ const MainLayout = () => {
   const isDarkMode = darkMode === 'dark';
 
   // Brand colors: slate for structure, teal for accents
-  const primaryColor = accentColor?.primary || '#1E293B';
-  const secondaryColor = accentColor?.secondary || '#14B8A6';
+  const primaryColor = accentColor?.primary || '#0F172A';
+  const secondaryColor = accentColor?.secondary || '#F4B929';
 
   // Check if user is super admin or admin (full access)
   const isSuperAdmin = user?.role === 'superadmin' || user?.role === 'Super Admin';
@@ -304,10 +304,10 @@ const MainLayout = () => {
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      backgroundColor: isDarkMode ? '#1C1410' : '#3E2723',
+      backgroundColor: isDarkMode ? '#15294D' : '#1F3966',
       position: 'relative',
       overflow: 'hidden',
-      borderRight: isDarkMode ? '1px solid rgba(208,165,116,0.08)' : 'none'
+      borderRight: isDarkMode ? '1px solid rgba(15, 23, 42,0.08)' : 'none'
     }}>
       {/* Header with Lead Matrix logo + collapse button */}
       <Box sx={{ p: sidebarCollapsed ? 1.5 : 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
@@ -384,13 +384,13 @@ const MainLayout = () => {
         <Box sx={{ px: 1.5, pb: 1.5, position: 'relative', zIndex: 1 }}>
           <Box
             sx={{
-              backgroundColor: 'rgba(192, 133, 82, 0.15)',
+              backgroundColor: 'rgba(37, 99, 235, 0.15)',
               borderRadius: '5px',
               p: 1.5,
-              border: '1px solid rgba(192, 133, 82, 0.2)',
+              border: '1px solid rgba(37, 99, 235, 0.2)',
               transition: 'all 0.2s ease',
               '&:hover': {
-                backgroundColor: 'rgba(192, 133, 82, 0.25)',
+                backgroundColor: 'rgba(37, 99, 235, 0.25)',
                 transform: 'translateY(-2px)',
                 boxShadow: isDarkMode
                   ? '0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
@@ -403,7 +403,7 @@ const MainLayout = () => {
                 sx={{
                   width: 38,
                   height: 38,
-                  bgcolor: '#C08552',
+                  bgcolor: '#F4B929',
                   color: '#FFFFFF',
                   fontWeight: 600,
                   fontSize: '1rem',
@@ -498,13 +498,13 @@ const MainLayout = () => {
                     justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
                     transition: 'all 0.2s ease',
                     '&:hover': {
-                      backgroundColor: 'rgba(192, 133, 82, 0.15)',
+                      backgroundColor: 'rgba(37, 99, 235, 0.15)',
                     },
                     '&.Mui-selected': {
-                      backgroundColor: 'rgba(192, 133, 82, 0.25)',
-                      borderLeft: '3px solid #C08552',
+                      backgroundColor: 'rgba(37, 99, 235, 0.25)',
+                      borderLeft: '3px solid #F4B929',
                       '&:hover': {
-                        backgroundColor: 'rgba(192, 133, 82, 0.3)',
+                        backgroundColor: 'rgba(37, 99, 235, 0.3)',
                       },
                     },
                   }}
@@ -628,9 +628,9 @@ const MainLayout = () => {
         sx={{
           width: { sm: `calc(100% - ${currentDrawerWidth}px)` },
           ml: { sm: `${currentDrawerWidth}px` },
-          bgcolor: isDarkMode ? '#1C1410' : '#FFFFFF',
+          bgcolor: isDarkMode ? '#15294D' : '#FFFFFF',
           borderBottom: '1px solid',
-          borderColor: isDarkMode ? 'rgba(208,165,116,0.1)' : '#C0855215',
+          borderColor: isDarkMode ? 'rgba(15, 23, 42,0.1)' : '#F4B92915',
           boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
         }}
       >
@@ -763,7 +763,7 @@ const MainLayout = () => {
                 <Avatar sx={{
                   width: 36,
                   height: 36,
-                  bgcolor: '#C08552',
+                  bgcolor: '#F4B929',
                   color: '#FFFFFF',
                 }}>
                   {user?.name?.[0] || 'A'}

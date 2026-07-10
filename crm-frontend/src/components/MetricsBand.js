@@ -31,7 +31,7 @@ const MetricsBand = ({ from, to, clientId, data: propData, loading: propLoading 
   const isLoading = propLoading || loading;
 
   const tiles = [
-    { emoji: '📋', label: 'Leads',    value: totals?.leads,    color: '#C08552', bg: '#C0855212' },
+    { emoji: '📋', label: 'Leads',    value: totals?.leads,    color: '#1F3966', bg: '#1F396612' },
     { emoji: '💬', label: 'Messages', value: totals?.messages, color: '#1976d2', bg: '#1976d212' },
     { emoji: '📞', label: 'Calls',    value: totals?.calls,    color: '#2e7d32', bg: '#2e7d3212' },
   ];

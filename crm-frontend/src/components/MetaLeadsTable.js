@@ -150,7 +150,7 @@ const labelChipColor = (label) => {
   if (v === 'RNR' || v === 'BUSY') return { bg: '#FEF3C7', fg: '#A16207' };
   if (v === 'INVALID') return { bg: '#E5E7EB', fg: '#374151' };
   if (v === 'TREATMENT BOOKED' || v === 'APPOINTMENT BOOKED') return { bg: '#DCFCE7', fg: '#15803D' };
-  if (v === 'CONSULTED') return { bg: '#DBEAFE', fg: '#1D4ED8' };
+  if (v === 'CONSULTED') return { bg: '#E4EAF3', fg: '#1D4ED8' };
   if (v === 'WARM' || v === 'HOT') return { bg: '#FFEDD5', fg: '#C2410C' };
   if (v === 'NOT INTERESTED' || v === 'CLOSED' || v === 'CANCELLED') return { bg: '#FEE2E2', fg: '#B91C1C' };
   if (v === 'DUPLICATE') return { bg: DUPLICATE_BG, fg: '#7E22CE' };

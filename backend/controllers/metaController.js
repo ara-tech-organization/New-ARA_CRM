@@ -1489,18 +1489,79 @@ export const getMetaDashboardOverview = async (req, res) => {
     });
 
     const clientIds = clients.map((c) => c._id);
-    const rows = await MetaInsights.aggregate([
-      { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
-      {
-        $group: {
-          _id: '$client_id',
-          spend: { $sum: '$spend' },
-          form_leads: { $sum: '$leads' },
-          whatsapp_leads: { $sum: '$messaging_conversations_started' },
-          calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
+    // Two campaign-level aggregations in parallel:
+    //   1. Per-client roll-up (spend / leads / calls) — for the KPI card
+    //   2. Per-(client, campaign) roll-up sorted by spend, then reduced
+    //      to the top-spend campaign per client — powers the Active
+    //      Campaigns widget's "one live campaign per client" view.
+    const [rows, topCampaignRows] = await Promise.all([
+      MetaInsights.aggregate([
+        { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
+        {
+          $group: {
+            _id: '$client_id',
+            spend: { $sum: '$spend' },
+            form_leads: { $sum: '$leads' },
+            whatsapp_leads: { $sum: '$messaging_conversations_started' },
+            calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
+          },
         },
-      },
+      ]),
+      MetaInsights.aggregate([
+        { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
+        {
+          $group: {
+            _id: { clientId: '$client_id', campaignId: '$campaign_id' },
+            spend: { $sum: '$spend' },
+            leads: { $sum: '$leads' },
+            whatsapp: { $sum: '$messaging_conversations_started' },
+          },
+        },
+        // Sort by spend so $first below picks the biggest spender.
+        { $sort: { spend: -1 } },
+        {
+          $group: {
+            _id: '$_id.clientId',
+            topCampaignId: { $first: '$_id.campaignId' },
+            topSpend: { $first: '$spend' },
+            topLeads: { $first: '$leads' },
+            topWhatsapp: { $first: '$whatsapp' },
+          },
+        },
+      ]),
     ]);
+
+    // Resolve campaign names for the top-per-client IDs.
+    // We keep any campaign the aggregation flagged — even paused ones —
+    // because the widget's row already shows a status pill. Filtering to
+    // strictly-live status here would silently blank rows during a
+    // brief campaign pause.
+    const topCampaignIds = topCampaignRows
+      .map((r) => r.topCampaignId)
+      .filter((id) => id && String(id).trim() !== '');
+    const campaignDocs = topCampaignIds.length > 0
+      ? await MetaCampaign.find({ campaign_id: { $in: topCampaignIds } })
+          .select('campaign_id name effective_status status objective')
+          .lean()
+      : [];
+    const campaignById = new Map(campaignDocs.map((c) => [c.campaign_id, c]));
+
+    const topByClientId = new Map();
+    topCampaignRows.forEach((r) => {
+      const doc = campaignById.get(r.topCampaignId);
+      topByClientId.set(String(r._id), {
+        campaign_id: r.topCampaignId,
+        // Fall back to the ID if the MetaCampaign doc hasn't been synced
+        // yet — better than showing a blank string in the dashboard.
+        name: doc?.name || `Campaign ${r.topCampaignId || ''}`,
+        effective_status: doc?.effective_status || '',
+        status: doc?.status || '',
+        objective: doc?.objective || '',
+        spend: round2(r.topSpend || 0),
+        leads: r.topLeads || 0,
+        whatsapp_leads: r.topWhatsapp || 0,
+      });
+    });
 
     const insightsById = new Map(rows.map((r) => [String(r._id), r]));
 
@@ -1514,6 +1575,10 @@ export const getMetaDashboardOverview = async (req, res) => {
       const cpl = total_leads > 0 ? round2(spend / total_leads) : 0;
       const calls = r.calls || 0;
       const rawBalance = balanceById.get(key);
+      // One representative campaign per client (highest spend in
+      // range). Only present when the client had campaign-level
+      // insight rows in the window — days with zero spend get `null`.
+      const top_campaign = topByClientId.get(key) || null;
       return {
         clientId: cid,
         spend,
@@ -1526,6 +1591,7 @@ export const getMetaDashboardOverview = async (req, res) => {
         // A synced ₹0 balance IS a real "low balance" signal though, so
         // that stays a number and will flag on the Dashboard.
         available_balance: rawBalance != null ? round2(rawBalance) : null,
+        top_campaign,
       };
     });
 
