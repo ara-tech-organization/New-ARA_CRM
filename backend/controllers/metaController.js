@@ -1635,15 +1635,17 @@ export const getMetaDashboardOverview = async (req, res) => {
       const key = String(cid);
       const r = insightsById.get(key) || {};
       const spend = round2(r.spend || 0);
-      // CRM Lead counts are authoritative when present. If the CRM
-      // has ANY meta-source leads for this client in the window, use
-      // those counts for both form + WhatsApp — matches ClientAdDetails
-      // and gives the Dashboard's Clients Overview a true conversion
-      // count instead of DM opens. Fall back to MetaInsights when the
-      // CRM has nothing yet (day zero after onboarding).
+      // CRM Lead counts are authoritative when they exist for that
+      // side. Form leads: use CRM if present, else Meta insights.
+      // WhatsApp leads: only override with CRM when the CRM actually
+      // has whatsapp records — otherwise a client whose WhatsApp
+      // inbox isn't syncing into Lead (like Sahakar Nagar) would
+      // silently show 0 despite Meta reporting real conversations.
       const crm = crmByClientId.get(key);
       const form_leads = crm ? crm.form : (r.form_leads || 0);
-      const whatsapp_leads = crm ? crm.whatsapp : (r.whatsapp_leads || 0);
+      const whatsapp_leads = crm && crm.whatsapp > 0
+        ? crm.whatsapp
+        : (r.whatsapp_leads || 0);
       const total_leads = form_leads + whatsapp_leads;
       const cpl = total_leads > 0 ? round2(spend / total_leads) : 0;
       const calls = r.calls || 0;
@@ -1847,10 +1849,13 @@ export const getMetaDailyMetrics = async (req, res) => {
         _id: r._id,
         // Leads = CRM form leads when present; else Meta ad-side leads.
         leads: crm ? crm.form : (r.leads || 0),
-        // Messages = actual WhatsApp CRM conversions when present;
-        // else fall back to Meta's DM-opens metric so days with a
-        // spend-but-no-CRM-sync-yet still show something.
-        messages: crm ? crm.whatsapp : (r.messages || 0),
+        // Messages: only override with CRM when the CRM actually has
+        // whatsapp records for that day. Prevents clients whose
+        // WhatsApp inbox doesn't ingest into Lead from silently
+        // showing 0 messages when Meta reports real conversations.
+        messages: crm && crm.whatsapp > 0
+          ? crm.whatsapp
+          : (r.messages || 0),
         calls: r.calls || 0,
       };
     });

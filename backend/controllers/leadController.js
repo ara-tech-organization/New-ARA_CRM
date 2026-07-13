@@ -501,13 +501,18 @@ export const getDailyByClient = asyncHandler(async (req, res) => {
   const entries = rows.map(r => {
     const cid = r._id.clientId == null ? '' : String(r._id.clientId);
     const date = r._id.date;
-    // CRM Lead counts are authoritative when present. If CRM has ANY
-    // leads for this (client, date), use its bucketed counts for both
-    // form + WhatsApp. Otherwise fall back to MetaInsights so days
-    // where the CRM hasn't ingested yet aren't silently zeroed out.
+    // CRM Lead counts are authoritative when they exist for that
+    // side. Form leads: use CRM if present, else Meta insights.
+    // WhatsApp: only override with CRM when the CRM actually has
+    // whatsapp records for that day — otherwise a client whose
+    // WhatsApp inbox isn't syncing into Lead (e.g. Sahakar Nagar)
+    // would silently show 0 despite Meta reporting real
+    // messaging conversations.
     const crm = crmByKey.get(`${cid}|${date}`);
     const metaForm = crm ? crm.form : (r.metaForm || 0);
-    const metaWhatsapp = crm ? crm.whatsapp : (r.metaWhatsapp || 0);
+    const metaWhatsapp = crm && crm.whatsapp > 0
+      ? crm.whatsapp
+      : (r.metaWhatsapp || 0);
     const metaCalls = r.metaCalls || 0;
     const metaFund = round2(r.metaFund || 0);
     const googleCall = r.googleCall || 0;
