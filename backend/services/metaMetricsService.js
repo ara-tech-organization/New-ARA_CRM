@@ -24,9 +24,40 @@
 
 import mongoose from 'mongoose';
 import MetaInsights from '../models/MetaInsights.js';
+import MetaAdSet from '../models/MetaAdSet.js';
 import Lead from '../models/Lead.js';
 
 const INSIGHTS_LEVEL = 'campaign'; // adset/ad rows would double-count
+
+// Meta reports `onsite_conversion.messaging_conversation_started_7d` on ANY
+// campaign — including lead-form ones, where it just means somebody DM'd the
+// page off the ad instead of filling the form. Counting that as a lead is what
+// made a lead-form client show phantom "WhatsApp leads".
+//
+// A campaign only genuinely sells conversations if one of its ad sets optimizes
+// for CONVERSATIONS — Meta's goal for click-to-WhatsApp / Messenger ads. On
+// every other campaign the metric is noise and is scored zero.
+const MESSAGING_OPTIMIZATION_GOAL = 'CONVERSATIONS';
+const MSG_CAMPAIGN_TTL = 5 * 60 * 1000;
+let msgCampaignCache = { ts: 0, ids: null };
+
+const messagingCampaignIds = async () => {
+  if (msgCampaignCache.ids && Date.now() - msgCampaignCache.ts < MSG_CAMPAIGN_TTL) {
+    return msgCampaignCache.ids;
+  }
+  const ids = await MetaAdSet.distinct('campaign_id', {
+    optimization_goal: MESSAGING_OPTIMIZATION_GOAL,
+  });
+  const clean = ids.filter(Boolean).map(String);
+  msgCampaignCache = { ts: Date.now(), ids: clean };
+  return clean;
+};
+
+// Campaign-level insight rows carry campaign_id, but fall back to entity_id
+// rather than silently scoring a row as non-messaging.
+const CAMPAIGN_KEY = {
+  $cond: [{ $in: ['$campaign_id', [null, '']] }, '$entity_id', '$campaign_id'],
+};
 
 export const IST_MS = 5.5 * 60 * 60 * 1000;
 
@@ -79,7 +110,7 @@ const leadDateFilter = (from, to) => {
 };
 
 // The canonical definitions. Edit here and every page moves together.
-const METRIC_ACCUMULATORS = {
+const accumulators = (msgCampaignIds) => ({
   spend: { $sum: { $ifNull: ['$spend', 0] } },
   impressions: { $sum: { $ifNull: ['$impressions', 0] } },
   reach: { $sum: { $ifNull: ['$reach', 0] } },
@@ -88,9 +119,24 @@ const METRIC_ACCUMULATORS = {
   conversions: { $sum: { $ifNull: ['$conversions', 0] } },
   video_thruplay: { $sum: { $ifNull: ['$video_thruplay', 0] } },
   formLeads: { $sum: { $ifNull: ['$leads', 0] } },
-  whatsappLeads: { $sum: { $ifNull: ['$messaging_conversations_started', 0] } },
   calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
-};
+
+  // Only genuine messaging campaigns score here. See messagingCampaignIds().
+  whatsappLeads: {
+    $sum: {
+      $cond: [
+        { $in: [CAMPAIGN_KEY, msgCampaignIds] },
+        { $ifNull: ['$messaging_conversations_started', 0] },
+        0,
+      ],
+    },
+  },
+  // Every messaging action Meta reported, messaging campaign or not. Not a
+  // lead count — kept so the DM noise we're excluding stays inspectable.
+  messagingAllCampaigns: {
+    $sum: { $ifNull: ['$messaging_conversations_started', 0] },
+  },
+});
 
 const matchStage = ({ clientIds, from, to }) => {
   const { start, end } = insightsRange(from, to);
@@ -114,6 +160,11 @@ export const finalize = (r = {}) => {
   const clicks = r.clicks || 0;
   const conversions = totalLeads + calls;
 
+  // Messaging actions Meta reported on non-messaging campaigns: someone DM'd
+  // the page off a lead-form ad. Excluded from every lead count; surfaced only
+  // so the exclusion is auditable.
+  const messagingAll = r.messagingAllCampaigns || 0;
+
   return {
     spend,
     impressions,
@@ -125,6 +176,7 @@ export const finalize = (r = {}) => {
     whatsappLeads,
     totalLeads,
     calls,
+    excludedDmActions: Math.max(0, messagingAll - whatsappLeads),
     ctr: impressions > 0 ? round2((clicks / impressions) * 100) : 0,
     cpc: clicks > 0 ? round2(spend / clicks) : 0,
     cpm: impressions > 0 ? round2((spend / impressions) * 1000) : 0,
@@ -135,28 +187,31 @@ export const finalize = (r = {}) => {
 };
 
 export const metricsTotals = async ({ clientIds, from, to }) => {
+  const msgIds = await messagingCampaignIds();
   const rows = await MetaInsights.aggregate([
     { $match: matchStage({ clientIds, from, to }) },
-    { $group: { _id: null, ...METRIC_ACCUMULATORS } },
+    { $group: { _id: null, ...accumulators(msgIds) } },
   ]);
   return finalize(rows[0]);
 };
 
 export const metricsByClient = async ({ clientIds, from, to }) => {
+  const msgIds = await messagingCampaignIds();
   const rows = await MetaInsights.aggregate([
     { $match: matchStage({ clientIds, from, to }) },
-    { $group: { _id: '$client_id', ...METRIC_ACCUMULATORS } },
+    { $group: { _id: '$client_id', ...accumulators(msgIds) } },
   ]);
   return new Map(rows.map((r) => [String(r._id), finalize(r)]));
 };
 
 export const metricsByDay = async ({ clientIds, from, to }) => {
+  const msgIds = await messagingCampaignIds();
   const rows = await MetaInsights.aggregate([
     { $match: matchStage({ clientIds, from, to }) },
     {
       $group: {
         _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-        ...METRIC_ACCUMULATORS,
+        ...accumulators(msgIds),
       },
     },
     { $sort: { _id: 1 } },
@@ -165,6 +220,7 @@ export const metricsByDay = async ({ clientIds, from, to }) => {
 };
 
 export const metricsByClientDay = async ({ clientIds, from, to }) => {
+  const msgIds = await messagingCampaignIds();
   const rows = await MetaInsights.aggregate([
     { $match: matchStage({ clientIds, from, to }) },
     {
@@ -173,7 +229,7 @@ export const metricsByClientDay = async ({ clientIds, from, to }) => {
           clientId: '$client_id',
           date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
         },
-        ...METRIC_ACCUMULATORS,
+        ...accumulators(msgIds),
       },
     },
     { $sort: { '_id.date': 1 } },
