@@ -26,6 +26,17 @@ import {
   triggerMetaSyncNow,
 } from '../sync/scheduler.js';
 import {
+  metricsTotals,
+  metricsByClient,
+  metricsByDay,
+  crmLeadsByClient,
+  withIngestionGap,
+  finalize as emptyMetrics,
+  insightsRange,
+  istToday,
+  toObjectId as toMetricsObjectId,
+} from '../services/metaMetricsService.js';
+import {
   verifySystemUser,
   verifyAdAccountAccess,
   listPagesForSystemUser,
@@ -895,6 +906,20 @@ const parseDateRange = (q) => {
   return { since, until };
 };
 
+// The YYYY-MM-DD form metaMetricsService expects. Defaults use the IST
+// calendar day — deriving "today" from toISOString() (UTC) meant that between
+// 00:00 and 05:30 IST the API answered for yesterday.
+const ymd = /^\d{4}-\d{2}-\d{2}$/;
+const parseDateStrings = (q) => {
+  const to = ymd.test(q.to || '') ? q.to : istToday();
+  const from = ymd.test(q.from || '')
+    ? q.from
+    : new Date(new Date(`${to}T00:00:00Z`).getTime() - 30 * 86400_000)
+        .toISOString()
+        .slice(0, 10);
+  return from <= to ? { from, to } : { from: to, to };
+};
+
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 // GET /api/meta/client/:clientId/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -903,10 +928,11 @@ export const getClientAnalytics = async (req, res) => {
   if (!client) return;
 
   const { since, until } = parseDateRange(req.query);
+  const { from, to } = parseDateStrings(req.query);
   const clientId = client._id;
   const dateRange = { $gte: since, $lte: until };
   const _t0 = Date.now();
-  const _tag = `[analytics] ${client.clientName || clientId} ${since.toISOString().slice(0,10)}→${until.toISOString().slice(0,10)}`;
+  const _tag = `[analytics] ${client.clientName || clientId} ${from}→${to}`;
 
   // IST date boundaries for lead queries
   const IST_MS = 5.5 * 60 * 60 * 1000;
@@ -923,32 +949,14 @@ export const getClientAnalytics = async (req, res) => {
   // ---- Batch 1: all independent DB queries in parallel ----
   const _t1 = Date.now();
   const [
-    summaryAggResult,
+    metrics,
     dailyTrend,
     campaignAgg,
     leadForms,
     formLeadCounts,
     leads_in_range,
   ] = await Promise.all([
-    MetaInsights.aggregate([
-      { $match: { client_id: clientId, level: 'campaign', date: dateRange } },
-      {
-        $group: {
-          _id: null,
-          spend: { $sum: '$spend' },
-          impressions: { $sum: '$impressions' },
-          reach: { $sum: '$reach' },
-          clicks: { $sum: '$clicks' },
-          inline_link_clicks: { $sum: '$inline_link_clicks' },
-          form_leads: { $sum: '$leads' },
-          whatsapp_leads: { $sum: '$messaging_conversations_started' },
-          calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
-          conversions: { $sum: '$conversions' },
-          video_thruplay: { $sum: '$video_thruplay' },
-          rows: { $sum: 1 },
-        },
-      },
-    ]),
+    metricsTotals({ clientIds: clientId, from, to }),
     MetaInsights.aggregate([
       { $match: { client_id: clientId, level: 'campaign', date: dateRange } },
       {
@@ -1007,37 +1015,30 @@ export const getClientAnalytics = async (req, res) => {
   ]);
 
   console.log(`${_tag} batch1(DB) ${Date.now()-_t1}ms`);
-  // ---- Build summary from aggregation result ----
-  const [summaryAgg] = summaryAggResult;
-  const sum = summaryAgg || {
-    spend: 0, impressions: 0, reach: 0, clicks: 0, inline_link_clicks: 0,
-    form_leads: 0, whatsapp_leads: 0, calls: 0, conversions: 0, video_thruplay: 0, rows: 0,
-  };
-  const totalLeads = (sum.form_leads || 0) + (sum.whatsapp_leads || 0);
+  // ---- Build summary from the shared metrics ----
+  // Same numbers the dashboard, daily table and monthly grid render; only the
+  // snake_case field names differ, because this page's frontend expects them.
   const summary = {
-    spend: round2(sum.spend),
-    impressions: sum.impressions || 0,
-    reach: sum.reach || 0,
-    clicks: sum.clicks || 0,
-    inline_link_clicks: sum.inline_link_clicks || 0,
-    video_thruplay: sum.video_thruplay || 0,
-    form_leads: sum.form_leads || 0,
-    whatsapp_leads: sum.whatsapp_leads || 0,
-    calls: sum.calls || 0,
-    total_leads: totalLeads,
-    conversions: sum.conversions || 0,
-    ctr: sum.impressions > 0 ? round2((sum.clicks / sum.impressions) * 100) : 0,
-    cpc: sum.clicks > 0 ? round2(sum.spend / sum.clicks) : 0,
-    cpm: sum.impressions > 0 ? round2((sum.spend / sum.impressions) * 1000) : 0,
-    cpl_form: sum.form_leads > 0 ? round2(sum.spend / sum.form_leads) : 0,
-    cpl_whatsapp: sum.whatsapp_leads > 0 ? round2(sum.spend / sum.whatsapp_leads) : 0,
-    cpl: totalLeads > 0 ? round2(sum.spend / totalLeads) : 0,
-    avg_cost_per_conv: (() => {
-      const totalConv = totalLeads + (sum.calls || 0);
-      return totalConv > 0 ? round2(sum.spend / totalConv) : 0;
-    })(),
-    leads: totalLeads,
-    messaging_conversations_started: sum.whatsapp_leads || 0,
+    spend: metrics.spend,
+    impressions: metrics.impressions,
+    reach: metrics.reach,
+    clicks: metrics.clicks,
+    inline_link_clicks: metrics.inline_link_clicks,
+    video_thruplay: metrics.video_thruplay,
+    form_leads: metrics.formLeads,
+    whatsapp_leads: metrics.whatsappLeads,
+    calls: metrics.calls,
+    total_leads: metrics.totalLeads,
+    conversions: metrics.totalLeads + metrics.calls,
+    ctr: metrics.ctr,
+    cpc: metrics.cpc,
+    cpm: metrics.cpm,
+    cpl_form: metrics.formLeads > 0 ? round2(metrics.spend / metrics.formLeads) : 0,
+    cpl_whatsapp: metrics.whatsappLeads > 0 ? round2(metrics.spend / metrics.whatsappLeads) : 0,
+    cpl: metrics.cpl,
+    avg_cost_per_conv: metrics.avg_cost_per_conv,
+    leads: metrics.totalLeads,
+    messaging_conversations_started: metrics.whatsappLeads,
   };
 
   // ---- Build campaigns (campaignDocs lookup depends on campaignAgg) ----
@@ -1088,58 +1089,34 @@ export const getClientAnalytics = async (req, res) => {
     last_seen_at: f.last_seen_at,
   }));
 
-  // ---- Override Leads + Messages with actual CRM records ------------------
-  // MetaInsights campaign attribution misses organic form leads and counts
-  // messaging_conversations_started (ad click → chat opened) rather than
-  // actual WhatsApp leads that became CRM records.
-  // Only override when CRM has matching leads; otherwise keep MetaInsights
-  // values so the detail page stays consistent with the dashboard.
-  if (leads_in_range.length > 0) {
-    const actualFormLeads = leads_in_range.filter(
-      (l) => (l.platform || '').toLowerCase() !== 'whatsapp'
-    ).length;
-    const actualWALeads = leads_in_range.filter(
-      (l) => (l.platform || '').toLowerCase() === 'whatsapp'
-    ).length;
-    summary.form_leads = actualFormLeads;
-    summary.whatsapp_leads = actualWALeads;
-    summary.messaging_conversations_started = actualWALeads;
-    const newTotalLeads = actualFormLeads + actualWALeads;
-    summary.total_leads = newTotalLeads;
-    summary.leads = newTotalLeads;
-    summary.cpl_form = actualFormLeads > 0 ? round2(summary.spend / actualFormLeads) : 0;
-    summary.cpl = newTotalLeads > 0 ? round2(summary.spend / newTotalLeads) : 0;
-    const totalConvActual = newTotalLeads + summary.calls;
-    summary.avg_cost_per_conv = totalConvActual > 0 ? round2(summary.spend / totalConvActual) : 0;
-  }
+  // ---- CRM ingestion gap (diagnostic — does NOT change reported counts) ----
+  // Reported leads come from MetaInsights, same as every other surface. The
+  // CRM is the list your team calls, not the ledger: a dropped lead webhook
+  // silently shrinks it. Surfacing the shortfall makes that visible instead of
+  // quietly reporting a smaller number.
+  //
+  // WhatsApp has no CRM counterpart to compare against — Meta fires no lead
+  // webhook for a conversation, so click-to-WhatsApp conversions only ever
+  // exist in MetaInsights unless someone enters them by hand.
+  const crmFormLeads = leads_in_range.filter(
+    (l) => (l.platform || '').toLowerCase() !== 'whatsapp'
+  ).length;
+  summary.crm_form_leads = crmFormLeads;
+  summary.missing_form_leads = Math.max(0, summary.form_leads - crmFormLeads);
 
-  // ---- Override per-campaign leads + messages with CRM records -----------
-  // Only override when CRM has matching leads; otherwise keep MetaInsights
-  // campaign-level values so rows stay consistent with the summary.
-  if (leads_in_range.length > 0) {
-    const leadsByCampaign = new Map();
-    for (const l of leads_in_range) {
-      if (!l.meta_campaign_id) continue;
-      if (!leadsByCampaign.has(l.meta_campaign_id)) {
-        leadsByCampaign.set(l.meta_campaign_id, { form: 0, whatsapp: 0 });
-      }
-      const bucket = leadsByCampaign.get(l.meta_campaign_id);
-      if ((l.platform || '').toLowerCase() === 'whatsapp') bucket.whatsapp++;
-      else bucket.form++;
-    }
-    for (const c of campaigns) {
-      const crm = leadsByCampaign.get(c.campaign_id) || { form: 0, whatsapp: 0 };
-      c.form_leads = crm.form;
-      c.whatsapp_leads = crm.whatsapp;
-      c.messaging_conversations_started = crm.whatsapp;
-      const totalConv = crm.form + crm.whatsapp + c.calls;
-      c.total_leads = totalConv;
-      c.leads = totalConv;
-      c.avg_cost_per_conv = totalConv > 0 ? round2(c.spend / totalConv) : 0;
-      c.cpl = totalConv > 0 ? round2(c.spend / totalConv) : 0;
-      c.cpl_form = crm.form > 0 ? round2(c.spend / crm.form) : 0;
-      c.cpl_whatsapp = crm.whatsapp > 0 ? round2(c.spend / crm.whatsapp) : 0;
-    }
+  const crmFormByCampaign = new Map();
+  for (const l of leads_in_range) {
+    if (!l.meta_campaign_id) continue;
+    if ((l.platform || '').toLowerCase() === 'whatsapp') continue;
+    crmFormByCampaign.set(
+      l.meta_campaign_id,
+      (crmFormByCampaign.get(l.meta_campaign_id) || 0) + 1
+    );
+  }
+  for (const c of campaigns) {
+    const crmForm = crmFormByCampaign.get(c.campaign_id) || 0;
+    c.crm_form_leads = crmForm;
+    c.missing_form_leads = Math.max(0, c.form_leads - crmForm);
   }
 
   // ---- Hourly leads (single-day only, computed from leads_in_range) --------
@@ -1334,34 +1311,10 @@ export const getClientsAdsComparison = async (req, res) => {
     }
 
     const clientIds = clients.map((c) => c._id);
+    const { from, to } = parseDateStrings(req.query);
 
-    // IST-adjusted lead date boundaries
-    const IST_MS_C = 5.5 * 60 * 60 * 1000;
-    const leadSince = new Date(since.getTime() - IST_MS_C);
-    const leadUntil = new Date(until.getTime() - IST_MS_C);
-    const leadDateFilter = {
-      $or: [
-        { meta_created_time: { $gte: leadSince, $lte: leadUntil } },
-        { meta_created_time: null, createdAt: { $gte: leadSince, $lte: leadUntil } },
-      ],
-    };
-
-    const [aggRows, budgetRows, crmLeadRows] = await Promise.all([
-      MetaInsights.aggregate([
-        { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
-        {
-          $group: {
-            _id: '$client_id',
-            spend: { $sum: '$spend' },
-            impressions: { $sum: '$impressions' },
-            reach: { $sum: '$reach' },
-            clicks: { $sum: '$clicks' },
-            calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
-            insights_leads: { $sum: { $ifNull: ['$leads', 0] } },
-            insights_wa: { $sum: { $ifNull: ['$messaging_conversations_started', 0] } },
-          },
-        },
-      ]),
+    const [metricsById, budgetRows, crmById] = await Promise.all([
+      metricsByClient({ clientIds, from, to }),
       MetaCampaign.aggregate([
         { $match: { client_id: { $in: clientIds } } },
         {
@@ -1371,41 +1324,17 @@ export const getClientsAdsComparison = async (req, res) => {
           },
         },
       ]),
-      Lead.aggregate([
-        { $match: { client: { $in: clientIds }, source: 'meta', ...leadDateFilter } },
-        {
-          $group: {
-            _id: '$client',
-            form_leads: { $sum: { $cond: [{ $ne: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] }, 1, 0] } },
-            whatsapp_leads: { $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] }, 1, 0] } },
-          },
-        },
-      ]),
+      crmLeadsByClient({ clientIds, from, to }),
     ]);
 
-    const byId = new Map(aggRows.map((r) => [String(r._id), r]));
     const budgetById = new Map(budgetRows.map((r) => [String(r._id), r.totalBudget]));
-    const crmById = new Map(crmLeadRows.map((r) => [String(r._id), r]));
 
     const overviews = clients.map((c) => {
-      const row = byId.get(String(c._id)) || {};
-      const crm = crmById.get(String(c._id));
-      const spend = round2(row.spend);
-      const impressions = row.impressions || 0;
-      const reach = row.reach || 0;
-      const clicks = row.clicks || 0;
-      const calls = row.calls || 0;
-      // Fall back to MetaInsights leads when no CRM lead records exist for this client/date range
-      const formLeads = crm ? (crm.form_leads || 0) : (row.insights_leads || 0);
-      const whatsappLeads = crm ? (crm.whatsapp_leads || 0) : (row.insights_wa || 0);
-      const leads = formLeads + whatsappLeads;
-      const totalConv = leads + calls;
-      const ctr = impressions > 0 ? round2((clicks / impressions) * 100) : 0;
-      const cpc = clicks > 0 ? round2(spend / clicks) : 0;
-      const cpm = impressions > 0 ? round2((spend / impressions) * 1000) : 0;
-      const cpl = leads > 0 ? round2(spend / leads) : 0;
-      const avg_cost_per_conv = totalConv > 0 ? round2(spend / totalConv) : 0;
-      const frequency = reach > 0 ? round2(impressions / reach) : 0;
+      const key = String(c._id);
+      const m = withIngestionGap(
+        metricsById.get(key) || emptyMetrics(),
+        crmById.get(key)
+      );
       const firstPage = Array.isArray(c.meta_pages) && c.meta_pages.length > 0 ? c.meta_pages[0] : null;
       return {
         clientId: c._id,
@@ -1414,10 +1343,24 @@ export const getClientsAdsComparison = async (req, res) => {
         metaAdAccountId: c.meta_ad_account_id || '',
         pageName: firstPage?.page_name || '',
         currency: c.meta_ad_account_currency || 'INR',
-        totalBudget: round2(budgetById.get(String(c._id)) || 0),
+        totalBudget: round2(budgetById.get(key) || 0),
         availableBalance: c.meta_ad_account_balance ?? null,
-        spend, reach, impressions, frequency, clicks, ctr, cpc, cpm,
-        leads, formLeads, whatsappLeads, calls, avg_cost_per_conv, cpl,
+        spend: m.spend,
+        reach: m.reach,
+        impressions: m.impressions,
+        frequency: m.frequency,
+        clicks: m.clicks,
+        ctr: m.ctr,
+        cpc: m.cpc,
+        cpm: m.cpm,
+        leads: m.totalLeads,
+        formLeads: m.formLeads,
+        whatsappLeads: m.whatsappLeads,
+        calls: m.calls,
+        avg_cost_per_conv: m.avg_cost_per_conv,
+        cpl: m.cpl,
+        crmFormLeads: m.crmFormLeads,
+        missingFormLeads: m.missingFormLeads,
       };
     });
 
@@ -1490,47 +1433,19 @@ export const getMetaDashboardOverview = async (req, res) => {
 
     const clientIds = clients.map((c) => c._id);
 
-    // IST-shifted window for CRM Lead filtering — Meta insights use
-    // UTC dates but the business day (and Lead.meta_created_time) is
-    // IST. Shift by 5.5h so a lead submitted at 23:30 IST lands in
-    // that IST day, not the next UTC day.
-    const IST_MS = 5.5 * 60 * 60 * 1000;
-    const leadSince = new Date(since.getTime() - IST_MS);
-    const leadUntil = new Date(until.getTime() - IST_MS);
-    const leadDateFilter = {
-      $or: [
-        { meta_created_time: { $gte: leadSince, $lte: leadUntil } },
-        { meta_created_time: null, createdAt: { $gte: leadSince, $lte: leadUntil } },
-      ],
-    };
+    const { from, to } = parseDateStrings(req.query);
+    // Derive the window from the same from/to the metrics service uses, so the
+    // top-campaign row can't land on a different day than the totals beside it.
+    const { start: rangeStart, end: rangeEnd } = insightsRange(from, to);
 
-    // Three aggregations in parallel:
-    //   1. MetaInsights per-client roll-up (spend / calls / ad-side lead+DM counts).
-    //   2. MetaInsights per-(client, campaign) roll-up → top-spend campaign per client.
-    //   3. Lead per-(client, platform) roll-up → authoritative CRM counts.
-    //
-    // `messaging_conversations_started` from Meta counts ad clicks
-    // that opened a chat (DM count), not actual leads that reached the
-    // CRM. ClientAdDetails already overrides its counts with CRM Lead
-    // records; this endpoint now does the same so the Dashboard's
-    // Clients Overview and Lead Check both show the true conversion
-    // count (Meta form leads + Meta WhatsApp leads that landed in
-    // the CRM), never inflated by opened-chat noise.
-    const [rows, topCampaignRows, crmRows] = await Promise.all([
+    // Reported counts come from metaMetricsService — the same definition the
+    // daily table, the monthly grid and client-ads use. crmByClientId is
+    // diagnostic only: it flags leads Meta delivered that never reached the
+    // CRM, and never changes a reported number.
+    const [metricsById, topCampaignRows, crmByClientId] = await Promise.all([
+      metricsByClient({ clientIds, from, to }),
       MetaInsights.aggregate([
-        { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
-        {
-          $group: {
-            _id: '$client_id',
-            spend: { $sum: '$spend' },
-            form_leads: { $sum: '$leads' },
-            whatsapp_leads: { $sum: '$messaging_conversations_started' },
-            calls: { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
-          },
-        },
-      ]),
-      MetaInsights.aggregate([
-        { $match: { client_id: { $in: clientIds }, level: 'campaign', date: dateRange } },
+        { $match: { client_id: { $in: clientIds }, level: 'campaign', date: { $gte: rangeStart, $lt: rangeEnd } } },
         {
           $group: {
             _id: { clientId: '$client_id', campaignId: '$campaign_id' },
@@ -1551,51 +1466,8 @@ export const getMetaDashboardOverview = async (req, res) => {
           },
         },
       ]),
-      Lead.aggregate([
-        {
-          $match: {
-            // MUST mirror ClientAdDetails' Lead query — source='meta'
-            // ensures manual "other"/Google leads flagged whatsapp
-            // don't leak into these counts.
-            source: 'meta',
-            client: { $in: clientIds },
-            ...leadDateFilter,
-          },
-        },
-        {
-          $group: {
-            _id: '$client',
-            crmForm: {
-              $sum: {
-                $cond: [
-                  { $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] },
-                  0, 1,
-                ],
-              },
-            },
-            crmWhatsapp: {
-              $sum: {
-                $cond: [
-                  { $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] },
-                  1, 0,
-                ],
-              },
-            },
-          },
-        },
-      ]),
+      crmLeadsByClient({ clientIds, from, to }),
     ]);
-
-    // Per-client lookup for the CRM-based overrides. Absence of a key
-    // means the CRM has no leads for that client in the window; we
-    // then fall back to MetaInsights values (matches ClientAdDetails).
-    const crmByClientId = new Map();
-    crmRows.forEach((r) => {
-      crmByClientId.set(String(r._id), {
-        form: r.crmForm || 0,
-        whatsapp: r.crmWhatsapp || 0,
-      });
-    });
 
     // Resolve campaign names for the top-per-client IDs.
     // We keep any campaign the aggregation flagged — even paused ones —
@@ -1629,24 +1501,12 @@ export const getMetaDashboardOverview = async (req, res) => {
       });
     });
 
-    const insightsById = new Map(rows.map((r) => [String(r._id), r]));
-
     const overviews = clientIds.map((cid) => {
       const key = String(cid);
-      const r = insightsById.get(key) || {};
-      const spend = round2(r.spend || 0);
-      // CRM Lead counts are authoritative when present. If the CRM
-      // has ANY meta-source leads for this client in the window, use
-      // those counts for both form + WhatsApp — matches ClientAdDetails
-      // and gives the Dashboard's Clients Overview a true conversion
-      // count instead of DM opens. Fall back to MetaInsights when the
-      // CRM has nothing yet (day zero after onboarding).
-      const crm = crmByClientId.get(key);
-      const form_leads = crm ? crm.form : (r.form_leads || 0);
-      const whatsapp_leads = crm ? crm.whatsapp : (r.whatsapp_leads || 0);
-      const total_leads = form_leads + whatsapp_leads;
-      const cpl = total_leads > 0 ? round2(spend / total_leads) : 0;
-      const calls = r.calls || 0;
+      const m = withIngestionGap(
+        metricsById.get(key) || emptyMetrics(),
+        crmByClientId.get(key)
+      );
       const rawBalance = balanceById.get(key);
       // One representative campaign per client (highest spend in
       // range). Only present when the client had campaign-level
@@ -1654,17 +1514,19 @@ export const getMetaDashboardOverview = async (req, res) => {
       const top_campaign = topByClientId.get(key) || null;
       return {
         clientId: cid,
-        spend,
-        total_leads,
-        form_leads,
-        whatsapp_leads,
-        calls,
-        cpl,
+        spend: m.spend,
+        total_leads: m.totalLeads,
+        form_leads: m.formLeads,
+        whatsapp_leads: m.whatsappLeads,
+        calls: m.calls,
+        cpl: m.cpl,
         // null → client has never synced its Meta account, don't alert.
         // A synced ₹0 balance IS a real "low balance" signal though, so
         // that stays a number and will flag on the Dashboard.
         available_balance: rawBalance != null ? round2(rawBalance) : null,
         top_campaign,
+        crm_form_leads: m.crmFormLeads,
+        missing_form_leads: m.missingFormLeads,
       };
     });
 
@@ -1752,112 +1614,14 @@ export const getMetaSpendOverview = async (req, res) => {
 // (or one client when clientId is supplied). Powers the 3-row metrics band.
 export const getMetaDailyMetrics = async (req, res) => {
   try {
-    const { since, until } = parseDateRange(req.query);
-    const clientId = req.query.clientId;
+    const { from, to } = parseDateStrings(req.query);
+    const clientIds = toMetricsObjectId(req.query.clientId) || undefined;
 
-    const matchStage = {
-      level: 'campaign',
-      date: { $gte: since, $lte: until },
-    };
-    const clientObjectId = clientId && /^[0-9a-fA-F]{24}$/.test(clientId)
-      ? new mongoose.Types.ObjectId(clientId)
-      : null;
-    if (clientObjectId) {
-      matchStage.client_id = clientObjectId;
-    }
+    const rows = await metricsByDay({ clientIds, from, to });
 
-    // IST-shifted window for Lead filtering so the daily buckets line
-    // up with the IST business day (leads store meta_created_time in
-    // UTC). Same convention as getDailyByClient + getClientAnalytics.
-    const IST_MS = 5.5 * 60 * 60 * 1000;
-    const leadSince = new Date(since.getTime() - IST_MS);
-    const leadUntil = new Date(until.getTime() - IST_MS);
-    const leadMatch = {
-      source: 'meta',
-      ...(clientObjectId ? { client: clientObjectId } : {}),
-      $or: [
-        { meta_created_time: { $gte: leadSince, $lte: leadUntil } },
-        { meta_created_time: null, createdAt: { $gte: leadSince, $lte: leadUntil } },
-      ],
-    };
-
-    const [insightRows, crmRows] = await Promise.all([
-      MetaInsights.aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-            leads:    { $sum: '$leads' },
-            // Kept as fallback only — replaced per-day by CRM counts
-            // when the CRM has data for that day. `messaging_conversations_started`
-            // is a DM-open metric, not a conversion count.
-            messages: { $sum: '$messaging_conversations_started' },
-            calls:    { $sum: { $ifNull: ['$actions.click_to_call_native_call_placed', 0] } },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-      Lead.aggregate([
-        { $match: leadMatch },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                format: '%Y-%m-%d',
-                // Bucket by IST calendar date.
-                date: {
-                  $add: [
-                    { $ifNull: ['$meta_created_time', '$createdAt'] },
-                    IST_MS,
-                  ],
-                },
-              },
-            },
-            // Real CRM conversion counts, split by platform bucket.
-            crmForm: {
-              $sum: {
-                $cond: [
-                  { $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] },
-                  0, 1,
-                ],
-              },
-            },
-            crmWhatsapp: {
-              $sum: {
-                $cond: [
-                  { $eq: [{ $toLower: { $ifNull: ['$platform', ''] } }, 'whatsapp'] },
-                  1, 0,
-                ],
-              },
-            },
-          },
-        },
-      ]),
-    ]);
-
-    // Per-day CRM lookup — presence of a key means CRM has leads
-    // for that day and its counts win over the ad-side DM figure.
-    const crmByDate = new Map(
-      crmRows.map((r) => [r._id, { form: r.crmForm || 0, whatsapp: r.crmWhatsapp || 0 }])
-    );
-
-    const rows = insightRows.map((r) => {
-      const crm = crmByDate.get(r._id);
-      return {
-        _id: r._id,
-        // Leads = CRM form leads when present; else Meta ad-side leads.
-        leads: crm ? crm.form : (r.leads || 0),
-        // Messages = actual WhatsApp CRM conversions when present;
-        // else fall back to Meta's DM-opens metric so days with a
-        // spend-but-no-CRM-sync-yet still show something.
-        messages: crm ? crm.whatsapp : (r.messages || 0),
-        calls: r.calls || 0,
-      };
-    });
-
-    const dates    = rows.map((r) => r._id);
-    const leads    = rows.map((r) => r.leads);
-    const messages = rows.map((r) => r.messages);
+    const dates    = rows.map((r) => r.date);
+    const leads    = rows.map((r) => r.formLeads);
+    const messages = rows.map((r) => r.whatsappLeads);
     const calls    = rows.map((r) => r.calls);
 
     const sum = (arr) => arr.reduce((a, b) => a + b, 0);
