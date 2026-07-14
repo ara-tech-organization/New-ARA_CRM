@@ -323,6 +323,11 @@ const FilterBar = ({
       <SearchIcon sx={{ fontSize: 16, color: PALETTE.inkFaint }} />
       <InputBase
         fullWidth
+        // Auto-focus on mount. ClientOverviewCards is unmounted when
+        // the Dashboard's Clients tab isn't active, so this fires
+        // every time the user switches into that tab — letting them
+        // start typing a client name immediately.
+        autoFocus
         placeholder="Search client name…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
