@@ -248,10 +248,10 @@ const ClientPerformanceCard = ({
                 minWidth: 80,
               }}
             >
-              <Google sx={{ color: "#0F172A", fontSize: 20 }} />
+              <Google sx={{ color: "#1F3966", fontSize: 20 }} />
               <Typography
                 variant="body2"
-                sx={{ fontWeight: 700, color: "#0F172A" }}
+                sx={{ fontWeight: 700, color: "#1F3966" }}
               >
                 GOOGLE
               </Typography>
@@ -372,7 +372,7 @@ const ClientPerformanceCard = ({
 const DashboardPro = () => {
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || "#1F3966";
-  const secondaryColor = accentColor?.primary || "#0F172A";
+  const secondaryColor = accentColor?.primary || "#1F3966";
 
   const [clients, setClients] = useState([]);
   const [todayLeads, setTodayLeads] = useState([]);
@@ -581,7 +581,7 @@ const DashboardPro = () => {
             sx={{
               borderRadius: 3,
               boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-              background: "linear-gradient(135deg, #0F172A 0%, #1e8e3e 100%)",
+              background: "linear-gradient(135deg, #1F3966 0%, #1e8e3e 100%)",
             }}
           >
             <CardContent sx={{ p: 2.5 }}>
@@ -754,7 +754,7 @@ const DashboardPro = () => {
                   />
                   <Bar
                     dataKey="googleLeads"
-                    fill="#0F172A"
+                    fill="#1F3966"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={50}
                   />

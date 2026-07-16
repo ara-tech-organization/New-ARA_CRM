@@ -70,8 +70,8 @@ const getCategoryConfig = (category) => {
     'Banking': { icon: <AccountBalanceIcon />, color: '#10b981' },
     'Cloud Service': { icon: <CloudIcon />, color: '#1F3966' },
     'Website': { icon: <WebsiteIcon />, color: '#1F3966' },
-    'App': { icon: <AppsIcon />, color: '#0F172A' },
-    'Other': { icon: <VpnKeyIcon />, color: '#0F172A' },
+    'App': { icon: <AppsIcon />, color: '#1F3966' },
+    'Other': { icon: <VpnKeyIcon />, color: '#1F3966' },
   };
   return configs[category] || configs['Other'];
 };
@@ -110,7 +110,7 @@ const safeOpenUrl = (raw) => {
 const PersonalVault = () => {
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#1F3966';
-  const secondaryColor = accentColor?.primary || '#0F172A';
+  const secondaryColor = accentColor?.primary || '#1F3966';
   const { user } = useSelector((state) => state.auth);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';

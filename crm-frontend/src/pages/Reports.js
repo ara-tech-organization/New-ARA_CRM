@@ -78,10 +78,10 @@ const METRIC_CONFIG = {
     bgColor: '#1F396615',
   },
   metaWhatsapp: {
-    color: '#0F172A',
+    color: '#1F3966',
     label: 'Meta WhatsApp Leads',
     icon: <WhatsApp />,
-    bgColor: '#0F172A15',
+    bgColor: '#1F396615',
   },
   metaTotalLeads: {
     color: '#1F3966',
@@ -701,7 +701,7 @@ const Reports = () => {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, flexWrap: 'wrap', gap: 1.5 }}>
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.3 }}>
-                <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color: '#0F172A', lineHeight: 1.1 }}>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.4rem', color: '#1F3966', lineHeight: 1.1 }}>
                   Analytics & Reports
                 </Typography>
                 <MuiTooltip
@@ -1187,9 +1187,9 @@ const Reports = () => {
           chart with a metric toggle. */}
       {selectedClient && (() => {
         const GOOGLE_GREEN = '#34A853';
-        const BROWN_C = '#0F172A';
+        const BROWN_C = '#1F3966';
         const CREAM_C = '#F1F5F9';
-        const BORDER_C = '#E2E8F0';
+        const BORDER_C = '#E4EAF3';
         const summary = googleData?.summary || null;
         const dailyRaw = Array.isArray(googleData?.dailyMetrics) ? googleData.dailyMetrics : [];
         // Normalise the date to `YYYY-MM-DD` regardless of whether

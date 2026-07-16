@@ -24,7 +24,7 @@ import { exportLeadsToExcel, exportLeadsToPdf } from '../utils/metaLeadsExport';
 // EOD report's click-through (location.state.filterPreset set).
 
 const COPPER = '#1F3966';
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 const CREAM = '#F8FAFC';
 const META_BLUE = '#1877f2';
 

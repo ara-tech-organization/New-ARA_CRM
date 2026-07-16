@@ -33,10 +33,10 @@ import api from '../api/axios';
 // the Google Ads or Meta Ads tab. Nothing loads until the user
 // clicks Generate — the AI call is expensive so we make it explicit.
 
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 const COPPER = '#1F3966';
 const CREAM = '#F1F5F9';
-const BORDER = '#E2E8F0';
+const BORDER = '#E4EAF3';
 const CRIT = '#EF4444';
 const WARN = '#F59E0B';
 const GOOD = '#10B981';

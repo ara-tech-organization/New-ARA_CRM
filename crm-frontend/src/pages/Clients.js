@@ -59,7 +59,7 @@ const Clients = () => {
   const navigate = useNavigate();
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#1F3966';
-  const secondaryColor = accentColor?.primary || '#0F172A';
+  const secondaryColor = accentColor?.primary || '#1F3966';
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);

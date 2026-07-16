@@ -24,7 +24,7 @@ import {
 } from '@mui/icons-material';
 
 const COPPER = '#1F3966';
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 const GREEN = '#10b981';
 const AMBER = '#f59e0b';
 const SLATE = '#64748b';
@@ -34,7 +34,7 @@ const GOOGLE = '#34a853';
 // Used by the row avatar — picks a stable swatch from the client name
 // so the same client always gets the same chip-coloured initial.
 const AVATAR_SWATCHES = [
-  '#1F3966', '#0F172A', '#0ea5e9', '#7c3aed', '#10b981',
+  '#1F3966', '#1F3966', '#0ea5e9', '#7c3aed', '#10b981',
   '#f59e0b', '#ef4444', '#0891b2', '#db2777', '#475569',
 ];
 const swatchFor = (str = '') => {
@@ -407,7 +407,7 @@ const ClientPortalAccess = () => {
                 fontWeight: 700, fontSize: '0.74rem',
                 bgcolor: selected ? BROWN : '#fff',
                 color: selected ? '#fff' : 'text.primary',
-                border: `1px solid ${selected ? BROWN : '#e2e8f0'}`,
+                border: `1px solid ${selected ? BROWN : '#E4EAF3'}`,
                 '&:hover': { bgcolor: selected ? BROWN : `${COPPER}14` },
               }}
             />
@@ -531,7 +531,7 @@ const ClientPortalAccess = () => {
                         onClick={() => openEdit(c)}
                         sx={{
                           fontSize: '0.74rem', fontWeight: 700, py: 0.3,
-                          color: BROWN, borderColor: '#e2e8f0',
+                          color: BROWN, borderColor: '#E4EAF3',
                           '&:hover': { borderColor: COPPER, bgcolor: `${COPPER}10` },
                         }}
                       >

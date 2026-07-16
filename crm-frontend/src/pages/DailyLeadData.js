@@ -725,7 +725,7 @@ const DailyLeadData = () => {
                         <Chip
                           label={entry.metaWhatsapp || 0}
                           size="small"
-                          sx={{ bgcolor: '#0F172A15', color: '#0F172A', fontWeight: 600, minWidth: 40 }}
+                          sx={{ bgcolor: '#1F396615', color: '#1F3966', fontWeight: 600, minWidth: 40 }}
                         />
                       </TableCell>
                       <TableCell align="center" sx={{ bgcolor: '#1F396605' }}>
@@ -750,7 +750,7 @@ const DailyLeadData = () => {
                       </Typography>
                     </TableCell>
                     <TableCell align="center" sx={{ bgcolor: '#1F396610' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#0F172A' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: '#1F3966' }}>
                         {dailyTotals.metaWhatsapp}
                       </Typography>
                     </TableCell>

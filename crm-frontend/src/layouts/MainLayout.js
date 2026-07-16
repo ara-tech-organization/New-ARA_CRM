@@ -115,7 +115,7 @@ const MainLayout = () => {
   const isDarkMode = darkMode === 'dark';
 
   // Brand colors: slate for structure, teal for accents
-  const primaryColor = accentColor?.primary || '#0F172A';
+  const primaryColor = accentColor?.primary || '#1F3966';
   const secondaryColor = accentColor?.secondary || '#F4B929';
 
   // Check if user is super admin or admin (full access)

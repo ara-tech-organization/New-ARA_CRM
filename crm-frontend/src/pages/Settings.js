@@ -17,7 +17,7 @@ import api from '../api/axios';
 import { loadUserFromStorage } from '../store/slices/authSlice';
 
 const COPPER = '#1F3966';
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 
 // Max base64 size we'll send to the backend. The browser-side resize
 // below keeps photos comfortably under this, but the check is here

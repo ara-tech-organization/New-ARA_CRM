@@ -38,10 +38,10 @@ const validationSchema = Yup.object({
 const PRIMARY = '#1F3966';       // Signature Navy
 const PRIMARY_DEEP = '#15294D';  // Deeper navy for hover / bolder accents
 const ACCENT = '#F4B929';        // Signature Gold
-const INK = '#0F172A';           // Slate ink
+const INK = '#0F172A';           // Slate ink for text
 const INK_MUTED = '#475569';
 const GROUND = '#F8FAFC';
-const CARD_BORDER = '#E2E8F0';
+const CARD_BORDER = '#E2E8F0';   // Slate-200 border
 
 const Login = () => {
   const navigate = useNavigate();

@@ -62,7 +62,7 @@ export const TableLoader = ({ rows = 5, message = 'Fetching records...' }) => {
             borderRadius: 1,
             background: theme.palette.mode === 'dark'
               ? `linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%)`
-              : 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)',
+              : 'linear-gradient(90deg, #f1f5f9 25%, #E4EAF3 50%, #f1f5f9 75%)',
             backgroundSize: '200% 100%',
             animation: `${shimmer} 1.5s ease-in-out infinite`,
             animationDelay: `${i * 0.1}s`,
@@ -115,7 +115,7 @@ export const CardLoader = ({ count = 4, message = 'Loading...' }) => {
               borderRadius: 2,
               background: theme.palette.mode === 'dark'
                 ? `linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%)`
-                : 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)',
+                : 'linear-gradient(90deg, #f1f5f9 25%, #E4EAF3 50%, #f1f5f9 75%)',
               backgroundSize: '200% 100%',
               animation: `${shimmer} 1.5s ease-in-out infinite`,
               animationDelay: `${i * 0.15}s`,

@@ -30,7 +30,7 @@ import { enGB } from 'date-fns/locale';
 import { format as fmtDateFn, parseISO, isValid as isValidDate } from 'date-fns';
 
 const COPPER = '#1F3966';
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
 
@@ -585,7 +585,7 @@ const AdsDashboard = () => {
                             <LinearProgress
                               variant="determinate"
                               value={pct}
-                              sx={{ height: 8, borderRadius: 4, bgcolor: '#E2E8F0', '& .MuiLinearProgress-bar': { bgcolor: pct > 90 ? '#ef4444' : GOOGLE_GREEN, borderRadius: 4 } }}
+                              sx={{ height: 8, borderRadius: 4, bgcolor: '#E4EAF3', '& .MuiLinearProgress-bar': { bgcolor: pct > 90 ? '#ef4444' : GOOGLE_GREEN, borderRadius: 4 } }}
                             />
                             <Typography sx={{ fontSize: '0.68rem', color: 'text.secondary', mt: 0.3 }}>{pct.toFixed(0)}% utilized</Typography>
                           </Paper>

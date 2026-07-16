@@ -34,7 +34,7 @@ import {
 } from 'recharts';
 
 const COPPER = '#1F3966';
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
 
@@ -972,7 +972,7 @@ const ClientAdDetails = () => {
                                   <stop offset="95%" stopColor={GOOGLE_GREEN} stopOpacity={0.02} />
                                 </linearGradient>
                               </defs>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                              <CartesianGrid strokeDasharray="3 3" stroke="#E4EAF320" vertical={false} />
                               <XAxis
                                 dataKey="label"
                                 tickLine={false}
@@ -1362,7 +1362,7 @@ const ClientAdDetails = () => {
                                   <stop offset="95%" stopColor={META_BLUE} stopOpacity={0.02} />
                                 </linearGradient>
                               </defs>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                              <CartesianGrid strokeDasharray="3 3" stroke="#E4EAF320" vertical={false} />
                               <XAxis
                                 dataKey="hourPart"
                                 tickLine={false}
@@ -1436,7 +1436,7 @@ const ClientAdDetails = () => {
                                 <stop offset="95%" stopColor={META_BLUE} stopOpacity={0.02} />
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E4EAF320" vertical={false} />
                             <XAxis
                               dataKey="datePart"
                               tickLine={false}
@@ -1598,7 +1598,8 @@ const ClientAdDetails = () => {
 // uses the agency `api` instance instead of the portal's clientApi.
 const AdminEodReportPanel = ({ clientId, clientName, apiInstance, onJumpToLeads }) => {
   const [view, setView] = useState('daily');
-  const SELECTED = '#8B1F2F';
+  // Navy primary — matches the app-wide theme instead of the old maroon.
+  const SELECTED = '#1F3966';
 
   const ToggleBtn = ({ value, label }) => {
     const active = view === value;
@@ -1662,10 +1663,10 @@ const AdminEodReportPanel = ({ clientId, clientName, apiInstance, onJumpToLeads 
 // Derives `fu_count` + `latest_followup` client-side from
 // `lead.follow_ups[]` so we can reuse the existing /analytics endpoint.
 const AdminLeadsTablePanel = ({ clientId, apiInstance }) => {
-  const TBL_BROWN = '#0F172A';
+  const TBL_BROWN = '#1F3966';
   const TBL_COPPER = '#1F3966';
   const TBL_CREAM = '#F1F5F9';
-  const TBL_BORDER = '#E2E8F0';
+  const TBL_BORDER = '#E4EAF3';
 
   const today = new Date().toISOString().slice(0, 10);
   const [from, setFrom] = useState(today);

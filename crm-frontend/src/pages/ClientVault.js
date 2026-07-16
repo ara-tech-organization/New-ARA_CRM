@@ -81,7 +81,7 @@ const safeOpenUrl = (raw) => {
 const ClientVault = () => {
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#1F3966';
-  const secondaryColor = accentColor?.primary || '#0F172A';
+  const secondaryColor = accentColor?.primary || '#1F3966';
 
   // Main API state - only source of clients
   const [clients, setClients] = useState([]);
@@ -174,7 +174,7 @@ const ClientVault = () => {
       'Google Ads': { icon: <GoogleIcon />, color: '#1F3966' },
       'Email': { icon: <EmailIcon />, color: '#1F3966' },
       'Website': { icon: <WebsiteIcon />, color: '#10b981' },
-      'Other': { icon: <VpnKeyIcon />, color: '#0F172A' },
+      'Other': { icon: <VpnKeyIcon />, color: '#1F3966' },
     };
     return configs[type] || configs['Other'];
   };

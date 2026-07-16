@@ -109,7 +109,7 @@ const StatCard = ({ title, value, icon, color, loading }) => (
 const DailyEntry = () => {
   const { accentColor } = useContext(ThemeContext);
   const primaryColor = accentColor?.secondary || '#1F3966';
-  const secondaryColor = accentColor?.primary || '#0F172A';
+  const secondaryColor = accentColor?.primary || '#1F3966';
 
   const dispatch = useDispatch();
 
@@ -542,7 +542,7 @@ const DailyEntry = () => {
                             <Chip
                               label={entry.metaWhatsapp || 0}
                               size="small"
-                              sx={{ bgcolor: '#0F172A15', color: '#0F172A', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#1F396615', color: '#1F3966', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="right">
@@ -559,7 +559,7 @@ const DailyEntry = () => {
                             <Chip
                               label={entry.googleCall || 0}
                               size="small"
-                              sx={{ bgcolor: '#0F172A15', color: '#0F172A', fontWeight: 700, minWidth: 45 }}
+                              sx={{ bgcolor: '#1F396615', color: '#1F3966', fontWeight: 700, minWidth: 45 }}
                             />
                           </TableCell>
                           <TableCell align="center">

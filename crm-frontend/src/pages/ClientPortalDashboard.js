@@ -35,11 +35,17 @@ import MonthlyAbstract from '../components/MonthlyAbstract';
 import PortalDashboardToday from '../components/PortalDashboardToday';
 
 const COPPER = '#1F3966';
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 const CREAM = '#F8FAFC';
 const GOOGLE_GREEN = '#34a853';
 const META_BLUE = '#1877f2';
-const MAROON = '#8B1F2F';
+// Client-portal accent — using the brand's gold secondary here so
+// the portal isn't dominated by navy (the navy shell/sidebar already
+// carries the primary, so buttons/badges/highlights lean on gold).
+const MAROON = '#F4B929';
+// Dark ink for surfaces painted with MAROON where white text won't
+// have enough contrast on gold.
+const MAROON_INK = '#0F172A';
 
 // Match the main CRM axios config: always point at the real backend
 // (REACT_APP_API_URL from .env), falling back to the production host.
@@ -784,7 +790,7 @@ const ClientPortalDashboard = () => {
                           <stop offset="95%" stopColor={GOOGLE_GREEN} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f020" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E4EAF320" vertical={false} />
                       <XAxis dataKey="datePart" tickLine={false} axisLine={false} height={45}
                         tick={({ x, y, index }) => {
                           const row = spikeChartData[index];
@@ -1332,7 +1338,11 @@ const MetaAdsKpiGrid = ({ metaData }) => {
 // EOD tab can show both views without occupying two top-level tabs.
 const EodReportPanel = ({ clientId, clientName, clientApi, onJumpToLeads }) => {
   const [view, setView] = useState('daily');     // 'daily' | 'monthly'
-  const SELECTED = '#8B1F2F';
+  // Gold secondary — the portal accent. Gold background needs dark
+  // text to stay readable, so ACTIVE_INK swaps in for '#fff' when the
+  // button is selected.
+  const SELECTED = '#F4B929';
+  const ACTIVE_INK = '#0F172A';
 
   const ToggleBtn = ({ value, label }) => {
     const active = view === value;
@@ -1343,7 +1353,8 @@ const EodReportPanel = ({ clientId, clientName, clientApi, onJumpToLeads }) => {
         sx={{
           textTransform: 'none', fontWeight: 700, px: 2, py: 0.6,
           bgcolor: active ? SELECTED : '#fff',
-          color: active ? '#fff' : SELECTED,
+          // Active: dark text on gold. Inactive: gold text on white.
+          color: active ? ACTIVE_INK : SELECTED,
           border: `1px solid ${SELECTED}`,
           borderRadius: 1,
           minWidth: 110,

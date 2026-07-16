@@ -35,7 +35,14 @@ import {
 //           per-platform counts and a "view leads" jump.
 //   row 3 — Response breakdown (badge grid) + Appointment status today.
 
-const MAROON = '#8B1F2F';
+// The client portal was dominated by navy primary — swapped this
+// accent to the brand's gold secondary so header borders, buttons,
+// progress bar, and mini highlight tiles carry the secondary colour
+// and break up the navy-heavy shell above/around them.
+const MAROON = '#F4B929';
+// Ink for surfaces painted with MAROON where white text was used
+// before. Gold + dark text keeps WCAG contrast readable.
+const MAROON_INK = '#0F172A';
 
 const SOURCE_CARDS = [
   // (label, key into leads_abstract, icon, accent colour)
@@ -299,7 +306,8 @@ const PortalDashboardToday = ({ clientId, apiInstance, displayName }) => {
                   variant="contained"
                   onClick={() => fetchReport()}
                   sx={{
-                    bgcolor: MAROON, color: '#fff',
+                    // Gold background → dark text for contrast.
+                    bgcolor: MAROON, color: MAROON_INK,
                     '&:hover': { bgcolor: MAROON, filter: 'brightness(0.92)' },
                   }}
                 >

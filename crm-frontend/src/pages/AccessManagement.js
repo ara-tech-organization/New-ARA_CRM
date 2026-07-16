@@ -152,7 +152,7 @@ const labelForRole = (role) => roleLabelMap[role] || role || '—';
 // copper preset was painting the Add User button white-on-cream and
 // hiding the label completely.
 const COPPER = '#1F3966';
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 
 const AccessManagement = () => {
   const primaryColor = COPPER;
@@ -619,7 +619,7 @@ const AccessManagement = () => {
             size="small" variant="outlined" disabled={disabled}
             startIcon={<SelectAllIcon sx={{ fontSize: 16 }} />}
             onClick={handleSelectAll}
-            sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#e2e8f0', color: 'text.primary' }}
+            sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#E4EAF3', color: 'text.primary' }}
           >
             Select all
           </Button>
@@ -627,7 +627,7 @@ const AccessManagement = () => {
             size="small" variant="outlined" disabled={disabled || selectedIds.length === 0}
             startIcon={<ClearIcon sx={{ fontSize: 16 }} />}
             onClick={handleClear}
-            sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#e2e8f0', color: 'text.primary' }}
+            sx={{ textTransform: 'none', fontWeight: 600, borderColor: '#E4EAF3', color: 'text.primary' }}
           >
             Clear
           </Button>
@@ -664,7 +664,7 @@ const AccessManagement = () => {
                   cursor: (disabled || lockedForRole) ? 'not-allowed' : 'pointer',
                   position: 'relative',
                   borderRadius: 2,
-                  borderColor: checked ? primaryColor : '#e2e8f0',
+                  borderColor: checked ? primaryColor : '#E4EAF3',
                   borderWidth: checked ? 2 : 1,
                   bgcolor: checked ? `${primaryColor}10` : '#fff',
                   transition: 'all 0.15s',

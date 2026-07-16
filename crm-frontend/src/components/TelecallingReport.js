@@ -315,10 +315,10 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads, t
   // Software palette — brown banners, copper sub-banners, cream rows.
   // Red highlight stays red on purpose: it marks the worst metric
   // (Achieved / Projection %) and the warning colour reads instantly.
-  const BROWN = '#0F172A';
+  const BROWN = '#1F3966';
   const COPPER = '#1F3966';
   const CREAM = '#F1F5F9';
-  const BORDER = '#E2E8F0';
+  const BORDER = '#E4EAF3';
   const RED_HL = '#D9534F';
   const RED_HL_BG = '#FBE4E2';
   // Editable-cell paint — a warm yellow-cream that's visibly different
@@ -548,36 +548,6 @@ const TelecallingReport = ({ clientId, apiInstance, clientName, onJumpToLeads, t
           Refresh
         </Button>
       </Paper>
-
-      {/* Legend — two small chips that teach the visual language used
-          throughout the report so users know which cells they can
-          click into vs which ones are auto-fetched. */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap', px: 0.4 }}>
-        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', fontWeight: 600 }}>
-          Legend:
-        </Typography>
-        <Box sx={{
-          display: 'inline-flex', alignItems: 'center', gap: 0.6,
-          px: 0.9, py: 0.3, borderRadius: 1,
-          border: `1px solid ${BORDER}`, backgroundColor: EDITABLE_BG,
-          position: 'relative',
-        }}>
-          <EditIcon sx={{ fontSize: 12, color: COPPER, opacity: 0.8 }} />
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: BROWN }}>
-            Editable — click to type
-          </Typography>
-        </Box>
-        <Box sx={{
-          display: 'inline-flex', alignItems: 'center', gap: 0.6,
-          px: 0.9, py: 0.3, borderRadius: 1,
-          border: `1px solid ${BORDER}`, backgroundColor: '#fff',
-        }}>
-          <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: BORDER }} />
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: BROWN }}>
-            Read-only — auto-fetched from leads
-          </Typography>
-        </Box>
-      </Box>
 
       {/* Header card — TELECALLING REPORT - <CLIENT>  |  DATE  |  DD-MM-YYYY */}
       <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1 }}>

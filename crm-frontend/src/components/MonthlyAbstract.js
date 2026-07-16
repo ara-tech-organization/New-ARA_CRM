@@ -19,10 +19,10 @@ import EditIcon from '@mui/icons-material/Edit';
 
 // Software palette — same constants the EOD report and Client Portal
 // Access page use, so the three reports read as one product.
-const BROWN = '#0F172A';
+const BROWN = '#1F3966';
 const COPPER = '#1F3966';
 const CREAM = '#F1F5F9';
-const BORDER = '#E2E8F0';
+const BORDER = '#E4EAF3';
 const SOFT_HL = '#FCE7C8';      // amber-cream highlight for emphasis columns
 // Editable-cell paint — same warm yellow-cream the EOD report uses,
 // plus a slightly warmer hover state. Pairs with a tiny ✏️ corner
@@ -404,34 +404,6 @@ const MonthlyAbstract = ({ clientId, apiInstance, telecallerOnly = false }) => {
           </Box>
         </CardContent>
       </Card>
-
-      {/* Legend — same visual language as the EOD report so users
-          carry a single mental model between the two views. */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap', px: 0.4 }}>
-        <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary', fontWeight: 600 }}>
-          Legend:
-        </Typography>
-        <Box sx={{
-          display: 'inline-flex', alignItems: 'center', gap: 0.6,
-          px: 0.9, py: 0.3, borderRadius: 1,
-          border: `1px solid ${BORDER}`, backgroundColor: EDITABLE_BG,
-        }}>
-          <EditIcon sx={{ fontSize: 12, color: COPPER, opacity: 0.8 }} />
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: BROWN }}>
-            Editable — click to type
-          </Typography>
-        </Box>
-        <Box sx={{
-          display: 'inline-flex', alignItems: 'center', gap: 0.6,
-          px: 0.9, py: 0.3, borderRadius: 1,
-          border: `1px solid ${BORDER}`, backgroundColor: '#fff',
-        }}>
-          <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: BORDER }} />
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: BROWN }}>
-            Read-only — auto-fetched
-          </Typography>
-        </Box>
-      </Box>
 
       {error && <Alert severity="error" sx={{ borderRadius: 1.5 }}>{error}</Alert>}
 
