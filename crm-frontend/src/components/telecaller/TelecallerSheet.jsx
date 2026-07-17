@@ -46,7 +46,10 @@ const COLUMNS = [
   { key: 'source_sheet',          label: 'SOURCE',                        width: 150, kind: 'select', options: SOURCE_OPTIONS },
   { key: 'name',                  label: 'NAME',                          width: 180, kind: 'text', required: true },
   { key: 'contact',               label: 'CONTACT',                       width: 130, kind: 'phone' },
-  { key: 'lead_location',         label: 'LOCATION',                      width: 140, kind: 'text' },
+  // wrap: true tells the readOnly renderer to allow multi-line
+  // wrapping for long addresses like "no460 1st b cross main road" —
+  // ellipsis truncation loses the numerical part the telecaller needs.
+  { key: 'lead_location',         label: 'LOCATION',                      width: 170, kind: 'text', wrap: true },
   { key: 'hair_or_skin',          label: 'HAIR/SKIN',                     width:  90, kind: 'select', options: HAIR_OR_SKIN_OPTIONS },
   { key: 'telecaller_name',       label: 'TELECALLER',                    width: 130, kind: 'text' },
   { key: 'first_call_date',       label: 'FIRST CALL DATE',               width: 130, kind: 'date',   readOnly: true },
@@ -102,7 +105,72 @@ const normaliseContact = (raw) => {
   return trimmed.length >= 10 ? trimmed.slice(-10) : trimmed;
 };
 
+// Meta `platform` enum → sheet SOURCE dropdown value. Used as the
+// display fallback for Meta-sync leads whose `source_sheet` field
+// wasn't touched by the migration yet.
+const PLATFORM_TO_SOURCE = {
+  whatsapp:  'WHATS APP',
+  instagram: 'INSTAGRAM',
+  facebook:  'FACEBOOK',
+  messenger: 'FACEBOOK',
+};
+
+// Fish a location-ish answer out of Meta's raw_field_data payload
+// (array of {name, values} OR flat {key: value} map). Preference
+// order matches how humans read an address:
+//   1. explicit city / town / place / location
+//   2. street_address / address / area / locality  ← "Mahalakshmi layout"
+//   3. first values-carrying key that looks address-ish
+// Used only as the display fallback when the CRM's own
+// `lead_location` field is empty.
+const readLocationFromRaw = (rfd) => {
+  if (!rfd) return '';
+  const CITY_RE   = /(^|_)(city|town|place|location)(\?|$|_)/i;
+  const STREET_RE = /(^|_)(street_address|address|street|area|locality|landmark)(\?|$|_)/i;
+  const asString = (v) => (Array.isArray(v) ? v.join(', ') : String(v || ''));
+
+  const scan = (entries) => {
+    let cityHit = '', streetHit = '';
+    for (const { key, value } of entries) {
+      if (!cityHit   && CITY_RE.test(key))   cityHit   = asString(value);
+      if (!streetHit && STREET_RE.test(key)) streetHit = asString(value);
+    }
+    return cityHit || streetHit;
+  };
+
+  if (Array.isArray(rfd)) {
+    return scan(rfd
+      .filter((e) => e?.name)
+      .map((e) => ({ key: e.name, value: Array.isArray(e.values) ? e.values : e.value })));
+  }
+  if (typeof rfd === 'object') {
+    return scan(Object.entries(rfd).map(([k, v]) => ({ key: k, value: v })));
+  }
+  return '';
+};
+
+// A lead is "synced" when it came from Meta's webhook / sync pipeline
+// (it has a Meta-issued leadgen id). For those rows, NAME / SOURCE /
+// CONTACT / LOCATION / DATE all originate from Meta's form
+// submission — the telecaller shouldn't edit them (fixing a typo
+// would silently diverge from Meta's audit record and confuse
+// deduplication). Manually-added rows have no leadgen id and stay
+// fully editable so the telecaller can key in walk-in / referral
+// leads from scratch.
+const isSyncedLead = (lead) => !!(lead && lead.meta_leadgen_id);
+
+// Sheet columns whose values arrive from Meta on synced leads —
+// locked read-only for those rows, editable for everyone else.
+const SYNCED_LOCKED_COLS = new Set([
+  'date', 'source_sheet', 'name', 'contact', 'lead_location',
+]);
+
 // Read the current display value from a lead for a given column.
+// Fallbacks matter: Meta-sync leads store their SOURCE in `platform`,
+// their CONTACT in `phone`, their DATE in `meta_created_time`, and
+// their LOCATION inside `raw_field_data`. Reading through those
+// aliases means the sheet works on day one for freshly-synced leads —
+// without waiting for the migration script to run.
 const readCell = (lead, col) => {
   switch (col.key) {
     case 'follow_up_number': {
@@ -119,6 +187,20 @@ const readCell = (lead, col) => {
       const anchor = lead.date || lead.meta_created_time || lead.createdAt;
       return anchor ? new Date(anchor).toLocaleString('en-GB', { month: 'long' }) : '';
     }
+    case 'date':
+      // Sheet's own DATE field first; otherwise Meta's authoritative
+      // form-submission time; otherwise ingestion timestamp.
+      return lead.date || lead.meta_created_time || lead.createdAt || '';
+    case 'source_sheet':
+      // Explicit sheet value wins; otherwise infer from Meta platform.
+      return lead.source_sheet || PLATFORM_TO_SOURCE[String(lead.platform || '').toLowerCase()] || '';
+    case 'contact':
+      // Prefer the normalised `contact`; otherwise normalise `phone`
+      // on the fly so the value displays consistently as 10 digits.
+      return lead.contact || normaliseContact(lead.phone);
+    case 'lead_location':
+      // Prefer telecaller-typed location; otherwise Meta form's city.
+      return lead.lead_location || readLocationFromRaw(lead.raw_field_data);
     default:
       return lead[col.key] ?? '';
   }
@@ -228,10 +310,14 @@ const TelecallerSheet = ({
   // ─── Add a fresh blank row at the top ──────────────────────────
   const handleAddRow = useCallback(async () => {
     try {
-      // Server requires name + phone; use placeholders the user can
-      // overwrite as their first two edits.
+      // `sheet_blank: true` tells the server to skip the strict name
+      // and phone validation used by the legacy Add-WhatsApp-Lead
+      // dialog. Walk-in / referral leads are captured live and the
+      // telecaller fills the name + phone inline as the customer
+      // gives them — a hard requirement blocks the flow.
       const created = await onAddLead({
-        name: 'New Lead',
+        sheet_blank: true,
+        name: '',
         phone: '',
         date: new Date(),
         telecaller_name: telecallerName || '',
@@ -301,6 +387,12 @@ const TelecallerSheet = ({
     const value = readCell(lead, col);
     const displayValue = value === null || value === undefined ? '' : String(value);
     const isSaving = savingCellKey === `${lead._id}:${col.key}`;
+    // Effective readOnly = column-level readOnly OR (synced lead AND
+    // this is one of the 5 Meta-owned columns). Meta-sync leads must
+    // preserve NAME/SOURCE/CONTACT/LOCATION/DATE from the submission
+    // record — editing them would silently diverge from Meta's audit
+    // trail and break deduplication.
+    const effReadOnly = col.readOnly || (isSyncedLead(lead) && SYNCED_LOCKED_COLS.has(col.key));
     const commonWrap = {
       ref: (el) => { if (el) cellRefs.current[`${rowIdx}:${colIdx}`] = el; },
       'data-cell-row': rowIdx,
@@ -312,9 +404,9 @@ const TelecallerSheet = ({
         outline: 'none',
         '&:focus-within': { bgcolor: CELL_FOCUS },
         opacity: isSaving ? 0.55 : 1,
-        cursor: col.readOnly ? 'default' : 'text',
+        cursor: effReadOnly ? 'default' : 'text',
       },
-      tabIndex: col.readOnly && col.kind !== 'actions' ? -1 : 0,
+      tabIndex: effReadOnly && col.kind !== 'actions' ? -1 : 0,
     };
 
     // Actions column: WhatsApp deep-link + delete
@@ -349,17 +441,39 @@ const TelecallerSheet = ({
       );
     }
 
-    if (col.readOnly) {
-      // Textarea / month / follow_up_number etc. — display only.
+    if (effReadOnly) {
+      // Column-level readOnly (textarea / month / follow_up_number)
+      // OR a Meta-locked column on a synced lead — display only. On
+      // synced leads the cell also gets a soft slate background so it
+      // reads visually distinct from editable fields and telecallers
+      // don't waste a click trying to type into it.
       const display = col.kind === 'date' ? fmtDate(displayValue) : displayValue;
+      const syncedLock = isSyncedLead(lead) && SYNCED_LOCKED_COLS.has(col.key);
+      // Wrap behaviour — three modes:
+      //   textarea (history columns)   → pre-line, no truncation
+      //   col.wrap (location)          → normal wrap, word-break, no ellipsis
+      //   everything else              → single line, ellipsis on overflow
+      const wraps = col.kind === 'textarea' || col.wrap;
       return (
-        <Box {...commonWrap} sx={{
-          ...commonWrap.sx,
-          color: '#475569', whiteSpace: col.kind === 'textarea' ? 'pre-line' : 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis',
-          fontSize: col.kind === 'textarea' ? '0.7rem' : '0.78rem',
-          lineHeight: col.kind === 'textarea' ? 1.25 : 1.4,
-        }}>
+        <Box {...commonWrap}
+          title={syncedLock ? 'Locked · came from Meta form submission' : (wraps ? displayValue : undefined)}
+          sx={{
+            ...commonWrap.sx,
+            color: '#475569',
+            whiteSpace: col.kind === 'textarea' ? 'pre-line' : (col.wrap ? 'normal' : 'nowrap'),
+            overflow: 'hidden',
+            textOverflow: wraps ? 'clip' : 'ellipsis',
+            wordBreak: col.wrap ? 'break-word' : undefined,
+            fontSize: col.kind === 'textarea' ? '0.7rem' : '0.78rem',
+            lineHeight: col.kind === 'textarea' ? 1.25 : 1.35,
+            // Let a wrapping cell grow the row height instead of
+            // getting cropped — align its contents to the top so
+            // multi-line rows read like a proper address block.
+            alignItems: wraps ? 'flex-start' : 'center',
+            py: wraps ? 0.5 : 0.4,
+            ...(syncedLock && { bgcolor: '#F8FAFC', fontWeight: 500 }),
+          }}
+        >
           {display}
         </Box>
       );

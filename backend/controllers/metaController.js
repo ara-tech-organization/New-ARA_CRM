@@ -1326,30 +1326,53 @@ export const updateClientLead = async (req, res) => {
   const prevFollowUpsLength = Array.isArray(lead.follow_ups) ? lead.follow_ups.length : 0;
   const prevAppointmentDate = lead.appointment_date;
 
-  applyPatchToLead(lead, req.body);
-
-  // Automation — reminder auto-suggest / history append / attempt
-  // counter / DARMANT flip / auto-stamp first_call_date + appointment_booked_date.
-  // `reminderExplicitlySet` prevents overwriting a reminder the user
-  // typed in the same request.
-  const reminderExplicitlySet =
-    Object.prototype.hasOwnProperty.call(req.body, 'next_followup_date') ||
-    Object.prototype.hasOwnProperty.call(req.body, 'reminder_date');
-  runTelecallerAutomation(lead, { prevFollowUpsLength, prevAppointmentDate, reminderExplicitlySet });
-
+  // Wrap patch + automation + save in ONE try so any throw at any
+  // stage (bad enum in patch, JS error inside automation, mongoose
+  // validation on save) returns a useful message instead of a
+  // generic 500. Prior version only caught save errors and swallowed
+  // the actual message for anything upstream.
   try {
+    applyPatchToLead(lead, req.body);
+
+    const reminderExplicitlySet =
+      Object.prototype.hasOwnProperty.call(req.body, 'next_followup_date') ||
+      Object.prototype.hasOwnProperty.call(req.body, 'reminder_date');
+    runTelecallerAutomation(lead, { prevFollowUpsLength, prevAppointmentDate, reminderExplicitlySet });
+
     await lead.save();
   } catch (err) {
     // Enum validation / unique-partial duplicate — surface the field
     // and message so the grid can toast a helpful error.
     if (err?.name === 'ValidationError') {
       const field = Object.keys(err.errors || {})[0];
-      return res.status(400).json({ success: false, message: err.errors[field]?.message || err.message, field });
+      return res.status(400).json({
+        success: false,
+        message: err.errors[field]?.message || err.message,
+        field,
+      });
     }
     if (err?.code === 11000 && err?.keyPattern?.contact) {
-      return res.status(409).json({ success: false, message: 'Another lead already has this contact number.', field: 'contact' });
+      return res.status(409).json({
+        success: false,
+        message: 'Another lead already has this contact number.',
+        field: 'contact',
+      });
     }
-    throw err;
+    // Anything else — DB unreachable, cast error, mid-save exception.
+    // Log server-side so ops can dig into it AND return the actual
+    // message to the client so the toast shows something useful
+    // instead of a generic "Request failed with status code 500".
+    console.error('updateClientLead: save failed', {
+      leadId: lead?._id,
+      client: lead?.client,
+      body: req.body,
+      err: err?.message,
+      stack: err?.stack,
+    });
+    return res.status(500).json({
+      success: false,
+      message: err?.message || 'Server error while saving lead',
+    });
   }
   res.json({ success: true, lead: lead.toObject() });
 };
@@ -1721,13 +1744,23 @@ export const createClientLead = async (req, res) => {
   const client = await loadClientOr404(req, res);
   if (!client) return;
 
-  const { name, phone, email, manual_source_type, ...rest } = req.body || {};
-  if (!name || !String(name).trim()) {
-    return res.status(400).json({ success: false, message: 'Name is required' });
+  const { name, phone, email, manual_source_type, sheet_blank, ...rest } = req.body || {};
+  // `sheet_blank: true` = the "+" row from the telecaller sheet.
+  // Walk-in / referral leads often have no phone at the moment they're
+  // captured (customer is still standing at the desk), so we accept a
+  // blank name + phone and let the telecaller fill them in inline.
+  // The legacy Add-WhatsApp-Lead dialog does NOT send sheet_blank and
+  // keeps its strict validation, so nothing there changes.
+  if (!sheet_blank) {
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, message: 'Name is required' });
+    }
+    if (!phone || !String(phone).trim()) {
+      return res.status(400).json({ success: false, message: 'Phone is required' });
+    }
   }
-  if (!phone || !String(phone).trim()) {
-    return res.status(400).json({ success: false, message: 'Phone is required' });
-  }
+  const cleanName  = String(name  || '').trim() || 'New Lead';
+  const cleanPhone = String(phone || '').trim();
 
   // Normalize the source — defaults to whatsapp for backwards compat
   // with the original Add-WhatsApp-Lead flow. The dashboard's Leads
@@ -1775,11 +1808,13 @@ export const createClientLead = async (req, res) => {
     source: 'meta',
     platform: platformByType[sourceType] || 'unknown',
     manual_source_type: sourceType,
-    name: String(name).trim(),
+    name: cleanName,
     email: finalEmail,
-    phone: String(phone).trim(),
+    phone: cleanPhone,
     // Normalised contact for the sheet's col 4 + unique-partial index.
-    contact: normaliseContactValue(phone),
+    // Empty phone → empty contact → index skips this row (partial filter
+    // excludes empty contacts) so multiple blank walk-in rows coexist.
+    contact: normaliseContactValue(cleanPhone),
     meta_form_name: sourceLabelMap[sourceType],
     meta_created_time: now,
     // Col 1 defaults to today for manually-created rows. Overridable

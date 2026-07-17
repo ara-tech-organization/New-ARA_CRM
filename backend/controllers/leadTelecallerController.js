@@ -177,11 +177,27 @@ export const importLeadsXlsx = async (req, res) => {
 };
 
 // ─── GET export ───────────────────────────────────────────────────
+// Accepts the same optional from/to query params as listClientLeads
+// so the download matches whatever the user has visible in the sheet.
+// No range → full history (unchanged behaviour when called without params).
 export const exportLeadsXlsx = async (req, res) => {
   const client = await loadClientOr404(req, res);
   if (!client) return;
 
-  const leads = await Lead.find({ client: client._id })
+  const { from, to } = req.query;
+  const filter = { client: client._id };
+  if (from || to) {
+    const dateFilter = {};
+    if (from) dateFilter.$gte = new Date(from);
+    if (to)   dateFilter.$lte = new Date(new Date(to).setHours(23, 59, 59, 999));
+    filter.$or = [
+      { date: dateFilter },
+      { date: { $exists: false }, meta_created_time: dateFilter },
+      { date: { $exists: false }, meta_created_time: { $exists: false }, createdAt: dateFilter },
+    ];
+  }
+
+  const leads = await Lead.find(filter)
     .sort({ date: -1, meta_created_time: -1, createdAt: -1 })
     .lean({ virtuals: true });
 

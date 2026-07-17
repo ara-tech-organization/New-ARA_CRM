@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import {
   Box, Card, CardContent, Typography, Button, Avatar,
-  CircularProgress, Alert, LinearProgress, Snackbar,
+  CircularProgress, Alert, LinearProgress, Snackbar, TextField,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -62,8 +62,19 @@ const ClientPortalLeads = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // ─── Date range (server-side filter) ────────────────────────────
+  // Default to today only — telecallers open the sheet to work
+  // TODAY's leads. Widen the range via the pickers / quick buttons.
+  // Both endpoints (list + export) accept from/to.
+  const isoToday = () => new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState(isoToday());
+  const [dateTo, setDateTo]     = useState(isoToday());
+
   // ─── Sheet filters ──────────────────────────────────────────────
-  const [bucket, setBucket] = useState(location.state?.filterPreset || 'due');
+  // Default active chip = 'all' so today's rows are visible on load.
+  // Users can switch to 'due' / 'fresh' / etc. once telecallers have
+  // logged calls and the buckets have real content.
+  const [bucket, setBucket] = useState(location.state?.filterPreset || 'all');
   const [filters, setFilters] = useState({
     source: '', hair_or_skin: '', telecaller: '', status: '', search: '',
   });
@@ -111,18 +122,24 @@ const ClientPortalLeads = () => {
 
   useEffect(() => { if (!token) navigate('/client-login'); }, [token, navigate]);
 
-  // ─── Full-history fetch ─────────────────────────────────────────
+  // ─── Date-scoped fetch ──────────────────────────────────────────
+  // Server accepts optional from/to (YYYY-MM-DD) — sending both scopes
+  // to a single calendar day; sending different values scopes to a
+  // range; sending neither returns the full history. Re-fires on any
+  // date change via the effect below.
   const fetchLeads = useCallback(async () => {
     const clientId = clientData?._id;
     if (!clientId) return;
     setLoading(true); setError(null);
     try {
-      const res = await clientApi.get(`/meta/client/${clientId}/leads`);
+      const res = await clientApi.get(`/meta/client/${clientId}/leads`, {
+        params: { from: dateFrom, to: dateTo },
+      });
       setLeads(res.data?.leads || []);
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Failed to fetch leads');
     } finally { setLoading(false); }
-  }, [clientApi, clientData]);
+  }, [clientApi, clientData, dateFrom, dateTo]);
 
   useEffect(() => { if (token) fetchLeads(); }, [fetchLeads, token]);
 
@@ -164,7 +181,11 @@ const ClientPortalLeads = () => {
     if (!clientId) return;
     setExporting(true);
     try {
+      // Pass the same from/to so the download matches what's visible
+      // on screen — telecallers who exported "today" wouldn't expect
+      // to open the file and see the entire history.
       const res = await clientApi.get(`/meta/client/${clientId}/leads/export`, {
+        params: { from: dateFrom, to: dateTo },
         responseType: 'blob',
       });
       // Trigger download from the returned blob.
@@ -263,7 +284,7 @@ const ClientPortalLeads = () => {
       </Box>
 
       <Box sx={{ flex: 1, p: { xs: 1.5, md: 2.5 } }}>
-        {/* Header strip — refresh + import/export placeholders (round 3) */}
+        {/* Header strip — date range + quick presets + actions. */}
         <Card variant="outlined" sx={{ mb: 1.5, position: 'relative', overflow: 'hidden' }}>
           {loading && (
             <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, bgcolor: `${NAVY}20`, '& .MuiLinearProgress-bar': { bgcolor: NAVY } }} />
@@ -277,6 +298,51 @@ const ClientPortalLeads = () => {
                 Excel-style workspace · 26 columns · auto-save on blur · Tab / Enter navigates cells.
               </Typography>
             </Box>
+
+            {/* Date range — from + to. Both scoped to a single day
+                (today) by default so the sheet opens on TODAY'S leads.
+                Widen either picker to pull earlier / later windows. */}
+            <TextField
+              type="date" size="small" label="From" value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 150 }} disabled={loading}
+            />
+            <TextField
+              type="date" size="small" label="To" value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ minWidth: 150 }} disabled={loading}
+            />
+
+            {/* Quick presets — same pattern as the admin /client-ads
+                page so the vocabulary stays consistent between the two
+                surfaces. Highlight the button whose range currently
+                matches so the user can see the active preset. */}
+            <Box sx={{ display: 'flex', gap: 0.6 }}>
+              {(() => {
+                const iso = (d) => d.toISOString().slice(0, 10);
+                const today = iso(new Date());
+                const yDate = new Date(); yDate.setDate(new Date().getDate() - 1);
+                const yesterday = iso(yDate);
+                const d7  = new Date(); d7.setDate(new Date().getDate() - 6);
+                const d30 = new Date(); d30.setDate(new Date().getDate() - 29);
+                const isT   = dateFrom === today     && dateTo === today;
+                const isY   = dateFrom === yesterday && dateTo === yesterday;
+                const is7   = dateFrom === iso(d7)   && dateTo === today;
+                const is30  = dateFrom === iso(d30)  && dateTo === today;
+                const active = { bgcolor: NAVY, color: '#fff', borderColor: NAVY, '&:hover': { bgcolor: NAVY_DEEP } };
+                return (
+                  <>
+                    <Button size="small" variant={isT  ? 'contained' : 'outlined'} disabled={loading} sx={isT  ? active : undefined} onClick={() => { setDateFrom(today);     setDateTo(today); }}>Today</Button>
+                    <Button size="small" variant={isY  ? 'contained' : 'outlined'} disabled={loading} sx={isY  ? active : undefined} onClick={() => { setDateFrom(yesterday); setDateTo(yesterday); }}>Yesterday</Button>
+                    <Button size="small" variant={is7  ? 'contained' : 'outlined'} disabled={loading} sx={is7  ? active : undefined} onClick={() => { setDateFrom(iso(d7));   setDateTo(today); }}>Last 7d</Button>
+                    <Button size="small" variant={is30 ? 'contained' : 'outlined'} disabled={loading} sx={is30 ? active : undefined} onClick={() => { setDateFrom(iso(d30));  setDateTo(today); }}>Last 30d</Button>
+                  </>
+                );
+              })()}
+            </Box>
+
             <Button
               size="small" variant="outlined"
               startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
