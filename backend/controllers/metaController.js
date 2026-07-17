@@ -13,6 +13,7 @@ import MetaAdSet from '../models/MetaAdSet.js';
 import MetaAd from '../models/MetaAd.js';
 import MetaInsights from '../models/MetaInsights.js';
 import Lead from '../models/Lead.js';
+import { runTelecallerAutomation } from '../lib/telecallerAutomation.js';
 import AbstractEntry from '../models/AbstractEntry.js';
 import {
   syncAllMetaClients,
@@ -1242,7 +1243,67 @@ const CRM_EDITABLE_FIELDS = [
   'appointment_date',
   'appointment_booked_date',
   'follow_ups',
+  // ── Telecaller-sheet fields (col 1-26 spec, Jul 2026) ─────────
+  'date',                    // col 1
+  'source_sheet',            // col 2 (enum-validated at schema level)
+  'contact',                 // col 4 (normalised in helper below)
+  'hair_or_skin',            // col 6 (enum) — mirrored to lead_category via pre-save hook
+  'reminder_date',           // col 12 — virtual alias over next_followup_date
+  'status_sheet',            // col 22 (enum)
+  'consulted_date',          // col 23
+  'treatment_booked_date',   // col 24
+  'treatment_value',         // col 25
+  // history_not_connected + history_connected + darmant_flagged are
+  // INTENTIONALLY omitted — they're auto-appended / auto-set by
+  // runTelecallerAutomation. Accepting them from the API would let a
+  // client overwrite the audit trail.
 ];
+
+const DATE_FIELDS = new Set([
+  'first_call_date', 'next_followup_date',
+  'appointment_date', 'appointment_booked_date',
+  'date', 'reminder_date', 'consulted_date', 'treatment_booked_date',
+]);
+
+// Normalise a raw phone into the 10-digit representation the schema
+// unique-partial index expects. Strips +91, spaces, hyphens, dots and
+// keeps the last 10 digits when input looks like a longer intl form.
+const normaliseContactValue = (raw) => {
+  if (raw == null) return '';
+  const digits = String(raw).replace(/\D/g, '');
+  if (!digits) return '';
+  const trimmed = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+  return trimmed.length >= 10 ? trimmed.slice(-10) : '';
+};
+
+// Shared body → lead mutator so createClientLead + updateClientLead
+// stay in lock-step (both need the same field-by-field handling
+// including date coercion, normalised contact and follow_ups[] shape).
+const applyPatchToLead = (lead, body) => {
+  for (const key of CRM_EDITABLE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const value = body[key];
+    if (key === 'follow_ups') {
+      // Replace the full array — simpler than diffing, and the table sends
+      // the entire ordered list on every save.
+      lead.follow_ups = Array.isArray(value)
+        ? value.map((f) => ({
+            number: f.number,
+            date: f.date || null,
+            call_label: f.call_label || '',
+            remarks: f.remarks || '',
+            connected: !!f.connected,
+          }))
+        : [];
+    } else if (key === 'contact') {
+      lead.contact = normaliseContactValue(value);
+    } else if (DATE_FIELDS.has(key)) {
+      lead[key] = value ? new Date(value) : null;
+    } else {
+      lead[key] = value;
+    }
+  }
+};
 
 export const updateClientLead = async (req, res) => {
   const client = await loadClientOr404(req, res);
@@ -1258,34 +1319,38 @@ export const updateClientLead = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Lead not found' });
   }
 
-  for (const key of CRM_EDITABLE_FIELDS) {
-    if (!Object.prototype.hasOwnProperty.call(req.body, key)) continue;
-    const value = req.body[key];
-    if (key === 'follow_ups') {
-      // Replace the full array — simpler than diffing, and the table sends
-      // the entire ordered list on every save.
-      lead.follow_ups = Array.isArray(value)
-        ? value.map((f) => ({
-            number: f.number,
-            date: f.date || null,
-            call_label: f.call_label || '',
-            remarks: f.remarks || '',
-            connected: !!f.connected,
-          }))
-        : [];
-    } else if (
-      key === 'first_call_date' ||
-      key === 'next_followup_date' ||
-      key === 'appointment_date' ||
-      key === 'appointment_booked_date'
-    ) {
-      lead[key] = value ? new Date(value) : null;
-    } else {
-      lead[key] = value;
-    }
-  }
+  // Capture pre-save state so runTelecallerAutomation can distinguish
+  // newly-added follow-ups (append history) from an idempotent resend
+  // of the full array (skip append). Ditto for appointment_date so a
+  // second save of the same date doesn't re-stamp appointment_booked_date.
+  const prevFollowUpsLength = Array.isArray(lead.follow_ups) ? lead.follow_ups.length : 0;
+  const prevAppointmentDate = lead.appointment_date;
 
-  await lead.save();
+  applyPatchToLead(lead, req.body);
+
+  // Automation — reminder auto-suggest / history append / attempt
+  // counter / DARMANT flip / auto-stamp first_call_date + appointment_booked_date.
+  // `reminderExplicitlySet` prevents overwriting a reminder the user
+  // typed in the same request.
+  const reminderExplicitlySet =
+    Object.prototype.hasOwnProperty.call(req.body, 'next_followup_date') ||
+    Object.prototype.hasOwnProperty.call(req.body, 'reminder_date');
+  runTelecallerAutomation(lead, { prevFollowUpsLength, prevAppointmentDate, reminderExplicitlySet });
+
+  try {
+    await lead.save();
+  } catch (err) {
+    // Enum validation / unique-partial duplicate — surface the field
+    // and message so the grid can toast a helpful error.
+    if (err?.name === 'ValidationError') {
+      const field = Object.keys(err.errors || {})[0];
+      return res.status(400).json({ success: false, message: err.errors[field]?.message || err.message, field });
+    }
+    if (err?.code === 11000 && err?.keyPattern?.contact) {
+      return res.status(409).json({ success: false, message: 'Another lead already has this contact number.', field: 'contact' });
+    }
+    throw err;
+  }
   res.json({ success: true, lead: lead.toObject() });
 };
 
@@ -1704,6 +1769,7 @@ export const createClientLead = async (req, res) => {
   const finalEmail = cleanEmail
     || `manual-${sourceType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@placeholder.invalid`;
 
+  const now = new Date();
   const doc = {
     client: client._id,
     source: 'meta',
@@ -1712,12 +1778,18 @@ export const createClientLead = async (req, res) => {
     name: String(name).trim(),
     email: finalEmail,
     phone: String(phone).trim(),
+    // Normalised contact for the sheet's col 4 + unique-partial index.
+    contact: normaliseContactValue(phone),
     meta_form_name: sourceLabelMap[sourceType],
-    meta_created_time: new Date(),
+    meta_created_time: now,
+    // Col 1 defaults to today for manually-created rows. Overridable
+    // via the CRM_EDITABLE_FIELDS loop below.
+    date: now,
   };
 
   // Allow-list the CRM telecaller fields so a stray `assignedTo` or
-  // similar can't sneak in. Mirrors updateClientLead's CRM_EDITABLE_FIELDS.
+  // similar can't sneak in. Same handling as updateClientLead — dates
+  // coerced, follow_ups shape-mapped, contact re-normalised if resent.
   for (const key of CRM_EDITABLE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(rest, key)) continue;
     const value = rest[key];
@@ -1731,12 +1803,9 @@ export const createClientLead = async (req, res) => {
             connected: !!f.connected,
           }))
         : [];
-    } else if (
-      key === 'first_call_date' ||
-      key === 'next_followup_date' ||
-      key === 'appointment_date' ||
-      key === 'appointment_booked_date'
-    ) {
+    } else if (key === 'contact') {
+      doc.contact = normaliseContactValue(value);
+    } else if (DATE_FIELDS.has(key)) {
       doc[key] = value ? new Date(value) : null;
     } else {
       doc[key] = value;
@@ -1744,9 +1813,32 @@ export const createClientLead = async (req, res) => {
   }
 
   try {
-    const lead = await Lead.create(doc);
+    // Build the doc, run automation on the plain object BEFORE hitting
+    // the DB so first_call_date / history / DARMANT / reminder are
+    // stamped on the same insert (avoids a second round-trip and
+    // keeps the create + update behaviour identical).
+    const lead = new Lead(doc);
+    const reminderExplicitlySet =
+      Object.prototype.hasOwnProperty.call(rest, 'next_followup_date') ||
+      Object.prototype.hasOwnProperty.call(rest, 'reminder_date');
+    runTelecallerAutomation(lead, {
+      prevFollowUpsLength: 0,       // brand-new lead → append every follow-up
+      prevAppointmentDate: null,
+      reminderExplicitlySet,
+      now,
+    });
+    await lead.save();
     res.status(201).json({ success: true, lead: lead.toObject() });
   } catch (err) {
+    // Enum ValidationError / duplicate-contact unique index → surface
+    // the offending field so the grid can toast a helpful message.
+    if (err?.name === 'ValidationError') {
+      const field = Object.keys(err.errors || {})[0];
+      return res.status(400).json({ success: false, message: err.errors[field]?.message || err.message, field });
+    }
+    if (err?.code === 11000 && err?.keyPattern?.contact) {
+      return res.status(409).json({ success: false, message: 'Another lead already has this contact number.', field: 'contact' });
+    }
     console.error('createClientLead error:', err);
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1796,6 +1888,50 @@ export const deleteClientLead = async (req, res) => {
 
   await lead.deleteOne();
   res.json({ success: true, message: 'Lead deleted', leadId });
+};
+
+// GET /api/meta/client/:clientId/leads?from=YYYY-MM-DD&to=YYYY-MM-DD
+// List every lead for a client — powers the /client-portal/leads
+// telecaller sheet. Lightweight (no spend aggregation) so the sheet
+// can load fast and re-fetch on filter changes without hammering the
+// Meta insights pipeline.
+//
+// Date range is OPTIONAL. Omit both to get the FULL history — the
+// "Due Today" queue chip needs to catch reminders overdue from
+// months ago, so the sheet defaults to loading everything. When
+// `from`/`to` are supplied they filter by the sheet's `date` field
+// (with a fallback to meta_created_time / createdAt for legacy docs
+// missing an explicit date). Portal token scoping honoured.
+export const listClientLeads = async (req, res) => {
+  const client = await loadClientOr404(req, res);
+  if (!client) return;
+
+  const { from, to } = req.query;
+  const filter = { client: client._id };
+
+  if (from || to) {
+    const dateFilter = {};
+    if (from) dateFilter.$gte = new Date(from);
+    if (to)   dateFilter.$lte = new Date(new Date(to).setHours(23, 59, 59, 999));
+    // Match rows whose `date` OR (missing date) `meta_created_time` OR
+    // `createdAt` sits in the window — the migration backfilled `date`
+    // for most docs, but a legacy row created after the migration
+    // ran and before the automation stamped `date` would still exist.
+    filter.$or = [
+      { date: dateFilter },
+      { date: { $exists: false }, meta_created_time: dateFilter },
+      { date: { $exists: false }, meta_created_time: { $exists: false }, createdAt: dateFilter },
+    ];
+  }
+
+  const leads = await Lead.find(filter)
+    // Newest first — matches how the telecaller sheet reads (top of
+    // the grid = most recent capture). The queue chips re-sort in the
+    // client based on the active bucket.
+    .sort({ date: -1, meta_created_time: -1, createdAt: -1 })
+    .lean({ virtuals: true });
+
+  res.json({ success: true, count: leads.length, leads });
 };
 
 // GET /api/meta/client/:clientId/telecalling-report?date=YYYY-MM-DD

@@ -37,6 +37,7 @@ import {
   updateClientLead,
   createClientLead,
   deleteClientLead,
+  listClientLeads,
   getClientsAdsComparison,
   getMetaDashboardOverview,
   getMetaSpendOverview,
@@ -46,6 +47,11 @@ import {
   saveMonthlyAbstractCell,
   updateTelecallingTargets,
 } from "../controllers/metaController.js";
+import {
+  xlsxUpload,
+  importLeadsXlsx,
+  exportLeadsXlsx,
+} from "../controllers/leadTelecallerController.js";
 
 const router = express.Router();
 
@@ -131,6 +137,24 @@ router.post("/client/:clientId/leads", createClientLead);
 // Delete a manual WhatsApp lead. Synced Meta-form leads are blocked
 // by the controller — this endpoint only removes manual entries.
 router.delete("/client/:clientId/leads/:leadId", deleteClientLead);
+
+// List every lead for a client — powers the /client-portal/leads
+// telecaller sheet. Lightweight (no spend aggregation like the
+// analytics endpoint) and returns the full history so the "Due
+// Today" chip can catch overdue reminders from any date.
+router.get("/client/:clientId/leads", listClientLeads);
+
+// Telecaller-sheet xlsx round-trip. Import parses the operator's
+// existing sheet (headers on row 2, data row 3+, dropdown value
+// cleaning, phone normalisation) and upserts by CONTACT. Export
+// produces the exact 26-column layout so the file drops back into
+// the old workflow. multer's memoryStorage — files are small.
+router.post(
+  "/client/:clientId/leads/import",
+  xlsxUpload.single("file"),
+  importLeadsXlsx,
+);
+router.get("/client/:clientId/leads/export", exportLeadsXlsx);
 
 // EOD telecalling report — aggregates day + month metrics for the
 // telecalling dashboard tab on admin and the client portal.
