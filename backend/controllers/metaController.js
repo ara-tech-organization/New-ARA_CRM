@@ -1969,6 +1969,128 @@ export const listClientLeads = async (req, res) => {
   res.json({ success: true, count: leads.length, leads });
 };
 
+// GET /api/meta/active-entities?clientId=<all|ObjectId>
+// Powers the /daily-lead-data page's three "active" tabs:
+//   · Active Campaigns
+//   · Active Ad Sets
+//   · Active Ads
+//
+// "Active" is defined by Meta's own effective_status = 'ACTIVE'
+// (Meta's canonical state — not a sync-time snapshot). Optional
+// clientId narrows to a single client; omit or 'all' returns every
+// Meta-enabled client's entities.
+//
+// One combined endpoint (not three) — the three lists are small
+// enough (dozens of rows each in practice) that a single round-trip
+// is cheaper than three parallel calls from the UI, and the client
+// -name join happens once instead of thrice.
+export const getActiveEntities = async (req, res) => {
+  try {
+    const { clientId } = req.query;
+    const scoped = clientId && clientId !== 'all' && mongoose.isValidObjectId(clientId);
+    const clientFilter = scoped ? { client_id: new mongoose.Types.ObjectId(clientId) } : {};
+
+    // Base filter: effective_status = ACTIVE. Ad-account-level entities
+    // that Meta hasn't returned a status for (e.g. still-syncing on
+    // day 1) get excluded — safer than showing potentially-paused
+    // rows as if they were live.
+    const activeFilter = { ...clientFilter, effective_status: 'ACTIVE' };
+
+    const [campaigns, adsets, ads, clientDocs] = await Promise.all([
+      MetaCampaign.find(activeFilter)
+        .select('client_id ad_account_id campaign_id name objective status effective_status daily_budget lifetime_budget start_time')
+        .lean(),
+      MetaAdSet.find(activeFilter)
+        .select('client_id ad_account_id campaign_id adset_id name status effective_status daily_budget optimization_goal')
+        .lean(),
+      MetaAd.find(activeFilter)
+        .select('client_id ad_account_id campaign_id adset_id ad_id name status effective_status')
+        .lean(),
+      // Pull just enough of each client to label the rows. `_id -> name`
+      // is what the UI needs; no need to hydrate ad-account details.
+      scoped
+        ? Client.find({ _id: clientId }).select('clientName').lean()
+        : Client.find({ meta_enabled: true }).select('clientName').lean(),
+    ]);
+
+    // client_id → clientName lookup. Rows whose client was deleted
+    // (orphan sync data) fall back to a placeholder so the row still
+    // shows up but the label reads clearly.
+    const clientNameById = new Map(clientDocs.map((c) => [String(c._id), c.clientName || '']));
+    const labelledClient = (cid) => clientNameById.get(String(cid)) || '';
+
+    // Also join campaign name onto ad sets + ads so the operator can
+    // see "which campaign this ad set belongs to" without opening
+    // Meta Ads Manager. One pass to build the id → name map.
+    const campaignNameById = new Map(campaigns.map((c) => [c.campaign_id, c.name || '']));
+
+    const shapedCampaigns = campaigns.map((c) => ({
+      _id: c._id,
+      client_id: c.client_id,
+      client_name: labelledClient(c.client_id),
+      campaign_id: c.campaign_id,
+      name: c.name || '',
+      objective: c.objective || '',
+      status: c.status,
+      effective_status: c.effective_status,
+      daily_budget: c.daily_budget || 0,
+      lifetime_budget: c.lifetime_budget || 0,
+      start_time: c.start_time,
+    }));
+
+    const shapedAdsets = adsets.map((a) => ({
+      _id: a._id,
+      client_id: a.client_id,
+      client_name: labelledClient(a.client_id),
+      campaign_id: a.campaign_id,
+      campaign_name: campaignNameById.get(a.campaign_id) || '',
+      adset_id: a.adset_id,
+      name: a.name || '',
+      optimization_goal: a.optimization_goal || '',
+      status: a.status,
+      effective_status: a.effective_status,
+      daily_budget: a.daily_budget || 0,
+    }));
+
+    const shapedAds = ads.map((a) => ({
+      _id: a._id,
+      client_id: a.client_id,
+      client_name: labelledClient(a.client_id),
+      campaign_id: a.campaign_id,
+      campaign_name: campaignNameById.get(a.campaign_id) || '',
+      adset_id: a.adset_id,
+      ad_id: a.ad_id,
+      name: a.name || '',
+      status: a.status,
+      effective_status: a.effective_status,
+    }));
+
+    // Sort each list by client name then entity name so the table
+    // reads alphabetically per client without further client-side work.
+    const alpha = (a, b) =>
+      (a.client_name || '').localeCompare(b.client_name || '') ||
+      (a.name || '').localeCompare(b.name || '');
+    shapedCampaigns.sort(alpha);
+    shapedAdsets.sort(alpha);
+    shapedAds.sort(alpha);
+
+    res.json({
+      success: true,
+      counts: {
+        campaigns: shapedCampaigns.length,
+        adsets: shapedAdsets.length,
+        ads: shapedAds.length,
+      },
+      campaigns: shapedCampaigns,
+      adsets: shapedAdsets,
+      ads: shapedAds,
+    });
+  } catch (err) {
+    console.error('getActiveEntities failed', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // GET /api/meta/client/:clientId/telecalling-report?date=YYYY-MM-DD
 // Powers the EOD Report tab on both the admin Client Ad Details page
 // and the client portal. Aggregates a single client's Lead documents

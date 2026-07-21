@@ -68,9 +68,51 @@ const DailyLeadData = () => {
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   // View tabs:
-  //   0 = "By Client" (the existing detailed table, one row per client per date)
-  //   1 = "Lead Check" (day-wise rollup with Daily / Weekly / Monthly toggle)
+  //   0 = "By Client"          per-client per-date detail
+  //   1 = "Lead Check"         day-wise rollup (Daily / Weekly / Monthly toggle)
+  //   2 = "Active Campaigns"   MetaCampaign rows where effective_status = 'ACTIVE'
+  //   3 = "Active Ad Sets"     MetaAdSet rows      "                                "
+  //   4 = "Active Ads"         MetaAd rows         "                                "
   const [view, setView] = useState(0);
+
+  // ─── Active-entities fetch (tabs 2/3/4) ────────────────────────
+  // Fires only when the user actually visits one of the three tabs —
+  // no point loading N thousand ad rows for a user who never opens
+  // the "Active Ads" tab. Cached across tab-switches on the same
+  // clientId; refreshes automatically when the client dropdown moves.
+  const [activeEntities, setActiveEntities] = useState({
+    loading: false, error: null, forClient: null,
+    counts: { campaigns: 0, adsets: 0, ads: 0 },
+    campaigns: [], adsets: [], ads: [],
+  });
+  const fetchActiveEntities = useCallback(async () => {
+    setActiveEntities((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const params = {};
+      if (selectedClient && selectedClient !== 'all') params.clientId = selectedClient;
+      const res = await api.get('/meta/active-entities', { params });
+      setActiveEntities({
+        loading: false, error: null, forClient: selectedClient,
+        counts: res.data?.counts || { campaigns: 0, adsets: 0, ads: 0 },
+        campaigns: res.data?.campaigns || [],
+        adsets:    res.data?.adsets    || [],
+        ads:       res.data?.ads       || [],
+      });
+    } catch (err) {
+      setActiveEntities((s) => ({
+        ...s,
+        loading: false,
+        error: err?.response?.data?.message || err?.message || 'Failed to load',
+      }));
+    }
+  }, [selectedClient]);
+  // Fetch when: user opens one of the 3 tabs, OR the client filter
+  // changes while such a tab is already open.
+  useEffect(() => {
+    if (view >= 2 && view <= 4 && activeEntities.forClient !== selectedClient) {
+      fetchActiveEntities();
+    }
+  }, [view, selectedClient, fetchActiveEntities, activeEntities.forClient]);
 
   // Clients come from the shared cache (small, slow-changing list shared by other pages).
   const { clients: cachedClients, clientsLoading, fetchClients } = useDataCache();
@@ -468,8 +510,40 @@ const DailyLeadData = () => {
           <Tooltip arrow title="One row per date — totals rolled up across all clients">
             <Tab label="Lead Check" sx={{ textTransform: 'none', fontWeight: 700 }} />
           </Tooltip>
+          <Tooltip arrow title="Every Meta campaign whose effective_status is ACTIVE">
+            <Tab
+              label={`Active Campaigns${activeEntities.forClient === selectedClient ? ` · ${activeEntities.counts.campaigns}` : ''}`}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            />
+          </Tooltip>
+          <Tooltip arrow title="Every Meta ad set whose effective_status is ACTIVE">
+            <Tab
+              label={`Active Ad Sets${activeEntities.forClient === selectedClient ? ` · ${activeEntities.counts.adsets}` : ''}`}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            />
+          </Tooltip>
+          <Tooltip arrow title="Every Meta ad whose effective_status is ACTIVE">
+            <Tab
+              label={`Active Ads${activeEntities.forClient === selectedClient ? ` · ${activeEntities.counts.ads}` : ''}`}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            />
+          </Tooltip>
         </Tabs>
       </Card>
+
+      {/* ── ACTIVE ENTITIES VIEWS (tabs 2/3/4) ────────────────────
+          One compact list per tab. Client dropdown at the top of
+          the page still filters — hitting the same endpoint with a
+          different clientId. Counts refresh via the Tab labels above. */}
+      {view >= 2 && view <= 4 && (
+        <ActiveEntitiesPanel
+          kind={view === 2 ? 'campaigns' : view === 3 ? 'adsets' : 'ads'}
+          state={activeEntities}
+          onRefresh={fetchActiveEntities}
+          primaryColor={primaryColor}
+          selectedClientName={selectedClientName}
+        />
+      )}
 
       {/* ── LEAD CHECK VIEW (day-wise) ───────────────────────────── */}
       {view === 1 && (
@@ -790,6 +864,146 @@ const DailyLeadData = () => {
       </Snackbar>
     </Box>
     </LocalizationProvider>
+  );
+};
+
+// ─── ActiveEntitiesPanel ────────────────────────────────────────
+// Renders the campaign / ad-set / ad table for the three "Active"
+// tabs. Kept as a sub-component so the main page stays readable and
+// the shape is easy to extend (add columns / sort dropdowns / etc.).
+// Column set switches on `kind` — same table shell, different rows.
+const ActiveEntitiesPanel = ({ kind, state, onRefresh, primaryColor, selectedClientName }) => {
+  const { loading, error, campaigns, adsets, ads, counts } = state;
+  const rows = kind === 'campaigns' ? campaigns : kind === 'adsets' ? adsets : ads;
+  const label = kind === 'campaigns' ? 'Active Campaigns'
+              : kind === 'adsets'    ? 'Active Ad Sets'
+              : 'Active Ads';
+  const total = counts[kind] ?? rows.length;
+
+  // Column config per kind. Kept declarative — one line to add a
+  // column, and colgroup widths propagate to the header + body cells
+  // automatically.
+  const columns = kind === 'campaigns'
+    ? [
+        { key: 'client_name', label: 'Client',    width: '22%' },
+        { key: 'name',        label: 'Campaign',  width: '38%' },
+        { key: 'objective',   label: 'Objective', width: '18%' },
+        { key: 'daily_budget', label: 'Daily ₹',  width: '11%', num: true },
+        { key: 'effective_status', label: 'Status', width: '11%' },
+      ]
+    : kind === 'adsets'
+    ? [
+        { key: 'client_name',   label: 'Client',   width: '20%' },
+        { key: 'campaign_name', label: 'Campaign', width: '28%' },
+        { key: 'name',          label: 'Ad Set',   width: '30%' },
+        { key: 'daily_budget',  label: 'Daily ₹',  width: '10%', num: true },
+        { key: 'effective_status', label: 'Status', width: '12%' },
+      ]
+    : [
+        { key: 'client_name',   label: 'Client',   width: '20%' },
+        { key: 'campaign_name', label: 'Campaign', width: '30%' },
+        { key: 'name',          label: 'Ad',       width: '38%' },
+        { key: 'effective_status', label: 'Status', width: '12%' },
+      ];
+
+  return (
+    <Card sx={{ mb: 2 }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5, flexWrap: 'wrap' }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: primaryColor, borderLeft: `3px solid ${primaryColor}`, pl: 1.2 }}>
+            {label}
+          </Typography>
+          <Chip
+            label={`${total}`}
+            size="small"
+            sx={{ bgcolor: `${primaryColor}18`, color: primaryColor, fontWeight: 800 }}
+          />
+          <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
+            · {selectedClientName}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Button
+            size="small" variant="outlined"
+            startIcon={loading ? <CircularProgress size={14} /> : <RefreshIcon />}
+            onClick={onRefresh} disabled={loading}
+          >
+            {loading ? 'Loading…' : 'Refresh'}
+          </Button>
+        </Box>
+
+        {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
+
+        {!loading && rows.length === 0 && !error && (
+          <Box sx={{ py: 6, textAlign: 'center', color: 'text.secondary', fontSize: '0.9rem' }}>
+            No active {kind === 'campaigns' ? 'campaigns' : kind === 'adsets' ? 'ad sets' : 'ads'} for {selectedClientName}.
+          </Box>
+        )}
+
+        {rows.length > 0 && (
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 'calc(100vh - 360px)' }}>
+            <Table stickyHeader size="small">
+              <TableHead>
+                <TableRow>
+                  {columns.map((c) => (
+                    <TableCell
+                      key={c.key}
+                      align={c.num ? 'right' : 'left'}
+                      sx={{
+                        width: c.width, fontWeight: 800, fontSize: '0.72rem',
+                        letterSpacing: '0.5px', textTransform: 'uppercase',
+                        bgcolor: `${primaryColor}10`, color: primaryColor,
+                      }}
+                    >
+                      {c.label}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row._id} hover>
+                    {columns.map((c) => {
+                      const v = row[c.key];
+                      if (c.key === 'effective_status') {
+                        return (
+                          <TableCell key={c.key}>
+                            <Chip
+                              label={v || '—'} size="small"
+                              sx={{
+                                height: 20, fontSize: '0.66rem', fontWeight: 800,
+                                bgcolor: '#DCFCE7', color: '#166534',
+                              }}
+                            />
+                          </TableCell>
+                        );
+                      }
+                      if (c.num) {
+                        // Daily / lifetime budgets are stored in the
+                        // account currency's minor unit (paise for INR).
+                        // Round-to-nearest-rupee is close enough for a
+                        // list view; the client-ads page has the exact
+                        // amount if the operator wants precision.
+                        const asRupees = v ? Math.round(Number(v) / 100) : 0;
+                        return (
+                          <TableCell key={c.key} align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {asRupees ? `₹${asRupees.toLocaleString('en-IN')}` : '—'}
+                          </TableCell>
+                        );
+                      }
+                      return (
+                        <TableCell key={c.key} sx={{ fontSize: '0.82rem' }}>
+                          {v || '—'}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 

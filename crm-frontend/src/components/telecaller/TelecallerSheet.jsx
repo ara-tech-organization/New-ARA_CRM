@@ -5,6 +5,7 @@ import {
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
 import {
   SOURCE_OPTIONS, CALL_LABEL_OPTIONS, RESPONSE_LABEL_OPTIONS,
   APPOINTMENT_STATUS_OPTIONS, FOLLOWUP_CALL_LABEL_OPTIONS, STATUS_SHEET_OPTIONS,
@@ -71,6 +72,9 @@ const COLUMNS = [
   { key: 'treatment_booked_date', label: 'TREATMENT BOOKED DATE',         width: 150, kind: 'date' },
   { key: 'treatment_value',       label: 'TREATMENT VALUE',               width: 130, kind: 'number' },
   { key: 'month',                 label: 'MONTH',                         width: 100, kind: 'text',     readOnly: true },
+  // Last column — explicit per-row save. Fields buffered in dirtyMap
+  // stay LOCAL until the user clicks this; auto-save-on-blur is off.
+  { key: 'row_save',              label: 'SAVE',                          width:  76, kind: 'save',    readOnly: true },
 ];
 
 const TOTAL_WIDTH = COLUMNS.reduce((s, c) => s + c.width, 0);
@@ -235,13 +239,20 @@ const TelecallerSheet = ({
   onError,                   // (msg) => void — page shows toast
   maxHeight = 'calc(100vh - 320px)',
 }) => {
-  const [savingCellKey, setSavingCellKey] = useState(null);
   const [rows, setRows] = useState(leads);
   const cellRefs = useRef({});   // `${rowIdx}:${colIdx}` → HTMLElement
 
-  // Sync local rows when parent leads array changes. Keep any pending
-  // follow-up scratch state (`_pendingFu`) attached to the same row
-  // so the user's in-progress FU input doesn't get wiped by a refetch.
+  // ─── Per-row edit buffer ────────────────────────────────────────
+  // Cell edits stay LOCAL until the row's Save button is clicked.
+  // `dirtyMap` keys are leadIds; values are the pending patch object
+  // to send with the next PATCH. `_pendingFu` still lives on the row
+  // itself (see readCell) so follow-up buffering behaves identically.
+  const [dirtyMap, setDirtyMap] = useState({});
+  const [savingRowId, setSavingRowId] = useState(null);
+
+  // Sync local rows when parent leads array changes. Preserve dirty
+  // patches (user might have typed in ROW A while the parent refetched
+  // in the background — we don't want to discard that work).
   useEffect(() => {
     setRows((prev) => leads.map((l) => {
       const existing = prev.find((r) => r._id === l._id);
@@ -251,61 +262,81 @@ const TelecallerSheet = ({
 
   const dupeIds = useMemo(() => buildDuplicateSet(rows), [rows]);
 
-  // ─── Save a single field ───────────────────────────────────────
-  const commitFieldEdit = useCallback(async (lead, col, value) => {
-    const key = `${lead._id}:${col.key}`;
-    setSavingCellKey(key);
-    try {
-      // Follow-up cells are special — they buffer into `_pendingFu`
-      // until the CALL LABEL is chosen, then flush as a new follow_ups
-      // entry alongside the running history append (server-side).
-      if (col.key === 'follow_up_call_label') {
-        const pending = { ...(lead._pendingFu || {}) };
-        pending.call_label = value;
-        pending.date = pending.date || toDateInput(new Date());
-        pending.remarks = pending.remarks || '';
-        pending.connected = String(value).toUpperCase() === 'CONNECTED';
-        pending.number = (lead.follow_ups?.length || 0) + 1;
-        if (!pending.call_label) return;
-        const nextFollowUps = [
-          ...(lead.follow_ups || []),
-          {
-            number: pending.number,
-            date: pending.date,
-            call_label: pending.call_label,
-            remarks: pending.remarks,
-            connected: pending.connected,
-          },
-        ];
-        const updated = await onSaveLead(lead._id, { follow_ups: nextFollowUps });
-        setRows((prev) => prev.map((r) =>
-          r._id === lead._id ? { ...updated, _pendingFu: undefined } : r
-        ));
-        return;
-      }
-      if (col.key === 'follow_up_date' || col.key === 'follow_up_remarks') {
-        // Just update the buffer — no server call until call label lands.
-        setRows((prev) => prev.map((r) => r._id === lead._id
-          ? { ...r, _pendingFu: { ...(r._pendingFu || {}), [col.key.replace('follow_up_', '')]: value } }
-          : r));
-        return;
-      }
-      if (col.key === 'follow_up_number') return; // virtual, read-only
+  // ─── Queue an edit (local only — no PATCH) ─────────────────────
+  // Follow-up cells stay special: they buffer into `_pendingFu` on
+  // the row itself. Everything else buffers into dirtyMap[leadId].
+  // The row's Save button drains BOTH into a single PATCH.
+  const queueEdit = useCallback((lead, col, value) => {
+    if (col.key === 'follow_up_number' || col.readOnly || col.kind === 'save' || col.kind === 'actions') return;
 
-      // Regular field save.
-      let payload = { [col.key]: value };
-      if (col.kind === 'phone') payload = { contact: normaliseContact(value) };
-      if (col.kind === 'number') payload = { [col.key]: value === '' ? 0 : Number(value) };
-      const updated = await onSaveLead(lead._id, payload);
+    // Follow-up cells → row-local buffer.
+    if (col.key === 'follow_up_call_label' || col.key === 'follow_up_date' || col.key === 'follow_up_remarks') {
+      const bufferKey = col.key.replace('follow_up_', '');
+      setRows((prev) => prev.map((r) => r._id === lead._id
+        ? { ...r, _pendingFu: { ...(r._pendingFu || {}), [bufferKey]: value } }
+        : r));
+      // Mark row dirty so Save enables even if only a follow-up is pending.
+      setDirtyMap((prev) => ({ ...prev, [lead._id]: { ...(prev[lead._id] || {}), _fuDirty: true } }));
+      return;
+    }
+
+    // Row field → dirtyMap. Normalise phones + number cells at buffer
+    // time so what the user sees is what will go to the server.
+    let field = col.key;
+    let normalised = value;
+    if (col.kind === 'phone')  { field = 'contact'; normalised = normaliseContact(value); }
+    if (col.kind === 'number') { normalised = value === '' ? 0 : Number(value); }
+
+    // Update rows (optimistic UI) + dirtyMap (server payload).
+    setRows((prev) => prev.map((r) => (r._id === lead._id ? { ...r, [field]: normalised } : r)));
+    setDirtyMap((prev) => ({ ...prev, [lead._id]: { ...(prev[lead._id] || {}), [field]: normalised } }));
+  }, []);
+
+  // ─── Save a whole row ──────────────────────────────────────────
+  // Merges dirtyMap[leadId] with any pending follow-up into a single
+  // PATCH. On success clears both buffers for that row.
+  const saveRow = useCallback(async (lead) => {
+    const patch = { ...(dirtyMap[lead._id] || {}) };
+    delete patch._fuDirty;   // internal flag, not for the server
+
+    // If a follow-up is queued, materialise it into follow_ups[].
+    const pf = lead._pendingFu;
+    if (pf?.call_label) {
+      const nextFollowUps = [
+        ...(lead.follow_ups || []),
+        {
+          number: (lead.follow_ups?.length || 0) + 1,
+          date: pf.date || toDateInput(new Date()),
+          call_label: pf.call_label,
+          remarks: pf.remarks || '',
+          connected: String(pf.call_label).toUpperCase() === 'CONNECTED',
+        },
+      ];
+      patch.follow_ups = nextFollowUps;
+    }
+
+    if (Object.keys(patch).length === 0) return;   // nothing to save
+
+    setSavingRowId(lead._id);
+    try {
+      const updated = await onSaveLead(lead._id, patch);
       setRows((prev) => prev.map((r) =>
-        r._id === lead._id ? { ...updated, _pendingFu: r._pendingFu } : r
+        r._id === lead._id ? { ...updated, _pendingFu: undefined } : r
       ));
+      // Drop this row from the dirty map.
+      setDirtyMap((prev) => {
+        const next = { ...prev };
+        delete next[lead._id];
+        return next;
+      });
     } catch (err) {
       onError?.(err?.response?.data?.message || err?.message || 'Save failed');
     } finally {
-      setSavingCellKey(null);
+      setSavingRowId(null);
     }
-  }, [onSaveLead, onError]);
+  }, [dirtyMap, onSaveLead, onError]);
+
+  const isRowDirty = (leadId) => Boolean(dirtyMap[leadId]);
 
   // ─── Add a fresh blank row at the top ──────────────────────────
   const handleAddRow = useCallback(async () => {
@@ -386,7 +417,7 @@ const TelecallerSheet = ({
   const renderCell = (lead, col, rowIdx, colIdx) => {
     const value = readCell(lead, col);
     const displayValue = value === null || value === undefined ? '' : String(value);
-    const isSaving = savingCellKey === `${lead._id}:${col.key}`;
+    const isSavingThisRow = savingRowId === lead._id;
     // Effective readOnly = column-level readOnly OR (synced lead AND
     // this is one of the 5 Meta-owned columns). Meta-sync leads must
     // preserve NAME/SOURCE/CONTACT/LOCATION/DATE from the submission
@@ -403,11 +434,46 @@ const TelecallerSheet = ({
         display: 'flex', alignItems: 'center',
         outline: 'none',
         '&:focus-within': { bgcolor: CELL_FOCUS },
-        opacity: isSaving ? 0.55 : 1,
+        opacity: isSavingThisRow ? 0.55 : 1,
         cursor: effReadOnly ? 'default' : 'text',
       },
-      tabIndex: effReadOnly && col.kind !== 'actions' ? -1 : 0,
+      tabIndex: effReadOnly && !['actions', 'save'].includes(col.kind) ? -1 : 0,
     };
+
+    // Save column — the row's commit button. Enabled only when the
+    // row has pending edits; spins while the PATCH is in-flight.
+    if (col.kind === 'save') {
+      const dirty = isRowDirty(lead._id);
+      return (
+        <Box {...commonWrap} sx={{ ...commonWrap.sx, justifyContent: 'center' }}>
+          <Tooltip title={dirty ? 'Save this row' : 'No unsaved changes'}>
+            <span>{/* span wrapper so the tooltip works on disabled buttons */}
+              <IconButton
+                size="small"
+                onClick={() => saveRow(lead)}
+                disabled={!dirty || isSavingThisRow}
+                sx={{
+                  bgcolor: dirty ? '#1F3966' : 'transparent',
+                  color: dirty ? '#fff' : '#94A3B8',
+                  border: `1px solid ${dirty ? '#1F3966' : '#CBD5E1'}`,
+                  borderRadius: 1,
+                  px: 0.9, py: 0.3,
+                  '&:hover': dirty ? { bgcolor: '#15294D' } : undefined,
+                  '&.Mui-disabled': { color: '#CBD5E1', bgcolor: 'transparent' },
+                }}
+              >
+                {isSavingThisRow
+                  ? <CircularProgressInline />
+                  : <SaveIcon sx={{ fontSize: 16 }} />}
+                <Box component="span" sx={{ ml: 0.4, fontSize: '0.7rem', fontWeight: 700 }}>
+                  Save
+                </Box>
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+      );
+    }
 
     // Actions column: WhatsApp deep-link + delete
     if (col.kind === 'actions') {
@@ -488,7 +554,7 @@ const TelecallerSheet = ({
             select
             variant="standard"
             value={displayValue}
-            onChange={(e) => commitFieldEdit(lead, col, e.target.value)}
+            onChange={(e) => queueEdit(lead, col,e.target.value)}
             SelectProps={{ native: true }}
             InputProps={{ disableUnderline: true }}
             sx={{
@@ -515,7 +581,7 @@ const TelecallerSheet = ({
             select
             variant="standard"
             value={displayValue}
-            onChange={(e) => commitFieldEdit(lead, col, e.target.value)}
+            onChange={(e) => queueEdit(lead, col,e.target.value)}
             SelectProps={{ native: true }}
             InputProps={{ disableUnderline: true }}
             sx={{ width: '100%', '& select': { fontSize: '0.78rem', px: 0.5, py: 0.4 } }}
@@ -533,7 +599,7 @@ const TelecallerSheet = ({
           <input
             type="date"
             value={toDateInput(displayValue)}
-            onChange={(e) => commitFieldEdit(lead, col, e.target.value || null)}
+            onChange={(e) => queueEdit(lead, col,e.target.value || null)}
             style={{
               border: 'none', background: 'transparent', width: '100%',
               fontSize: '0.78rem', padding: '4px 2px', color: '#0F172A', outline: 'none',
@@ -549,7 +615,7 @@ const TelecallerSheet = ({
         <BlurCommitInput
           value={displayValue}
           type={col.kind === 'number' ? 'number' : (col.kind === 'phone' ? 'tel' : 'text')}
-          onCommit={(v) => commitFieldEdit(lead, col, v)}
+          onCommit={(v) => queueEdit(lead, col,v)}
           required={col.required}
         />
       </Box>
@@ -619,7 +685,12 @@ const TelecallerSheet = ({
               && new Date(lead.next_followup_date) < new Date()
               && !['CLOSED', 'DARMANT'].includes(lead.status_sheet);
             const isFresh = !lead.first_call_date;
-            const rowBg = isDupe ? DUPE_BG
+            const dirty = isRowDirty(lead._id);
+            // Dirty rows override the state colour with a soft amber so
+            // the user can see at a glance which rows have unsaved
+            // edits waiting for a Save-button click.
+            const rowBg = dirty ? '#FFFBEB'
+              : isDupe ? DUPE_BG
               : isOverdue ? OVERDUE_BG
               : isFresh ? FRESH_BG
               : (rowIdx % 2 === 0 ? '#fff' : ROW_ALT_BG);
@@ -653,8 +724,9 @@ const TelecallerSheet = ({
         <LegendSwatch bg={DUPE_BG}    label="Duplicate contact" />
         <LegendSwatch bg={OVERDUE_BG} label="Reminder overdue" />
         <LegendSwatch bg={FRESH_BG}   label="Fresh · not called yet" />
+        <LegendSwatch bg="#FFFBEB"    label="Unsaved changes" />
         <Box sx={{ flex: 1 }} />
-        <span>Tab / Shift-Tab · move column · Enter / Shift-Enter · move row</span>
+        <span>Tab / Shift-Tab · move column · Enter / Shift-Enter · move row · Click Save to commit</span>
       </Box>
     </Box>
   );
@@ -694,6 +766,20 @@ const BlurCommitInput = ({ value, type = 'text', onCommit, required }) => {
     />
   );
 };
+
+// Tiny spinner used inside the Save button while a row is saving.
+// Cheaper than importing another MUI icon — just a spinning border.
+const CircularProgressInline = () => (
+  <>
+    <style>{`@keyframes tc-spin { to { transform: rotate(360deg); } }`}</style>
+    <Box sx={{
+      width: 12, height: 12, borderRadius: '50%',
+      border: '2px solid rgba(255,255,255,0.4)',
+      borderTopColor: '#fff',
+      animation: 'tc-spin 0.7s linear infinite',
+    }} />
+  </>
+);
 
 const LegendSwatch = ({ bg, label }) => (
   <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>

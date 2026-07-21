@@ -1,0 +1,1440 @@
+<meta charset="utf-8">
+<title>ARA Lead Matrix CRM — Technical Solution Document</title>
+<style>
+  :root{
+    --navy:#1F3966; --navy-2:#16294a; --gold:#F4B929;
+    --ink:#20242c; --muted:#5b6472; --line:#d8dee8;
+    --soft:#f4f7fb; --soft-2:#eef2f8;
+    --ok:#1c7c54; --warn:#b7791f; --bad:#b3261e; --teal:#0f6e6e; --violet:#5b3fa0;
+  }
+  @page{ size:A4; margin:19mm 14mm 17mm 14mm; }
+  @page:first{ margin:0; }
+  *{ box-sizing:border-box; }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{ font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; color:var(--ink); font-size:10pt; line-height:1.46; margin:0; }
+  h1,h2,h3,h4{ color:var(--navy); font-weight:700; line-height:1.24; }
+  h2{ font-size:15.5pt; margin:0 0 9px; padding-bottom:6px; border-bottom:3px solid var(--gold); }
+  h3{ font-size:11.5pt; margin:15px 0 5px; }
+  h4{ font-size:10.2pt; margin:11px 0 3px; color:var(--navy-2); }
+  p{ margin:0 0 8px; }
+  ul,ol{ margin:0 0 8px; padding-left:18px; }
+  li{ margin:1.5px 0; }
+  strong{ color:var(--navy-2); }
+  code{ font-family:"Consolas",monospace; background:var(--soft-2); padding:0 4px; border-radius:3px; font-size:8.6pt; color:var(--navy-2); }
+  .mono{ font-family:"Consolas",monospace; font-size:8.6pt; }
+
+  /* Cover */
+  .cover{ height:297mm; background:linear-gradient(150deg,var(--navy) 0%,var(--navy-2) 55%,#0b1830 100%); color:#fff; padding:30mm 22mm 18mm; position:relative; page-break-after:always; }
+  .cover .brandmark{ display:flex; align-items:center; gap:13px; margin-bottom:50mm; }
+  .cover .logo-badge{ width:54px;height:54px;border-radius:13px; background:var(--gold); color:var(--navy); display:flex;align-items:center;justify-content:center; font-weight:800;font-size:23px; box-shadow:0 8px 26px rgba(0,0,0,.35); }
+  .cover .brandmark .bt{ font-size:13.5pt;font-weight:700;letter-spacing:.5px; }
+  .cover .brandmark .bs{ font-size:8.5pt;color:#b9c6de;letter-spacing:3px;text-transform:uppercase; }
+  .cover .doc-kicker{ color:var(--gold);font-weight:700;letter-spacing:4px;font-size:10.5pt;text-transform:uppercase;margin-bottom:10px; }
+  .cover h1.doc-title{ color:#fff;font-size:37pt;line-height:1.07;margin:0 0 8px;letter-spacing:-.5px; }
+  .cover .doc-sub{ font-size:14pt;color:#d7e0f0;font-weight:400;margin-bottom:22px; }
+  .cover .rule{ width:118px;height:4px;background:var(--gold);border-radius:3px;margin:0 0 22px; }
+  .cover .prod{ font-size:11pt;color:#eaf0fb;max-width:122mm; }
+  .cover .meta-grid{ position:absolute;left:22mm;right:22mm;bottom:20mm; display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px 20px; border-top:1px solid rgba(255,255,255,.22);padding-top:15px; }
+  .cover .meta-grid .k{ font-size:7.4pt;letter-spacing:2px;text-transform:uppercase;color:var(--gold); }
+  .cover .meta-grid .v{ font-size:9.6pt;color:#fff;font-weight:600;margin-top:2px; }
+  .cover .confidential{ position:absolute;top:30mm;right:22mm; border:1px solid var(--gold);color:var(--gold); font-size:7.6pt;letter-spacing:2px;text-transform:uppercase;padding:4px 10px;border-radius:20px;font-weight:700; }
+
+  section.page{ page-break-before:always; padding-top:2mm; }
+  .lead{ font-size:10.4pt;color:var(--muted);margin-bottom:11px; }
+
+  table{ width:100%; border-collapse:collapse; margin:6px 0 12px; font-size:8.8pt; }
+  th,td{ border:1px solid var(--line); padding:5px 7px; text-align:left; vertical-align:top; }
+  th{ background:var(--navy); color:#fff; font-weight:600; font-size:8.5pt; }
+  tbody tr:nth-child(even){ background:var(--soft); }
+  table.tight th, table.tight td{ padding:3.5px 6px; font-size:8.2pt; }
+  .center{ text-align:center; }
+
+  .callout{ border-left:4px solid var(--gold); background:var(--soft); padding:8px 12px; border-radius:0 8px 8px 0; margin:10px 0; }
+  .callout.warn{ border-left-color:var(--warn); background:#fdf6ea; }
+  .callout.info{ border-left-color:var(--navy); }
+  .callout.bad{ border-left-color:var(--bad); background:#fdeceb; }
+
+  .pill{ display:inline-block;padding:1px 8px;border-radius:20px;font-size:7.4pt;font-weight:700; }
+  .pill.hi{ background:#fdeceb;color:var(--bad); }
+  .pill.med{ background:#fdf3e2;color:var(--warn); }
+  .pill.lo{ background:#e7f4ee;color:var(--ok); }
+  .pill.navy{ background:var(--soft-2);color:var(--navy); }
+
+  .sec-num{ display:inline-block;background:var(--gold);color:var(--navy); font-size:10pt;font-weight:800;border-radius:6px;padding:0 8px;margin-right:7px; }
+  .fid{ font-family:"Consolas",monospace;font-weight:700;color:var(--navy);white-space:nowrap;font-size:8.2pt; }
+
+  .toc-list{ font-size:8.9pt; }
+  .toc-list .row{ display:flex;justify-content:space-between;padding:2.5px 0;border-bottom:1px dotted var(--line); }
+  .toc-list .row .t b{ color:var(--navy);display:inline-block;width:22px; }
+  .toc-list .grp{ margin-top:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1.5px;font-size:8pt; }
+
+  /* Diagram primitives */
+  .diagram{ border:1px solid var(--line); border-radius:8px; background:#fcfdff; padding:12px; margin:10px 0; }
+  .diagram .cap{ font-size:8pt;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;font-weight:700; }
+  .tier{ border:1.5px solid var(--navy); border-radius:8px; margin:7px 0; padding:8px 10px; background:#fff; }
+  .tier .tt{ font-size:8.2pt;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px; }
+  .tier.g{ border-color:var(--gold); background:#fffdf6; }
+  .tier.t{ border-color:var(--teal); background:#f4fbfb; }
+  .tier.v{ border-color:var(--violet); background:#f8f5fd; }
+  .row-boxes{ display:flex; gap:7px; flex-wrap:wrap; }
+  .node{ flex:1; min-width:90px; border:1px solid var(--line); border-radius:6px; background:var(--soft-2); padding:5px 7px; font-size:8pt; font-weight:600; color:var(--navy-2); text-align:center; }
+  .node.gold{ background:#fdf3e2; border-color:#f0d39a; }
+  .node.ext{ background:#f4fbfb; border-color:#bfe3e3; color:var(--teal); }
+  .node.db{ background:#f8f5fd; border-color:#d9cef0; color:var(--violet); }
+  .vbar{ text-align:center; color:var(--gold); font-weight:800; font-size:12pt; margin:1px 0; }
+
+  .flow{ margin:8px 0; line-height:2.0; }
+  .flow .step{ display:inline-block;background:var(--soft-2);border:1px solid var(--line); border-radius:6px;padding:3px 8px;font-size:8pt;font-weight:600;color:var(--navy-2); }
+  .flow .dec{ background:#fdf3e2;border-color:#f0d39a; }
+  .flow .end{ background:#e7f4ee;border-color:#b6e0cd; }
+  .flow .arw{ color:var(--gold);font-weight:800;margin:0 2px; }
+
+  /* sequence diagram */
+  .seq{ font-family:"Consolas",monospace; font-size:8pt; background:#fcfdff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:9px 0; white-space:pre; overflow-x:auto; color:var(--navy-2); line-height:1.5; }
+
+  .kpi-row{ display:flex; gap:9px; margin:10px 0; }
+  .kpi{ flex:1;border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:8px;padding:8px 10px;background:#fff; }
+  .kpi .n{ font-size:15pt;font-weight:800;color:var(--navy); }
+  .kpi .l{ font-size:7.7pt;color:var(--muted);text-transform:uppercase;letter-spacing:.5px; }
+
+  .small{ font-size:8pt;color:var(--muted); }
+  .footer{ position:fixed;bottom:-11mm;left:0;right:0;font-size:7.2pt;color:var(--muted); display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:3px; }
+  .footer .c{ color:var(--bad);font-weight:700;letter-spacing:1px; }
+  .cols2{ column-count:2; column-gap:18px; }
+  .tree{ font-family:"Consolas",monospace; font-size:8.2pt; line-height:1.5; color:var(--navy-2); background:#fcfdff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; white-space:pre; overflow-x:auto; }
+</style>
+
+<div class="footer">
+  <span>ARA Lead Matrix CRM — Technical Solution Document · v1.0</span>
+  <span class="c">CONFIDENTIAL</span>
+  <span>ARA Discoveries Technologies</span>
+</div>
+
+<!-- ===================== COVER ===================== -->
+<div class="cover">
+  <div class="confidential">Confidential</div>
+  <div class="brandmark">
+    <div class="logo-badge">LM</div>
+    <div><div class="bt">LEAD MATRIX</div><div class="bs">By ARA Discoveries</div></div>
+  </div>
+  <div class="doc-kicker">Technical Solution Document</div>
+  <h1 class="doc-title">ARA Lead Matrix<br>CRM Platform</h1>
+  <div class="doc-sub">Solution, Data, API, Security &amp; Infrastructure Architecture</div>
+  <div class="rule"></div>
+  <p class="prod">The complete technical implementation of the platform — solution &amp; logical architecture, the MongoDB data model, the full REST API catalogue, authentication &amp; security design, background processing, integrations, deployment topology, and the strategies for logging, caching, scalability, availability and disaster recovery.</p>
+  <div class="meta-grid">
+    <div><div class="k">Prepared For</div><div class="v">Architects · Developers · DevOps · QA</div></div>
+    <div><div class="k">Prepared By</div><div class="v">Solution Architecture Office</div></div>
+    <div><div class="k">Version</div><div class="v">1.0 (Baseline)</div></div>
+    <div><div class="k">Date of Issue</div><div class="v">17 July 2026</div></div>
+    <div><div class="k">Classification</div><div class="v">Confidential</div></div>
+    <div><div class="k">Companion To</div><div class="v">BRD-2026-001 · FSD-2026-001</div></div>
+  </div>
+</div>
+
+<!-- ===================== 2. DOCUMENT CONTROL ===================== -->
+<section class="page">
+  <h2>Document Control</h2>
+  <p class="lead">Governance and configuration of this Technical Solution Document (TSD).</p>
+  <table>
+    <tr><th style="width:30%">Attribute</th><th>Detail</th></tr>
+    <tr><td>Document Title</td><td>ARA Lead Matrix CRM — Technical Solution Document</td></tr>
+    <tr><td>Reference</td><td>ARA-TSD-CRM-2026-001</td></tr>
+    <tr><td>System</td><td>ARA Lead Matrix CRM ("New Ara CRM")</td></tr>
+    <tr><td>Companion Documents</td><td>BRD (ARA-BRD-CRM-2026-001) · FSD (ARA-FSD-CRM-2026-001)</td></tr>
+    <tr><td>Version / Status</td><td>1.0 — Baseline — Approved for Review</td></tr>
+    <tr><td>Classification</td><td>Confidential</td></tr>
+    <tr><td>Date of Issue</td><td>17 July 2026</td></tr>
+    <tr><td>Codebase baseline</td><td>Backend ≈ 21,250 LOC (Node/Express ESM); React SPA; 24 Mongoose models; 18 route groups.</td></tr>
+  </table>
+  <h3>Intended Audience</h3>
+  <ul>
+    <li><strong>Solution / Software Architects</strong> — architecture, data model, integration design.</li>
+    <li><strong>Developers</strong> — module &amp; component structure, API contracts, coding standards.</li>
+    <li><strong>DevOps Engineers</strong> — deployment, infrastructure, configuration, CI/CD, DR.</li>
+    <li><strong>QA Engineers</strong> — testing strategy, validation, error handling.</li>
+    <li><strong>Enterprise Clients</strong> — technical assurance of the delivered solution.</li>
+  </ul>
+  <h3>Approval &amp; Sign-Off</h3>
+  <table>
+    <tr><th>Role</th><th>Responsibility</th><th>Signature</th><th>Date</th></tr>
+    <tr><td>Solution Architect</td><td>Architecture accuracy</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>Engineering Lead</td><td>Implementation fidelity</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>DevOps Lead</td><td>Infra &amp; deployment accuracy</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>Security Officer</td><td>Security posture review</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+  </table>
+  <div class="callout info"><strong>Basis.</strong> Produced from a full source-level review of the delivered repository (backend services, models, routes, middleware, background jobs, utilities, front-end, build &amp; deploy scripts and environment configuration). It describes the system <em>as built and in production</em> as of the issue date.</div>
+</section>
+
+<!-- ===================== 3. REVISION HISTORY ===================== -->
+<section class="page">
+  <h2>Revision History</h2>
+  <table>
+    <tr><th style="width:10%">Version</th><th style="width:14%">Date</th><th style="width:22%">Author</th><th>Summary</th></tr>
+    <tr><td>0.1</td><td>12 Jul 2026</td><td>Solution Architecture Office</td><td>Architecture outline &amp; section structure.</td></tr>
+    <tr><td>0.6</td><td>15 Jul 2026</td><td>Solution Architecture Office</td><td>Data, API, security &amp; integration architecture drafted from source.</td></tr>
+    <tr><td>0.9</td><td>16 Jul 2026</td><td>Solution Architecture Office</td><td>Deployment, DR, diagrams, risks &amp; recommendations added.</td></tr>
+    <tr><td><strong>1.0</strong></td><td>17 Jul 2026</td><td>Solution Architecture Office</td><td>Baseline — full 54-section TSD approved.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 4. TABLE OF CONTENTS ===================== -->
+<section class="page">
+  <h2>Table of Contents</h2>
+  <div class="toc-list" style="column-count:3;column-gap:20px;">
+    <div class="grp">Governance</div>
+    <div class="row"><span class="t"><b>1</b> Cover Page</span></div>
+    <div class="row"><span class="t"><b>2</b> Document Control</span></div>
+    <div class="row"><span class="t"><b>3</b> Revision History</span></div>
+    <div class="row"><span class="t"><b>4</b> Table of Contents</span></div>
+    <div class="grp">Architecture</div>
+    <div class="row"><span class="t"><b>5</b> Exec. Technical Summary</span></div>
+    <div class="row"><span class="t"><b>6</b> Architecture Overview</span></div>
+    <div class="row"><span class="t"><b>7</b> Solution Architecture</span></div>
+    <div class="row"><span class="t"><b>8</b> Logical Architecture</span></div>
+    <div class="row"><span class="t"><b>9</b> Physical Architecture</span></div>
+    <div class="row"><span class="t"><b>10</b> Deployment Architecture</span></div>
+    <div class="row"><span class="t"><b>11</b> Infrastructure Overview</span></div>
+    <div class="row"><span class="t"><b>12</b> Technology Stack</span></div>
+    <div class="grp">Structure</div>
+    <div class="row"><span class="t"><b>13</b> Project Structure</span></div>
+    <div class="row"><span class="t"><b>14</b> Folder Structure</span></div>
+    <div class="row"><span class="t"><b>15</b> Module Architecture</span></div>
+    <div class="row"><span class="t"><b>16</b> Component Architecture</span></div>
+    <div class="row"><span class="t"><b>17</b> Layered Architecture</span></div>
+    <div class="grp">Data</div>
+    <div class="row"><span class="t"><b>18</b> Database Architecture</span></div>
+    <div class="row"><span class="t"><b>19</b> ER Diagrams</span></div>
+    <div class="row"><span class="t"><b>20</b> Database Tables</span></div>
+    <div class="row"><span class="t"><b>21</b> Database Relationships</span></div>
+    <div class="grp">API &amp; Security</div>
+    <div class="row"><span class="t"><b>22</b> API Architecture</span></div>
+    <div class="row"><span class="t"><b>23</b> API Catalogue</span></div>
+    <div class="row"><span class="t"><b>24</b> Authentication Arch.</span></div>
+    <div class="row"><span class="t"><b>25</b> Authorization Arch.</span></div>
+    <div class="row"><span class="t"><b>26</b> Security Architecture</span></div>
+    <div class="grp">Operations</div>
+    <div class="row"><span class="t"><b>27</b> Logging Strategy</span></div>
+    <div class="row"><span class="t"><b>28</b> Monitoring Strategy</span></div>
+    <div class="row"><span class="t"><b>29</b> Error Handling</span></div>
+    <div class="row"><span class="t"><b>30</b> Validation Strategy</span></div>
+    <div class="row"><span class="t"><b>31</b> Performance Optim.</span></div>
+    <div class="row"><span class="t"><b>32</b> Caching Strategy</span></div>
+    <div class="row"><span class="t"><b>33</b> Scalability Strategy</span></div>
+    <div class="row"><span class="t"><b>34</b> High Availability</span></div>
+    <div class="row"><span class="t"><b>35</b> Backup Strategy</span></div>
+    <div class="row"><span class="t"><b>36</b> Disaster Recovery</span></div>
+    <div class="grp">Delivery</div>
+    <div class="row"><span class="t"><b>37</b> CI/CD Overview</span></div>
+    <div class="row"><span class="t"><b>38</b> Environment Config</span></div>
+    <div class="row"><span class="t"><b>39</b> Configuration Files</span></div>
+    <div class="row"><span class="t"><b>40</b> Third-party Integr.</span></div>
+    <div class="grp">Diagrams</div>
+    <div class="row"><span class="t"><b>41</b> Sequence Diagrams</span></div>
+    <div class="row"><span class="t"><b>42</b> Data Flow Diagrams</span></div>
+    <div class="row"><span class="t"><b>43</b> Component Diagrams</span></div>
+    <div class="row"><span class="t"><b>44</b> Class Diagrams</span></div>
+    <div class="row"><span class="t"><b>45</b> Package Diagrams</span></div>
+    <div class="row"><span class="t"><b>46</b> Deployment Diagrams</span></div>
+    <div class="row"><span class="t"><b>47</b> Module Dependencies</span></div>
+    <div class="grp">Assurance</div>
+    <div class="row"><span class="t"><b>48</b> Coding Standards</span></div>
+    <div class="row"><span class="t"><b>49</b> Testing Strategy</span></div>
+    <div class="row"><span class="t"><b>50</b> Security Considerations</span></div>
+    <div class="row"><span class="t"><b>51</b> Technical Risks</span></div>
+    <div class="row"><span class="t"><b>52</b> Future Scalability</span></div>
+    <div class="row"><span class="t"><b>53</b> Recommendations</span></div>
+    <div class="row"><span class="t"><b>54</b> Appendix</span></div>
+  </div>
+</section>
+
+<!-- ===================== 5. EXECUTIVE TECHNICAL SUMMARY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">5</span>Executive Technical Summary</h2>
+  <p class="lead">ARA Lead Matrix is a multi-tenant MERN-stack CRM: a React single-page front-end, a stateless Node.js/Express REST API, a MongoDB (Azure Cosmos DB for MongoDB vCore) datastore, and an in-process background-job engine that synchronises Meta and Google Ads data and reconciles advertising spend into an immutable billing ledger.</p>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="n">MERN</div><div class="l">Architecture pattern</div></div>
+    <div class="kpi"><div class="n">24</div><div class="l">Collections</div></div>
+    <div class="kpi"><div class="n">18</div><div class="l">API route groups</div></div>
+    <div class="kpi"><div class="n">3</div><div class="l">External integrations</div></div>
+    <div class="kpi"><div class="n">2</div><div class="l">Auth realms</div></div>
+  </div>
+
+  <h3>5.1 Architectural characteristics</h3>
+  <table class="tight">
+    <tr><th style="width:24%">Characteristic</th><th>Implementation</th></tr>
+    <tr><td>Statelessness</td><td>JWT-based sessions; no server session store — the API scales horizontally behind a load balancer without sticky sessions (subject to the single-instance scheduler caveat, §33).</td></tr>
+    <tr><td>Multi-tenancy</td><td>Row-level tenancy on a shared schema; client identity for portal tokens is derived from the JWT and enforced per request.</td></tr>
+    <tr><td>Idempotency</td><td>Unique/compound indexes + idempotency keys guarantee exactly-once lead ingestion and billing writes.</td></tr>
+    <tr><td>Resilience</td><td>Typed integration errors, exponential-backoff retries, a webhook dead-letter queue, overlap guards, and boot-time self-healing migrations.</td></tr>
+    <tr><td>Separation of concerns</td><td>Routes → Controllers → Services → Models, with a dedicated single metrics service as the canonical KPI authority.</td></tr>
+    <tr><td>Security at rest</td><td>bcrypt for passwords; AES-256-CBC for recoverable secrets (page tokens, vault, portal-password recovery).</td></tr>
+  </table>
+
+  <h3>5.2 Key technical decisions &amp; rationale</h3>
+  <table class="tight">
+    <tr><th style="width:30%">Decision</th><th>Rationale</th></tr>
+    <tr><td>Single-database, shared-schema multi-tenancy</td><td>Simplicity + cross-client agency reporting; tenancy enforced at the query layer.</td></tr>
+    <tr><td>In-process cron scheduler (node-cron)</td><td>Zero extra infrastructure; adequate for current client volume; must run on exactly one instance (§33).</td></tr>
+    <tr><td>Meta insights as reporting source of truth</td><td>Avoids under-reporting when lead ingestion is briefly degraded.</td></tr>
+    <tr><td>Delta-based idempotent billing ledger</td><td>Financial correctness under retries and concurrency.</td></tr>
+    <tr><td>Post-build JS obfuscation</td><td>Raises the bar against trivial client-code inspection (identifier mangling; heavy transforms deliberately disabled for runtime safety).</td></tr>
+    <tr><td>Cosmos DB vCore with small connection pools</td><td>Respects a hard per-cluster connection ceiling shared across processes.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 6. ARCHITECTURE OVERVIEW ===================== -->
+<section class="page">
+  <h2><span class="sec-num">6</span>Architecture Overview</h2>
+  <p class="lead">A classic three-tier web architecture augmented with an integration/background-processing tier.</p>
+
+  <div class="diagram">
+    <div class="cap">High-level architecture</div>
+    <div class="tier g">
+      <div class="tt">Client tier — browsers</div>
+      <div class="row-boxes">
+        <div class="node gold">Agency Console (React SPA)</div>
+        <div class="node gold">Client Portal (React SPA)</div>
+      </div>
+    </div>
+    <div class="vbar">▼ HTTPS / JWT</div>
+    <div class="tier">
+      <div class="tt">Presentation / edge — Nginx</div>
+      <div class="row-boxes">
+        <div class="node">Static asset host (/var/www/leadmatrix)</div>
+        <div class="node">Reverse proxy → :5000</div>
+        <div class="node">TLS termination</div>
+      </div>
+    </div>
+    <div class="vbar">▼</div>
+    <div class="tier">
+      <div class="tt">Application tier — Node.js / Express (systemd: ara-crm)</div>
+      <div class="row-boxes">
+        <div class="node">Routes / Middleware</div>
+        <div class="node">Controllers</div>
+        <div class="node">Services</div>
+        <div class="node">Single Metrics Service</div>
+      </div>
+      <div class="row-boxes" style="margin-top:6px">
+        <div class="node gold">Background jobs — node-cron (Google sync · Meta sync · retry worker)</div>
+        <div class="node gold">Webhook receiver (Meta leadgen)</div>
+      </div>
+    </div>
+    <div class="vbar">▼ Mongoose (pool ≤5)</div>
+    <div class="tier v">
+      <div class="tt">Data tier</div>
+      <div class="row-boxes"><div class="node db">MongoDB — Azure Cosmos DB for MongoDB vCore (24 collections)</div></div>
+    </div>
+    <div class="vbar">◀ ▶ outbound API</div>
+    <div class="tier t">
+      <div class="tt">External systems</div>
+      <div class="row-boxes">
+        <div class="node ext">Meta Graph API</div>
+        <div class="node ext">Google Ads API</div>
+        <div class="node ext">Google Gemini</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>6.1 Architectural styles applied</h3>
+  <ul>
+    <li><strong>Three-tier</strong> (presentation / application / data) with a <strong>REST</strong> API contract.</li>
+    <li><strong>Layered</strong> application internals (routes → controllers → services → models).</li>
+    <li><strong>Event-driven ingestion</strong> for Meta leads (webhook push) with <strong>scheduled batch</strong> reconciliation.</li>
+    <li><strong>Shared-schema multi-tenant SaaS.</strong></li>
+  </ul>
+</section>
+
+<!-- ===================== 7. SOLUTION ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">7</span>Solution Architecture</h2>
+  <p class="lead">How the business capability is realised technically end-to-end.</p>
+  <table class="tight">
+    <tr><th style="width:20%">Capability</th><th style="width:40%">Technical realisation</th><th>Key components</th></tr>
+    <tr><td>Identity</td><td>Two JWT realms (staff, portal-user); bcrypt credentials; cookie + bearer transport.</td><td>authController, clientAuthController, auth middleware, generateToken</td></tr>
+    <tr><td>Ad data acquisition</td><td>Scheduled per-client pulls + real-time webhooks; typed errors; rate-limit awareness.</td><td>scheduler, syncService, metaSyncService, metaAdsService, googleAdsService</td></tr>
+    <tr><td>Lead ingestion</td><td>Signed webhook → raw audit → idempotent upsert → retry queue → poller safety-net.</td><td>metaController, metaLeadService, MetaLeadRaw, MetaWebhookRetry</td></tr>
+    <tr><td>Telecalling</td><td>26-column sheet; pre-save automation library; Excel round-trip.</td><td>leadTelecallerController, telecallerAutomation, leadXlsxService</td></tr>
+    <tr><td>Billing</td><td>Delta reconcile vs snapshot; immutable idempotent ledger; balance cache.</td><td>metaBillingService, syncService, BillingTransaction, DailyDebitSnapshot</td></tr>
+    <tr><td>Reporting</td><td>One metrics service feeds all surfaces; short-TTL caches.</td><td>metaMetricsService, analyticsService, reportsController</td></tr>
+    <tr><td>Intelligence</td><td>Gemini REST call with strict-JSON contract + repair.</td><td>aiController</td></tr>
+    <tr><td>Presentation</td><td>Lazy-loaded React SPA; Redux slices + context caches; MUI.</td><td>App.js, store, contexts, pages, components</td></tr>
+  </table>
+
+  <h3>7.1 Cross-cutting concerns</h3>
+  <table class="tight">
+    <tr><th style="width:24%">Concern</th><th>Mechanism</th></tr>
+    <tr><td>Security</td><td>helmet, CORS allow-list, two-tier rate limiting, JWT verify, tenant scoping, encryption utilities.</td></tr>
+    <tr><td>Consistency</td><td>Canonical metrics service; shared enum constants (front/back in lockstep).</td></tr>
+    <tr><td>Observability</td><td>MetaSyncRun log, retry queue, raw-lead audit, morgan HTTP logs, tagged diagnostics.</td></tr>
+    <tr><td>Data integrity</td><td>Unique/compound/partial indexes; idempotency keys; boot-time self-heal.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 8. LOGICAL ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">8</span>Logical Architecture</h2>
+  <div class="diagram">
+    <div class="cap">Logical layers</div>
+    <div class="tier g"><div class="tt">L1 · Presentation (React)</div>
+      <div class="row-boxes"><div class="node gold">Pages / Layouts</div><div class="node gold">Components</div><div class="node gold">Redux slices &amp; Contexts</div><div class="node gold">API clients (axios)</div></div>
+    </div>
+    <div class="vbar">▼ REST/JSON</div>
+    <div class="tier"><div class="tt">L2 · API &amp; Middleware</div>
+      <div class="row-boxes"><div class="node">Route groups (/api/*)</div><div class="node">Auth &amp; RBAC guards</div><div class="node">Validation</div><div class="node">Rate limit / CORS / helmet</div><div class="node">Error handler</div></div>
+    </div>
+    <div class="vbar">▼</div>
+    <div class="tier"><div class="tt">L3 · Domain / Controllers</div>
+      <div class="row-boxes"><div class="node">Auth</div><div class="node">Client</div><div class="node">Lead / Telecaller</div><div class="node">Meta</div><div class="node">Billing</div><div class="node">Reports / AI</div></div>
+    </div>
+    <div class="vbar">▼</div>
+    <div class="tier"><div class="tt">L4 · Services / Integration</div>
+      <div class="row-boxes"><div class="node">Meta services</div><div class="node">Google Ads service</div><div class="node">Metrics service</div><div class="node">Billing services</div><div class="node">Xlsx service</div><div class="node">Sync + scheduler</div></div>
+    </div>
+    <div class="vbar">▼</div>
+    <div class="tier v"><div class="tt">L5 · Data Access (Mongoose ODM)</div>
+      <div class="row-boxes"><div class="node db">Models / Schemas / Indexes / Hooks / Virtuals</div></div>
+    </div>
+  </div>
+  <p class="small">Each layer depends only on the layer beneath it. Controllers never talk to external APIs directly — they delegate to services; services own all Graph/Ads API traffic and normalisation.</p>
+
+  <h3>8.1 Front-end logical state</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Store / context</th><th>Responsibility</th></tr>
+    <tr><td>auth slice</td><td>Staff session, role, permissions; persisted to localStorage.</td></tr>
+    <tr><td>clients / leads / dailyEntry / dailyLeadData slices</td><td>Entity lists, CRUD, stats.</td></tr>
+    <tr><td>DataCacheContext</td><td>Caches slow-changing client list across pages.</td></tr>
+    <tr><td>ThemeContext</td><td>Brand colours / dark mode.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 9. PHYSICAL ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">9</span>Physical Architecture</h2>
+  <div class="diagram">
+    <div class="cap">Physical nodes (production)</div>
+    <div class="row-boxes">
+      <div class="node gold" style="min-width:130px">End-user browser<br><span class="small">HTTPS 443</span></div>
+      <div class="node" style="min-width:130px">Linux VM<br><span class="small">Nginx (static + reverse proxy)</span></div>
+      <div class="node" style="min-width:130px">Node process<br><span class="small">Express :5000 (systemd ara-crm)</span></div>
+      <div class="node db" style="min-width:130px">Azure Cosmos DB<br><span class="small">MongoDB vCore (TLS)</span></div>
+    </div>
+    <div class="row-boxes" style="margin-top:6px">
+      <div class="node ext" style="min-width:130px">Meta Graph API</div>
+      <div class="node ext" style="min-width:130px">Google Ads API</div>
+      <div class="node ext" style="min-width:130px">Google Gemini API</div>
+    </div>
+  </div>
+  <table class="tight">
+    <tr><th style="width:22%">Node</th><th>Detail</th></tr>
+    <tr><td>Web/edge</td><td>Nginx serves the built SPA from <code>/var/www/leadmatrix</code> and reverse-proxies <code>/api</code> to the Node backend; TLS termination. Public host: <code>leadmatrix.discovertechnologies.co</code> (also <code>crm.aradiscoveries.com</code> allow-listed).</td></tr>
+    <tr><td>Application</td><td>Single Node.js process managed by <code>systemd</code> unit <code>ara-crm</code>, listening on port 5000. Hosts the API and the in-process cron scheduler. (A managed Azure App Service endpoint also exists as an alternate/observed target.)</td></tr>
+    <tr><td>Database</td><td>Azure Cosmos DB for MongoDB vCore — TLS, SCRAM-SHA-256 auth, <code>retrywrites=false</code>, shared per-cluster connection ceiling (pool sized small, default 5/process).</td></tr>
+    <tr><td>External</td><td>Outbound HTTPS to Meta, Google Ads and Gemini; inbound HTTPS webhook from Meta to <code>/api/meta/webhook</code>.</td></tr>
+  </table>
+  <div class="callout info"><strong>Note.</strong> The frontend base URL is environment-driven (<code>REACT_APP_API_URL</code>), currently <code>https://leadmatrix.discovertechnologies.co/api</code>. The codebase also carries an Azure App Service fallback URL, indicating the app has run on both a self-managed VM and Azure App Service.</div>
+</section>
+
+<!-- ===================== 10. DEPLOYMENT ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">10</span>Deployment Architecture</h2>
+  <h3>10.1 Deployment procedure (redeploy.sh)</h3>
+  <div class="seq">1. git pull                     # ~/ara-crm — fetch latest code
+2. sudo systemctl restart ara-crm  # restart Node backend (systemd)
+3. cd crm-frontend && npm run build # CRA build + post-build obfuscation
+4. sudo cp -r build/* /var/www/leadmatrix/    # publish static SPA
+5. sudo chown -R www-data:www-data /var/www/leadmatrix
+   ✅ Deploy done</div>
+  <table class="tight">
+    <tr><th style="width:26%">Aspect</th><th>Detail</th></tr>
+    <tr><td>Trigger</td><td>Manual (operator runs <code>redeploy.sh</code>); <code>set -e</code> aborts on first failure.</td></tr>
+    <tr><td>Backend release</td><td>In-place git pull + systemd restart (no blue-green; brief restart gap).</td></tr>
+    <tr><td>Frontend build</td><td><code>react-scripts build</code> then <code>scripts/obfuscate.js</code> (javascript-obfuscator, light preset — identifier mangling; heavy transforms disabled for React 19/MUI/Recharts safety).</td></tr>
+    <tr><td>Frontend release</td><td>Static files copied to the Nginx web root; ownership handed to <code>www-data</code>.</td></tr>
+    <tr><td>Boot behaviour</td><td>On start: connect DB → self-heal migrations → orphaned-sync cleanup → start scheduler → listen. Fatal boot error exits the process (systemd restarts).</td></tr>
+  </table>
+  <h3>10.2 Startup sequence</h3>
+  <div class="flow">
+    <span class="step">connectDB()</span><span class="arw">▶</span>
+    <span class="step">cleanupEmptyUniqueFields · healClientPortalUsers · syncIndexes</span><span class="arw">▶</span>
+    <span class="step">cleanupOrphanedSyncRuns (zombie → failed)</span><span class="arw">▶</span>
+    <span class="step">startSyncScheduler (Google +30s · Meta +45s · retry /2m)</span><span class="arw">▶</span>
+    <span class="step end">app.listen(:5000)</span>
+  </div>
+</section>
+
+<!-- ===================== 11. INFRASTRUCTURE OVERVIEW ===================== -->
+<section class="page">
+  <h2><span class="sec-num">11</span>Infrastructure Overview</h2>
+  <table class="tight">
+    <tr><th style="width:22%">Component</th><th>Technology</th><th>Role</th></tr>
+    <tr><td>Compute</td><td>Linux VM (systemd)</td><td>Runs the Node.js backend as service <code>ara-crm</code>.</td></tr>
+    <tr><td>Web server</td><td>Nginx</td><td>Static hosting of the SPA + reverse proxy + TLS.</td></tr>
+    <tr><td>Runtime</td><td>Node.js (ESM)</td><td>Express API + in-process scheduler.</td></tr>
+    <tr><td>Database</td><td>Azure Cosmos DB for MongoDB vCore</td><td>Managed, replicated document store.</td></tr>
+    <tr><td>DNS / TLS</td><td>Public domains + HTTPS</td><td><code>leadmatrix.discovertechnologies.co</code>, <code>crm.aradiscoveries.com</code>.</td></tr>
+    <tr><td>Process supervision</td><td>systemd</td><td>Auto-restart on crash/exit.</td></tr>
+    <tr><td>Secrets</td><td>Environment files (<code>.env</code>)</td><td>DB URI, JWT/encryption keys, API tokens.</td></tr>
+  </table>
+  <div class="callout warn"><strong>Observation.</strong> The infrastructure is a single-VM deployment (no container orchestration, no autoscaling group, no managed secret vault). This is appropriate for the current scale but is the primary constraint for the availability and scalability strategies (§33–§36).</div>
+</section>
+
+<!-- ===================== 12. TECHNOLOGY STACK ===================== -->
+<section class="page">
+  <h2><span class="sec-num">12</span>Technology Stack</h2>
+  <h3>12.1 Backend</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Concern</th><th>Library</th></tr>
+    <tr><td>Runtime / framework</td><td>Node.js (ESM) · Express 5</td></tr>
+    <tr><td>ODM / database</td><td>Mongoose 9 · MongoDB (Cosmos vCore)</td></tr>
+    <tr><td>Auth / crypto</td><td>jsonwebtoken · bcryptjs · Node crypto (AES-256-CBC)</td></tr>
+    <tr><td>Security middleware</td><td>helmet · cors · express-rate-limit · cookie-parser</td></tr>
+    <tr><td>Validation</td><td>express-validator</td></tr>
+    <tr><td>Scheduling</td><td>node-cron</td></tr>
+    <tr><td>Integrations</td><td>google-ads-api · googleapis · Meta Graph (via fetch) · Gemini (REST)</td></tr>
+    <tr><td>Files / logging</td><td>exceljs · multer · morgan</td></tr>
+    <tr><td>Dev</td><td>nodemon</td></tr>
+  </table>
+  <h3>12.2 Frontend</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Concern</th><th>Library</th></tr>
+    <tr><td>Framework</td><td>React 19 · react-router-dom 6</td></tr>
+    <tr><td>State</td><td>Redux Toolkit · react-redux · React Context</td></tr>
+    <tr><td>UI</td><td>MUI (Material + Joy + Base + System) · Emotion</td></tr>
+    <tr><td>Data viz</td><td>@mui/x-charts · Recharts</td></tr>
+    <tr><td>Grids / pickers</td><td>@mui/x-data-grid · @mui/x-date-pickers</td></tr>
+    <tr><td>HTTP / forms</td><td>axios · Formik · Yup · date-fns</td></tr>
+    <tr><td>Export</td><td>xlsx · xlsx-js-style · jspdf · jspdf-autotable · html2canvas · file-saver</td></tr>
+    <tr><td>Build / harden</td><td>react-scripts (CRA) · javascript-obfuscator</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 13. PROJECT STRUCTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">13</span>Complete Project Structure</h2>
+  <div class="tree">New_Ara_CRM/
+├── backend/                 # Node.js / Express API + jobs
+│   ├── config/db.js         # Mongo connection + boot self-heal
+│   ├── controllers/         # 12 controllers (request handlers)
+│   ├── routes/              # 18 route groups (/api/*)
+│   ├── middleware/          # auth, permissions, validation, errorHandler
+│   ├── models/              # 24 Mongoose schemas
+│   ├── services/            # Meta/Google/metrics/billing/xlsx/AI
+│   ├── sync/                # scheduler, syncService, metaSyncService
+│   ├── lib/                 # telecallerAutomation
+│   ├── utils/               # encryption, tokens, mappers, rate-limit, signature
+│   ├── scripts/             # migrations, smoke tests, backfills
+│   ├── seedAdmin.js         # seed a first admin
+│   ├── server.js            # app bootstrap + middleware wiring
+│   └── .env(.example)       # backend configuration
+├── crm-frontend/            # React SPA
+│   ├── public/
+│   ├── scripts/obfuscate.js # post-build hardening
+│   └── src/
+│       ├── api/             # axios instances + resource clients
+│       ├── pages/           # 23 routed screens
+│       ├── components/      # dashboard/, telecaller/, shared widgets
+│       ├── layouts/         # MainLayout (agency shell)
+│       ├── store/slices/    # Redux Toolkit slices
+│       ├── contexts/        # DataCache, Theme
+│       ├── constants/       # telecallerSheet (enum lockstep)
+│       └── utils/           # ProtectedRoute, exporters
+├── docs/                    # BRD, FSD, TSD, integration references
+└── redeploy.sh              # manual deployment script</div>
+</section>
+
+<!-- ===================== 14. FOLDER STRUCTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">14</span>Folder Structure (responsibilities)</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Folder</th><th>Responsibility</th></tr>
+    <tr><td>backend/config</td><td>DB connection, pool sizing, boot-time self-heal &amp; index repair.</td></tr>
+    <tr><td>backend/routes</td><td>HTTP surface; binds middleware guards to controller actions.</td></tr>
+    <tr><td>backend/controllers</td><td>Request/response orchestration &amp; business logic per resource.</td></tr>
+    <tr><td>backend/middleware</td><td>auth (protect/protectClient/protectAdminOrClient/authorize), permissions (checkPermission/checkRole + maps), validation, errorHandler.</td></tr>
+    <tr><td>backend/models</td><td>Schemas, indexes, virtuals, hooks — the data contract.</td></tr>
+    <tr><td>backend/services</td><td>External API clients, normalisation, metrics, billing, Excel, AI.</td></tr>
+    <tr><td>backend/sync</td><td>Cron scheduler + Google/Meta sync orchestration.</td></tr>
+    <tr><td>backend/lib</td><td>Framework-free domain logic (telecaller automation).</td></tr>
+    <tr><td>backend/utils</td><td>Crypto, JWT, Meta field mapping/rate-limit/signature, validators.</td></tr>
+    <tr><td>backend/scripts</td><td>One-off migrations, backfills, and operational smoke tests.</td></tr>
+    <tr><td>crm-frontend/src/api</td><td>Axios base (interceptors, 401 grace) + per-resource clients.</td></tr>
+    <tr><td>crm-frontend/src/pages</td><td>Route-level screens (agency + portal).</td></tr>
+    <tr><td>crm-frontend/src/components</td><td>Reusable UI (dashboard widgets, telecaller grid, reports).</td></tr>
+    <tr><td>crm-frontend/src/store</td><td>Redux Toolkit store &amp; slices.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 15. MODULE ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">15</span>Module Architecture</h2>
+  <p class="lead">Backend modules map route group → controller → service(s) → model(s).</p>
+  <table class="tight">
+    <tr><th style="width:16%">Module</th><th style="width:18%">Route</th><th style="width:24%">Controller / Service</th><th>Primary models</th></tr>
+    <tr><td>Auth</td><td>/auth, /client-portal</td><td>authController, clientAuthController</td><td>User, ClientPortalUser, Client</td></tr>
+    <tr><td>Users</td><td>/users</td><td>userController</td><td>User</td></tr>
+    <tr><td>Clients</td><td>/clients</td><td>clientController</td><td>Client (+cascade)</td></tr>
+    <tr><td>Leads</td><td>/leads</td><td>leadController + metaMetricsService</td><td>Lead</td></tr>
+    <tr><td>Meta / Telecalling</td><td>/meta</td><td>metaController, leadTelecallerController, metaLeadService, metaAdsService, metaBillingService, telecallerAutomation, leadXlsxService</td><td>Meta*, Lead, BillingTransaction</td></tr>
+    <tr><td>Google Ads</td><td>/google-ads, /metrics, /analytics</td><td>googleAdsService, syncService, analyticsService</td><td>Campaign, Metric, Keyword</td></tr>
+    <tr><td>Daily data</td><td>/daily-entries, /daily-lead-data</td><td>dailyEntryController, dailyLeadDataController</td><td>DailyEntry, DailyLeadData</td></tr>
+    <tr><td>Billing</td><td>/payments, /billing</td><td>payments/billing routes + metaBillingService</td><td>Payment, BillingTransaction, DailyDebitSnapshot</td></tr>
+    <tr><td>Reports</td><td>/reports</td><td>reportsController</td><td>various (aggregations)</td></tr>
+    <tr><td>Content</td><td>/content-entries</td><td>contentEntryController</td><td>ContentEntry</td></tr>
+    <tr><td>Vaults</td><td>/vault, /personal-vault</td><td>route handlers + encryption util</td><td>Vault, PersonalVault</td></tr>
+    <tr><td>AI</td><td>/ai</td><td>aiController</td><td>— (stateless)</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 16. COMPONENT ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">16</span>Component Architecture</h2>
+  <h3>16.1 Backend components</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Component</th><th>Responsibility</th></tr>
+    <tr><td>Metrics service</td><td>Single authority for lead/spend KPIs (form vs WhatsApp rules, CPL/CTR/CPC/CPM, ingestion gap).</td></tr>
+    <tr><td>Meta ad service</td><td>Graph API client: retries, pagination, rate-limit parsing, field sets.</td></tr>
+    <tr><td>Meta lead service</td><td>Idempotent ingest, retry queue processing, poller.</td></tr>
+    <tr><td>Billing services</td><td>Delta reconcile, idempotent ledger writes, balance cache.</td></tr>
+    <tr><td>Telecaller automation</td><td>Framework-free pre-save rules (reminder/history/DARMANT/stamps).</td></tr>
+    <tr><td>Xlsx service</td><td>Import parse + value cleaning + upsert; export 26-column workbook.</td></tr>
+    <tr><td>Scheduler</td><td>Cron registration, overlap guards, run-state, retry worker.</td></tr>
+  </table>
+  <h3>16.2 Frontend components</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Component group</th><th>Members</th></tr>
+    <tr><td>Shell</td><td>MainLayout, ProtectedRoute, OfflineScreen, LeadMatrixLoader.</td></tr>
+    <tr><td>Dashboard</td><td>BalanceWatch, PerformanceInsights, KpiStrip, PlatformOverview, ClientOverviewCards, SideWidgets, ActiveCampaigns.</td></tr>
+    <tr><td>Telecalling</td><td>TelecallerSheet, QueueChips, TelecallerFilterBar, ImportLeadsDialog, MetaLeadsTable.</td></tr>
+    <tr><td>Reporting</td><td>TelecallingReport, MonthlyAbstract, MetricsBand, PortalDashboardToday, AiCampaignInsights.</td></tr>
+    <tr><td>Alerts</td><td>LowBalanceBell.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 17. LAYERED ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">17</span>Layered Architecture</h2>
+  <table class="tight">
+    <tr><th style="width:20%">Layer</th><th style="width:30%">Contains</th><th>Rules</th></tr>
+    <tr><td>Routing</td><td>Express routers</td><td>Only wire middleware + controller; no business logic.</td></tr>
+    <tr><td>Middleware (cross-cut)</td><td>auth, permissions, validation, rate-limit, error handler</td><td>Guard, validate, normalise; short-circuit on failure.</td></tr>
+    <tr><td>Controller (domain)</td><td>Per-resource handlers</td><td>Orchestrate; may call services + models; own transaction-like flows.</td></tr>
+    <tr><td>Service (integration/domain)</td><td>External clients, metrics, billing, xlsx, automation</td><td>All external I/O and heavy computation; reusable across controllers.</td></tr>
+    <tr><td>Data access (ODM)</td><td>Mongoose models</td><td>Schema, indexes, hooks, virtuals; the only DB touch-point.</td></tr>
+  </table>
+  <div class="callout"><strong>Dependency rule.</strong> Dependencies point downward only. Controllers depend on services and models; services depend on models and utils; models depend on nothing above them. The single metrics service is shared by multiple controllers to prevent KPI drift.</div>
+</section>
+
+<!-- ===================== 18. DATABASE ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">18</span>Database Architecture</h2>
+  <table class="tight">
+    <tr><th style="width:24%">Aspect</th><th>Detail</th></tr>
+    <tr><td>Engine</td><td>MongoDB API on Azure Cosmos DB for MongoDB vCore (document model).</td></tr>
+    <tr><td>ODM</td><td>Mongoose 9 — schemas, validation, hooks, virtuals, index sync.</td></tr>
+    <tr><td>Connection</td><td>TLS + SCRAM-SHA-256; <code>retrywrites=false</code>; pool <code>maxPoolSize</code> default 5 (env <code>DB_MAX_POOL</code>), <code>minPoolSize</code> 0, idle 120 s.</td></tr>
+    <tr><td>Indexing</td><td><code>autoIndex</code> enabled in non-prod only; prod relies on explicit <code>syncIndexes()</code>; unique/compound/partial indexes enforce integrity &amp; idempotency.</td></tr>
+    <tr><td>Multi-tenancy</td><td>Row-level via <code>client</code>/<code>client_id</code> foreign keys on shared collections.</td></tr>
+    <tr><td>Integrity patterns</td><td>Idempotency keys, partial unique indexes (non-empty), compound daily keys <code>{client, date, …}</code>, immutable audit/ledger collections.</td></tr>
+    <tr><td>Self-heal</td><td>Boot-time cleanup of empty unique fields, stale portal-user indexes, and orphaned sync runs.</td></tr>
+  </table>
+  <h3>18.1 Collection groups</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Group</th><th>Collections</th></tr>
+    <tr><td>Identity</td><td>User, ClientPortalUser</td></tr>
+    <tr><td>Core</td><td>Client, Lead</td></tr>
+    <tr><td>Google Ads</td><td>Campaign, Metric, Keyword</td></tr>
+    <tr><td>Meta Ads</td><td>MetaCampaign, MetaAdSet, MetaAd, MetaInsights, MetaLeadForm, MetaLeadRaw, MetaWebhookRetry, MetaSyncRun</td></tr>
+    <tr><td>Finance</td><td>Payment, BillingTransaction, DailyDebitSnapshot</td></tr>
+    <tr><td>Operational</td><td>DailyEntry, DailyLeadData, AbstractEntry, ContentEntry</td></tr>
+    <tr><td>Secrets</td><td>Vault, PersonalVault</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 19. ER DIAGRAMS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">19</span>Entity Relationship Diagrams</h2>
+  <div class="diagram">
+    <div class="cap">Client-centred ER (hub-and-spoke)</div>
+    <div class="seq">                         ┌─────────────┐
+                         │    User     │ (staff identity)
+                         └──────┬──────┘
+             createdBy/assignedTo/recordedBy │
+                                ▼
+   ┌───────────────┐     ┌─────────────┐     ┌────────────────────┐
+   │ClientPortalUser│◀───│   CLIENT    │───▶│ Campaign/Metric/    │
+   │ (admin/teleclr)│ 1:N │  (the hub)  │ 1:N │ Keyword (Google)    │
+   └───────────────┘     └──────┬──────┘     └────────────────────┘
+                    1:N ┌───────┼───────┬──────────────┐
+                        ▼       ▼       ▼              ▼
+                   ┌────────┐ ┌──────┐ ┌───────────┐ ┌─────────────┐
+                   │  Lead  │ │Meta* │ │ Payment / │ │ Daily* /    │
+                   │        │ │(5)   │ │ Billing   │ │ Abstract    │
+                   └───┬────┘ └──────┘ │ /Snapshot │ │ /Content    │
+                       │ 1:1           └───────────┘ └─────────────┘
+                 ┌─────▼──────┐
+                 │ MetaLeadRaw│ (audit → lead_id)
+                 └────────────┘</div>
+  </div>
+  <p class="small">Client is the operational hub (parent of ~15 collections); User is the identity hub. The Meta ad hierarchy (MetaCampaign → MetaAdSet → MetaAd → MetaInsights) is linked by business string IDs, each also referencing Client. MetaLeadRaw links 1:1 to the created Lead via <code>lead_id</code>.</p>
+
+  <h3>19.1 Cardinality summary</h3>
+  <table class="tight">
+    <tr><th style="width:30%">Relationship</th><th>Cardinality</th></tr>
+    <tr><td>Client → ClientPortalUser</td><td>1 : N</td></tr>
+    <tr><td>Client → Lead / Meta* / Google* / Finance / Daily*</td><td>1 : N (each)</td></tr>
+    <tr><td>User → Lead (assignedTo, createdBy)</td><td>1 : N</td></tr>
+    <tr><td>User ↔ PersonalVault.sharedWith</td><td>M : N</td></tr>
+    <tr><td>Payment → BillingTransaction (reference.payment_id)</td><td>1 : 1</td></tr>
+    <tr><td>MetaLeadRaw → Lead (lead_id)</td><td>1 : 1</td></tr>
+    <tr><td>ClientPortalUser → ClientPortalUser (createdBy)</td><td>self-ref</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 20. DATABASE TABLES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">20</span>Database Tables (Collections)</h2>
+  <table class="tight">
+    <tr><th style="width:20%">Collection</th><th style="width:30%">Key fields</th><th>Notable indexes / constraints</th></tr>
+    <tr><td>User</td><td>userID(uniq), email(uniq), password, role, permissions[], isActive</td><td>unique email/userID; role, isActive indexes; bcrypt hook; USRnnn generator.</td></tr>
+    <tr><td>Client</td><td>clientName, status, google_ads_customer_id, meta_ad_account_id, billing{}, meta_pages[], telecalling_targets{}, portal*</td><td>unique+sparse on ad IDs; text index; validators (10-digit / act_).</td></tr>
+    <tr><td>ClientPortalUser</td><td>clientId, username, email, password, role, isActive</td><td>unique {clientId,username}; partial unique {clientId,email}.</td></tr>
+    <tr><td>Lead</td><td>name, email, contact, source*, status*, meta_*, follow_ups[], telecaller cols</td><td>unique {client,contact} partial; unique sparse meta_leadgen_id; many query indexes; virtuals.</td></tr>
+    <tr><td>Campaign / Metric / Keyword</td><td>client_id, campaign_id, metrics/KPIs, date</td><td>unique campaign_id; compound {client,campaign,date}; unique keyword {client,campaign,criterion,date}.</td></tr>
+    <tr><td>MetaCampaign/AdSet/Ad</td><td>client_id, *_id, status, budgets, targeting</td><td>unique on entity id; {client,status}/{client,campaign} indexes.</td></tr>
+    <tr><td>MetaInsights</td><td>client_id, level, entity_id, date, spend, leads, KPIs</td><td>unique {client,entity,date}; {date,level} cross-client.</td></tr>
+    <tr><td>MetaLeadForm</td><td>form_id, page_id, client_id(nullable), question_schema[]</td><td>unique form_id; nullable client for unmapped forms.</td></tr>
+    <tr><td>MetaLeadRaw</td><td>leadgen_id(uniq), raw_payload, processed, lead_id</td><td>unique leadgen_id; {processed, received_at}.</td></tr>
+    <tr><td>MetaWebhookRetry</td><td>leadgen_id, payload, attempts, next_attempt_at, status</td><td>{status, next_attempt_at} worker query.</td></tr>
+    <tr><td>MetaSyncRun</td><td>run_id(uniq), scope, status, counts{}, errors[]</td><td>unique run_id; {status, started_at}.</td></tr>
+    <tr><td>Payment</td><td>client_id, amount, method, date</td><td>client_id, date indexes.</td></tr>
+    <tr><td>BillingTransaction</td><td>client_id, type, amount, balance_after, source, idempotency_key</td><td>{client,occurred_at}; unique sparse idempotency_key.</td></tr>
+    <tr><td>DailyDebitSnapshot</td><td>client_id, platform, campaign_id, date, debited/reported</td><td>unique {client,platform,campaign,date}.</td></tr>
+    <tr><td>DailyEntry / DailyLeadData</td><td>date, client, meta/google counts, CPL</td><td>unique {date,client} / unique date; pre-save calc.</td></tr>
+    <tr><td>AbstractEntry</td><td>client, date(YYYY-MM-DD), manualValues(Map)</td><td>unique {client,date}.</td></tr>
+    <tr><td>ContentEntry</td><td>date, clientName, contentType, status, approvalStatus</td><td>date/clientName/status indexes.</td></tr>
+    <tr><td>Vault / PersonalVault</td><td>credentials (AES), platform, sharedWith[]</td><td>encrypted password at rest.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 21. DATABASE RELATIONSHIPS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">21</span>Database Relationships</h2>
+  <table class="tight">
+    <tr><th style="width:22%">Type</th><th>Relationships</th></tr>
+    <tr><td>ObjectId references (enforced by app)</td><td>Lead.client→Client, Lead.assignedTo/createdBy→User, ClientPortalUser.clientId→Client, Payment.client_id→Client, BillingTransaction.client_id→Client &amp; reference.payment_id→Payment, MetaLeadRaw.lead_id→Lead, all Google/Meta facts.client_id→Client, PersonalVault.createdBy/sharedWith→User, AbstractEntry.client→Client, MetaSyncRun.client_id→Client.</td></tr>
+    <tr><td>String / business-key links</td><td>Meta hierarchy cross-links (campaign_id/adset_id/ad_id); Vault.clientId (string); DailyEntry.clientId (string); ContentEntry.clientName (string).</td></tr>
+    <tr><td>Non-client-scoped</td><td>DailyLeadData is a global per-day aggregate (unique on date).</td></tr>
+    <tr><td>Financial flow</td><td>Payment (credit) → BillingTransaction → Client.billing.available_balance; ad spend (Metric/MetaInsights) → delta → DailyDebitSnapshot → BillingTransaction (debit).</td></tr>
+  </table>
+  <div class="callout info"><strong>Referential integrity</strong> is application-enforced (document DB). Hard-delete of a client cascades explicitly across ~10 collections with per-collection outcome reporting; drop is a reversible soft-delete preserving all references.</div>
+</section>
+
+<!-- ===================== 22. API ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">22</span>API Architecture</h2>
+  <table class="tight">
+    <tr><th style="width:24%">Aspect</th><th>Detail</th></tr>
+    <tr><td>Style</td><td>RESTful JSON over HTTPS, mounted under <code>/api</code>.</td></tr>
+    <tr><td>Envelope</td><td>Success <code>{ success:true, data|message|… }</code>; error <code>{ success:false, error|message|errors }</code>.</td></tr>
+    <tr><td>Auth transport</td><td><code>Authorization: Bearer</code> or httpOnly <code>token</code> cookie (<code>Secure; SameSite=None</code>).</td></tr>
+    <tr><td>Guards</td><td>protect · protectClient · protectAdminOrClient · authorize(roles) · requireClientPortalRole · checkPermission · checkRole · requireAgencyToken.</td></tr>
+    <tr><td>Rate limiting</td><td>Auth 10/15 min (reset on success); API 1000/15 min per IP.</td></tr>
+    <tr><td>Body limits</td><td>10 MB JSON/urlencoded; raw body captured only for the Meta webhook (HMAC).</td></tr>
+    <tr><td>Caching</td><td>Short-TTL in-memory caches on hot read endpoints (analytics 5 min; lead pivots 60 s; user cache 1 min).</td></tr>
+    <tr><td>Errors</td><td>Centralised handler maps Mongoose/JWT errors to status + message.</td></tr>
+  </table>
+  <h3>22.1 Request lifecycle</h3>
+  <div class="flow">
+    <span class="step">HTTPS request</span><span class="arw">▶</span><span class="step">helmet/CORS</span><span class="arw">▶</span>
+    <span class="step">rate limiter</span><span class="arw">▶</span><span class="step">body parse</span><span class="arw">▶</span>
+    <span class="step">auth guard</span><span class="arw">▶</span><span class="step">RBAC / tenant</span><span class="arw">▶</span>
+    <span class="step">validation</span><span class="arw">▶</span><span class="step">controller → service → model</span><span class="arw">▶</span>
+    <span class="step end">JSON response</span> <span class="arw">│</span> <span class="step dec">error → errorHandler</span>
+  </div>
+</section>
+
+<!-- ===================== 23. API CATALOGUE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">23</span>Complete API Catalogue</h2>
+  <table class="tight">
+    <tr><th style="width:20%">Group</th><th style="width:16%">Guard</th><th>Representative endpoints</th></tr>
+    <tr><td><code>/auth</code></td><td>public/protect</td><td>POST login · POST client-login · POST register · GET me · GET client-me · POST logout · PUT update-details · PUT update-password</td></tr>
+    <tr><td><code>/users</code></td><td>admin/superadmin</td><td>GET / · POST / · GET stats · GET roles · GET teams · GET/PUT/DELETE :id · PATCH toggle-status · PATCH change-password · PATCH permissions</td></tr>
+    <tr><td><code>/clients</code></td><td>checkPermission</td><td>GET / · POST / · GET stats · GET/PUT/DELETE :id · PATCH status · PATCH drop · PATCH reonboard · GET :id/portal-credentials · GET smm-users</td></tr>
+    <tr><td><code>/leads</code></td><td>checkPermission</td><td>GET / · POST / · GET stats/summary · GET monthly-meta-by-client · GET daily-by-client · GET/PUT/DELETE :id</td></tr>
+    <tr><td><code>/meta</code></td><td>protectAdminOrClient</td><td>GET/POST webhook · sync(+historical) · unassigned-forms · forms/:id/assign|reprocess · client/:id/config|analytics|spend-overview · client/:id/leads (GET/POST/PUT/DELETE) · leads/import|export · telecalling-report · telecalling-targets · monthly-abstract(+/cell) · sync-runs · retry-queue · raw-leads</td></tr>
+    <tr><td><code>/google-ads</code></td><td>admin/superadmin</td><td>POST sync · sync/:id · GET campaigns/:id · PUT customer-id|enable|associate · POST clients/bulk-associate · GET clients/unassociated · POST validate-customer-id · GET sync-status</td></tr>
+    <tr><td><code>/metrics</code></td><td>protectAdminOrClient</td><td>GET dashboard/:id · campaigns/:id · daily/:id</td></tr>
+    <tr><td><code>/analytics</code></td><td>protectAdminOrClient</td><td>GET clients · client/:id · client/:id/spend-overview</td></tr>
+    <tr><td><code>/daily-entries</code></td><td>checkPermission</td><td>CRUD · stats/summary|today · date/:date · meta-lead|meta-fund · sync-meta · main-* proxies</td></tr>
+    <tr><td><code>/daily-lead-data</code></td><td>checkPermission</td><td>CRUD · stats/summary · stats/campaign-comparison · date/:date</td></tr>
+    <tr><td><code>/payments</code></td><td>admin/superadmin</td><td>POST / · GET :clientId</td></tr>
+    <tr><td><code>/billing</code></td><td>admin/superadmin</td><td>POST :id/reconcile · :id/deep-sync · :id/reset(confirm)</td></tr>
+    <tr><td><code>/client-portal</code></td><td>protectClient</td><td>GET analytics · GET/POST/PUT/DELETE users (admin)</td></tr>
+    <tr><td><code>/reports</code></td><td>report:view</td><td>GET dashboard · sales · campaign-performance · lead-performance · user-performance* · financial* (*admin)</td></tr>
+    <tr><td><code>/content-entries</code></td><td>checkPermission</td><td>CRUD · calendar/:year/:month · smm-users</td></tr>
+    <tr><td><code>/vault · /personal-vault</code></td><td>protect / admin</td><td>credential CRUD (decrypt on read); personal share PATCH</td></tr>
+    <tr><td><code>/ai</code></td><td>protect</td><td>POST analyze-campaign</td></tr>
+    <tr><td><code>/health · /</code></td><td>public</td><td>health check &amp; root banner</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 24. AUTHENTICATION ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">24</span>Authentication Architecture</h2>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Detail</th></tr>
+    <tr><td>Mechanism</td><td>Stateless JWT (jsonwebtoken), signed with <code>JWT_SECRET</code>.</td></tr>
+    <tr><td>Staff token</td><td>Payload <code>{ id }</code>; login by email+password; access 30 d, refresh 90 d (<code>JWT_REFRESH_SECRET</code>).</td></tr>
+    <tr><td>Portal token</td><td>Payload <code>{ id, role, clientId, userId }</code>; login by username/email+password, client-scoped.</td></tr>
+    <tr><td>Transport</td><td>Bearer header or httpOnly cookie <code>token</code> (<code>Secure; SameSite=None</code> for cross-site HTTPS).</td></tr>
+    <tr><td>Password storage</td><td>bcrypt (salt rounds 10) in pre-save hooks; <code>select:false</code>.</td></tr>
+    <tr><td>Guards</td><td><code>protect</code> (staff; 1-min user cache; active check), <code>protectClient</code> (portal; portalEnabled + active), <code>protectAdminOrClient</code> (dual).</td></tr>
+    <tr><td>Legacy self-heal</td><td>Portal login falls back to legacy client credentials and auto-seeds an admin ClientPortalUser; tokens without <code>userId</code> degrade to least-privilege on protected portal routes.</td></tr>
+    <tr><td>Client 401 grace</td><td>Front-end delays forced logout 800 ms and cancels it if any success lands — resists transient 401s.</td></tr>
+  </table>
+  <h3>24.1 Login sequence</h3>
+  <div class="seq">Browser        API (/auth/login)      Mongo(User)       Token util
+  │  POST email,password │                   │                 │
+  │─────────────────────▶│  findOne(email)   │                 │
+  │                      │──────────────────▶│                 │
+  │                      │  user (+hash)     │                 │
+  │                      │◀──────────────────│                 │
+  │                      │ bcrypt.compare     │                 │
+  │                      │ active? lastLogin  │                 │
+  │                      │───────────────────────────────────▶ │ sign(30d)
+  │  200 {token,user}    │◀─────────────────────────────────── │
+  │◀─────────────────────│  Set-Cookie token (httpOnly)         │</div>
+</section>
+
+<!-- ===================== 25. AUTHORIZATION ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">25</span>Authorization Architecture</h2>
+  <h3>25.1 Agency RBAC — evaluation order</h3>
+  <div class="flow">
+    <span class="step dec">role ∈ {superadmin, admin}?</span><span class="arw">▶ yes</span><span class="step end">allow</span>
+  </div>
+  <div class="flow">
+    <span class="arw">no →</span><span class="step dec">permissions ∋ required API perm?</span><span class="arw">▶ yes</span><span class="step end">allow</span>
+  </div>
+  <div class="flow">
+    <span class="arw">no →</span><span class="step dec">holds a page-perm mapping to it?</span><span class="arw">▶ yes</span><span class="step end">allow</span> <span class="arw">│ no →</span><span class="step">403</span>
+  </div>
+  <p class="small">Page↔API map (e.g. page <code>daily-entry</code>/<code>daily-lead-data</code> grants <code>entry:create</code>; page <code>clients</code>/<code>dashboard</code> grants <code>client:read</code>). Roles are free-form; only superadmin/admin are hard-coded full access.</p>
+
+  <h3>25.2 Portal RBAC &amp; tenancy</h3>
+  <table class="tight">
+    <tr><th style="width:24%">Control</th><th>Behaviour</th></tr>
+    <tr><td>Role gate</td><td><code>requireClientPortalRole('admin')</code> on user-management &amp; ad/billing routes; telecaller limited to leads/reports.</td></tr>
+    <tr><td>Tenant isolation</td><td><code>clientId</code> taken from the JWT; shared routes reject mismatched <code>:clientId</code> (403 "Portal token cannot access another client").</td></tr>
+    <tr><td>Last-admin guard</td><td>Cannot demote/deactivate/delete the final active admin; cannot delete self.</td></tr>
+  </table>
+  <div class="callout warn"><strong>Gap.</strong> <code>/api/vault</code> has authentication but no role/permission gate and returns decrypted client credentials to any authenticated staff user (see §26, §50, §53).</div>
+</section>
+
+<!-- ===================== 26. SECURITY ARCHITECTURE ===================== -->
+<section class="page">
+  <h2><span class="sec-num">26</span>Security Architecture</h2>
+  <table class="tight">
+    <tr><th style="width:24%">Control</th><th>Implementation</th></tr>
+    <tr><td>Transport security</td><td>HTTPS end-to-end; secure cookies; HSTS via edge.</td></tr>
+    <tr><td>HTTP hardening</td><td>helmet (cross-origin resource policy set for asset sharing).</td></tr>
+    <tr><td>CORS</td><td>Credentialed, explicit origin allow-list (prod domains + localhost).</td></tr>
+    <tr><td>Rate limiting</td><td>Strict login limiter + generous API limiter.</td></tr>
+    <tr><td>Password security</td><td>bcrypt (rounds 10); never returned; <code>select:false</code>.</td></tr>
+    <tr><td>Secret encryption</td><td>AES-256-CBC (random IV, <code>iv:ciphertext</code>) for page tokens, vault, recoverable portal password; SHA-256 hashing helper.</td></tr>
+    <tr><td>Webhook integrity</td><td>HMAC-SHA256 over raw body vs <code>X-Hub-Signature-256</code>; verify-token challenge.</td></tr>
+    <tr><td>Injection resistance</td><td>Mongoose parameterised queries; express-validator input validation; enum allow-lists.</td></tr>
+    <tr><td>Tenant isolation</td><td>Token-derived client identity; per-route scoping.</td></tr>
+    <tr><td>Client hardening</td><td>Production bundle obfuscation (identifier mangling).</td></tr>
+  </table>
+  <h3>26.1 Threats &amp; mitigations</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Threat</th><th>Mitigation</th></tr>
+    <tr><td>Credential brute force</td><td>Auth rate limiter (10/15 min).</td></tr>
+    <tr><td>Cross-tenant access (IDOR)</td><td>JWT-derived tenant + per-route assert.</td></tr>
+    <tr><td>Token theft</td><td>httpOnly secure cookies; short-lived intent (30 d) — see §53 for rotation.</td></tr>
+    <tr><td>Webhook spoofing</td><td>HMAC signature verification.</td></tr>
+    <tr><td>Secret exposure</td><td>Encryption at rest; keys in env (see §53 for a vault recommendation).</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 27. LOGGING STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">27</span>Logging Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Log</th><th>Detail</th></tr>
+    <tr><td>HTTP access</td><td>morgan — <code>combined</code> in production, <code>dev</code> otherwise.</td></tr>
+    <tr><td>Application logs</td><td>Structured, tagged console logs (<code>[sync-scheduler]</code>, <code>[meta-scheduler]</code>, <code>[meta-retry]</code>, <code>[client-login]</code>, <code>[server]</code>) captured by systemd/journald.</td></tr>
+    <tr><td>Sync audit</td><td>MetaSyncRun documents per run (counts, per-stage errors, rate-limit usage).</td></tr>
+    <tr><td>Lead audit</td><td>MetaLeadRaw immutable payload log; MetaWebhookRetry failure trail.</td></tr>
+    <tr><td>Financial audit</td><td>Append-only BillingTransaction ledger with idempotency keys.</td></tr>
+    <tr><td>Sensitive data</td><td>Login diagnostics never log passwords; errors omit stack traces in production.</td></tr>
+  </table>
+  <div class="callout info"><strong>Recommendation.</strong> Introduce centralised, structured JSON logging (e.g. pino) shipped to an aggregator for search, retention and alerting (§53).</div>
+</section>
+
+<!-- ===================== 28. MONITORING STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">28</span>Monitoring Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Signal</th><th>Source</th></tr>
+    <tr><td>Liveness</td><td><code>GET /health</code> (uptime, timestamp) and <code>GET /</code> banner.</td></tr>
+    <tr><td>Sync health</td><td><code>GET /api/meta/sync-status</code>, <code>/sync-runs</code>, <code>/google-ads/sync-status</code> (last run, duration, status, counts, errors).</td></tr>
+    <tr><td>Retry backlog</td><td><code>GET /api/meta/retry-queue</code> (pending/abandoned).</td></tr>
+    <tr><td>Ingestion gap</td><td>Lead pivots expose <code>missingFormLeads</code> (Meta-reported minus CRM-held).</td></tr>
+    <tr><td>Balance health</td><td>Low-balance bell + Balance Watch as operational monitors.</td></tr>
+    <tr><td>Process</td><td>systemd status / journald for crashes &amp; restarts.</td></tr>
+  </table>
+  <div class="callout info"><strong>Recommendation.</strong> Add uptime checks on <code>/health</code>, alerting on failed/partial sync runs and growing retry backlog, and DB/host metrics (§53).</div>
+</section>
+
+<!-- ===================== 29. ERROR HANDLING STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">29</span>Error Handling Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:30%">Condition</th><th style="width:10%">Status</th><th>Message</th></tr>
+    <tr><td>CastError (bad ObjectId)</td><td>404</td><td>"Resource not found"</td></tr>
+    <tr><td>Duplicate key (11000)</td><td>400</td><td>"&lt;field&gt; already exists"</td></tr>
+    <tr><td>ValidationError</td><td>400</td><td>joined field messages</td></tr>
+    <tr><td>JsonWebTokenError</td><td>401</td><td>"Invalid token"</td></tr>
+    <tr><td>TokenExpiredError</td><td>401</td><td>"Token expired"</td></tr>
+    <tr><td>Permission/role denial</td><td>403</td><td>"Access denied. Required permission/role: …"</td></tr>
+    <tr><td>Tenant violation</td><td>403</td><td>"Portal token cannot access another client"</td></tr>
+    <tr><td>Unknown route</td><td>404</td><td>"Not Found - &lt;url&gt;"</td></tr>
+    <tr><td>Rate limit</td><td>429</td><td>"Too many …, please try again later."</td></tr>
+    <tr><td>Fallback</td><td>500</td><td>"Server Error" (stack in dev only)</td></tr>
+  </table>
+  <p class="small">All async handlers are wrapped (<code>asyncHandler</code>) so rejections route to the central handler. Process-level <code>unhandledRejection</code>/<code>uncaughtException</code> handlers log and exit for a clean systemd restart.</p>
+  <div class="callout warn"><strong>Consistency note.</strong> Three error-payload key conventions coexist (<code>message</code> / <code>error</code> / <code>errors</code>) and duplicate conflicts return 409 (portal users) vs 400 (staff users); 422 is unused. Standardisation recommended (§53).</div>
+</section>
+
+<!-- ===================== 30. VALIDATION STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">30</span>Validation Strategy</h2>
+  <div class="diagram">
+    <div class="cap">Three-layer validation</div>
+    <div class="row-boxes">
+      <div class="node gold">L1 Client (Formik/Yup + inline regex) — instant feedback</div>
+      <div class="vbar">▶</div>
+      <div class="node">L2 API (express-validator + controller enum checks) — 400 {errors[]}</div>
+      <div class="vbar">▶</div>
+      <div class="node db">L3 Schema (Mongoose validators/enums/indexes) — final guard</div>
+    </div>
+  </div>
+  <table class="tight">
+    <tr><th style="width:26%">Rule class</th><th>Examples</th></tr>
+    <tr><td>Format</td><td>email regex; Google ID 10 digits (schema) / 8–12 (UI); Meta ID <code>act_\d+</code>; username <code>^[a-z0-9._-]{3,60}$</code>.</td></tr>
+    <tr><td>Range/length</td><td>password ≥ 6; client name 2–200; notes ≤ 1000; pagination limit ≤ 10000; date range ≤ 90 days.</td></tr>
+    <tr><td>Enum allow-lists</td><td>status, source, telecalling vocabulary (validated by controller before save).</td></tr>
+    <tr><td>Uniqueness</td><td>email, userID, ad IDs (sparse), contact per client (partial), leadgen_id, idempotency key.</td></tr>
+    <tr><td>Business guards</td><td>billing fields stripped from client update; last-admin protection; confirm-required destructive ops.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 31. PERFORMANCE OPTIMIZATION ===================== -->
+<section class="page">
+  <h2><span class="sec-num">31</span>Performance Optimization</h2>
+  <table class="tight">
+    <tr><th style="width:30%">Technique</th><th>Detail</th></tr>
+    <tr><td>Targeted indexing</td><td>Query-shaped indexes on hot paths (client+date, meta_created_time, status, form/campaign/ad ids).</td></tr>
+    <tr><td>Bulk endpoints</td><td>dashboard-overview &amp; daily-metrics replace N+1 per-client calls.</td></tr>
+    <tr><td>Parallelism</td><td>Analytics computed in parallelised Promise.all batches; webhook events processed via Promise.allSettled.</td></tr>
+    <tr><td>Short-TTL caching</td><td>Analytics 5 min, lead pivots 60 s, user lookups 1 min.</td></tr>
+    <tr><td>Aggregation at DB</td><td>Roll-ups computed via Mongo aggregation, not in-app loops.</td></tr>
+    <tr><td>Field projection</td><td>Meta field sets avoid <code>fields=*</code>; select only what's needed.</td></tr>
+    <tr><td>Front-end</td><td>Route-level code splitting + prefetch; silent background refresh; memoised computed views; balance cache for fast reads.</td></tr>
+    <tr><td>Sync hygiene</td><td>Sequential per-client sync, staggered cadence, overlap guards to avoid contention.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 32. CACHING STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">32</span>Caching Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Cache</th><th>Scope / TTL</th><th>Purpose</th></tr>
+    <tr><td>Analytics cache</td><td>In-process · 5 min</td><td>Expensive per-client Google analytics.</td></tr>
+    <tr><td>Lead-pivot cache</td><td>In-process · 60 s</td><td>monthly-meta-by-client pivots.</td></tr>
+    <tr><td>User cache</td><td>In-process · 1 min</td><td>Auth middleware user lookups.</td></tr>
+    <tr><td>Balance cache</td><td>Client.meta_ad_account_balance</td><td>Fast dashboard balance reads (scraped during sync).</td></tr>
+    <tr><td>Front-end caches</td><td>DataCacheContext + 5-min client-ad cache</td><td>Avoid re-fetching slow-changing data across pages.</td></tr>
+    <tr><td>Main-API proxy cache</td><td>5 min</td><td>Companion-service clients/leads/funds lookups.</td></tr>
+  </table>
+  <div class="callout info"><strong>Note.</strong> Caches are per-process and in-memory — correct for a single instance. Horizontal scaling would require a shared cache (Redis) to stay consistent (§33).</div>
+</section>
+
+<!-- ===================== 33. SCALABILITY STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">33</span>Scalability Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Dimension</th><th>Current &amp; path forward</th></tr>
+    <tr><td>API tier</td><td>Stateless JWT enables horizontal scale-out behind a load balancer. Caveat: in-memory caches and the in-process scheduler assume a single instance.</td></tr>
+    <tr><td>Scheduler</td><td>Must run on exactly one node. To scale the API, extract sync/webhook workers into a dedicated job process (or leader-elect) so only one runs cron.</td></tr>
+    <tr><td>Database</td><td>Cosmos vCore scales vertically/with shards; connection pools kept small due to a hard per-cluster ceiling — more app instances need pool budgeting.</td></tr>
+    <tr><td>Caching</td><td>Move to Redis for a shared cache across instances.</td></tr>
+    <tr><td>Rate limiting</td><td>express-rate-limit is per-process/in-memory; a shared store (Redis) needed for multi-instance correctness.</td></tr>
+    <tr><td>Vertical growth</td><td>Sequential per-client sync scales linearly with client count; parallelise with bounded concurrency + queue as the roster grows.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 34. HIGH AVAILABILITY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">34</span>High Availability Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Layer</th><th>Current posture</th><th>Recommended</th></tr>
+    <tr><td>Application</td><td>Single VM + systemd auto-restart on crash.</td><td>≥2 instances behind a load balancer; health-based routing.</td></tr>
+    <tr><td>Database</td><td>Managed Cosmos DB (built-in replication/HA).</td><td>Confirm zone-redundant tier + failover SLA.</td></tr>
+    <tr><td>Web/edge</td><td>Single Nginx.</td><td>Redundant edge / managed CDN for static SPA.</td></tr>
+    <tr><td>Jobs</td><td>In-process scheduler (single point).</td><td>Dedicated worker with restart + leader election.</td></tr>
+    <tr><td>Resilience built-in</td><td>Overlap guards, zombie-run cleanup, retry queue, poller safety-net, graceful degradation.</td><td>—</td></tr>
+  </table>
+  <div class="callout warn"><strong>Current SPOF.</strong> The single application VM is the main availability risk; the database tier is managed and already highly available.</div>
+</section>
+
+<!-- ===================== 35. BACKUP STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">35</span>Backup Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Asset</th><th>Approach</th></tr>
+    <tr><td>Database</td><td>Azure Cosmos DB automatic backups (platform-managed, point-in-time depending on tier). <strong>Action:</strong> confirm retention window &amp; restore runbook.</td></tr>
+    <tr><td>Application code</td><td>Git repository is the source of truth; deploy is a git pull.</td></tr>
+    <tr><td>Configuration/secrets</td><td><code>.env</code> files on the host — <strong>not</strong> in version control; must be backed up securely out-of-band.</td></tr>
+    <tr><td>Immutable audit</td><td>Ledger + raw-lead + sync-run collections provide replay/audit even without file backups.</td></tr>
+    <tr><td>User-generated exports</td><td>Excel/PDF generated on demand — no separate backup needed.</td></tr>
+  </table>
+  <div class="callout info"><strong>Recommendation.</strong> Document and test DB restore; store <code>.env</code> secrets in a managed vault with backup; schedule periodic logical exports for an independent recovery copy (§53).</div>
+</section>
+
+<!-- ===================== 36. DISASTER RECOVERY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">36</span>Disaster Recovery</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Scenario</th><th>Recovery approach</th></tr>
+    <tr><td>Application host loss</td><td>Re-provision VM, install Node/Nginx, restore <code>.env</code>, <code>git pull</code>, <code>redeploy.sh</code>. Boot self-heal repairs indexes; scheduler resumes; retry queue &amp; poller recover missed leads.</td></tr>
+    <tr><td>Database loss/corruption</td><td>Restore from Cosmos backup to last good point; the ledger/raw-lead audit enables reconciliation of any gap.</td></tr>
+    <tr><td>Integration outage</td><td>Sync skips/backs off; leads queue in retry; balances resume on recovery — no data loss.</td></tr>
+    <tr><td>Secret compromise</td><td>Rotate JWT/encryption keys &amp; API tokens; re-encrypt secrets; force re-login.</td></tr>
+  </table>
+  <table class="tight">
+    <tr><th style="width:26%">Objective</th><th>Indicative target (to formalise)</th></tr>
+    <tr><td>RTO (app)</td><td>Hours — bounded by VM re-provision + deploy.</td></tr>
+    <tr><td>RPO (data)</td><td>Minutes-to-hours — bounded by Cosmos backup granularity; near-zero for leads/billing thanks to idempotent replay.</td></tr>
+  </table>
+  <div class="callout info"><strong>Recommendation.</strong> Formalise RTO/RPO, automate infrastructure provisioning (IaC), and rehearse a restore drill (§53).</div>
+</section>
+
+<!-- ===================== 37. CI/CD OVERVIEW ===================== -->
+<section class="page">
+  <h2><span class="sec-num">37</span>CI/CD Overview</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Stage</th><th>Current state</th></tr>
+    <tr><td>Source control</td><td>Git (GitHub) — single <code>main</code> branch workflow observed.</td></tr>
+    <tr><td>Continuous integration</td><td><strong>None</strong> — no pipeline (<code>.github/workflows</code> absent); no automated build/test gate.</td></tr>
+    <tr><td>Build</td><td>Manual: <code>npm run build</code> (CRA + obfuscation) at deploy time.</td></tr>
+    <tr><td>Deployment</td><td>Manual <code>redeploy.sh</code>: git pull → systemd restart → build → publish static.</td></tr>
+    <tr><td>Rollback</td><td>Git revert + re-run deploy (no automated rollback).</td></tr>
+    <tr><td>Migrations</td><td>Idempotent, boot-time self-heal + manual scripts under <code>backend/scripts</code>.</td></tr>
+  </table>
+  <div class="callout warn"><strong>Recommendation.</strong> Introduce a CI pipeline (lint + test + build on PR) and a CD step (artifact build, blue-green or rolling deploy, automated rollback) — see §53.</div>
+</section>
+
+<!-- ===================== 38. ENVIRONMENT CONFIGURATION ===================== -->
+<section class="page">
+  <h2><span class="sec-num">38</span>Environment Configuration</h2>
+  <table class="tight">
+    <tr><th style="width:32%">Variable</th><th>Purpose</th></tr>
+    <tr><td>NODE_ENV / PORT</td><td>Runtime mode; API port (5000).</td></tr>
+    <tr><td>MONGODB_URI</td><td>Cosmos vCore connection string (TLS, SCRAM).</td></tr>
+    <tr><td>DB_MAX_POOL</td><td>Per-process connection pool cap (default 5).</td></tr>
+    <tr><td>JWT_SECRET / JWT_EXPIRE</td><td>Access-token signing &amp; lifetime (30 d).</td></tr>
+    <tr><td>JWT_REFRESH_SECRET / JWT_REFRESH_EXPIRE</td><td>Refresh-token signing &amp; lifetime (90 d).</td></tr>
+    <tr><td>COOKIE_EXPIRE</td><td>Auth cookie lifetime (days).</td></tr>
+    <tr><td>ENCRYPTION_KEY</td><td>AES-256 key (padded/truncated to 32 bytes).</td></tr>
+    <tr><td>CLIENT_URL</td><td>Allowed CORS origin (prod frontend).</td></tr>
+    <tr><td>RATE_LIMIT_* / AUTH_RATE_LIMIT_MAX</td><td>Rate-limit windows &amp; ceilings.</td></tr>
+    <tr><td>SYNC_INTERVAL_MINUTES</td><td>Google sync cadence (15).</td></tr>
+    <tr><td>META_APP_ID / SECRET / VERIFY_TOKEN / SYSTEM_USER_TOKEN</td><td>Meta app + webhook + system-user auth.</td></tr>
+    <tr><td>META_API_VERSION / BASE_URL</td><td>Graph API version pin (v19.0) &amp; host.</td></tr>
+    <tr><td>META_SYNC_ENABLED / _INTERVAL / _BACKFILL_DAYS</td><td>Meta sync toggle, cadence, backfill window.</td></tr>
+    <tr><td>META_BILLING_DRY_RUN</td><td>Financial safety switch (default true).</td></tr>
+    <tr><td>GOOGLE_ADS_* (OAuth, dev token, MCC)</td><td>Google Ads API credentials.</td></tr>
+    <tr><td>GEMINI_API_KEY / GEMINI_MODEL</td><td>AI insights (default gemini-1.5-flash).</td></tr>
+    <tr><td>MAIN_API_URL / META_SYNC_API_URL</td><td>Companion-service endpoints (Daily Entry).</td></tr>
+    <tr><td>REACT_APP_API_URL (frontend)</td><td>API base URL for the SPA.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 39. CONFIGURATION FILES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">39</span>Configuration Files</h2>
+  <table class="tight">
+    <tr><th style="width:30%">File</th><th>Purpose</th></tr>
+    <tr><td>backend/.env(.example)</td><td>Backend runtime configuration &amp; secrets.</td></tr>
+    <tr><td>crm-frontend/.env</td><td>Frontend build-time config (<code>REACT_APP_API_URL</code>).</td></tr>
+    <tr><td>backend/package.json</td><td>Scripts (start/dev/seed/fix:indexes/oauth), dependencies.</td></tr>
+    <tr><td>crm-frontend/package.json</td><td>Scripts (start/build/build:raw/obfuscate/test), deps, browserslist, eslintConfig.</td></tr>
+    <tr><td>backend/config/db.js</td><td>Connection, pool sizing, boot self-heal.</td></tr>
+    <tr><td>backend/server.js</td><td>Middleware wiring, CORS allow-list, rate limits, route mounting, boot sequence.</td></tr>
+    <tr><td>crm-frontend/scripts/obfuscate.js</td><td>Post-build hardening configuration.</td></tr>
+    <tr><td>redeploy.sh</td><td>Deployment steps.</td></tr>
+    <tr><td>systemd unit (ara-crm)</td><td>Process supervision (host-side).</td></tr>
+    <tr><td>Nginx site config</td><td>Static host + reverse proxy + TLS (host-side).</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 40. THIRD-PARTY INTEGRATIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">40</span>Third-party Integrations</h2>
+  <table class="tight">
+    <tr><th style="width:18%">Integration</th><th style="width:20%">Protocol / auth</th><th>Data &amp; direction</th></tr>
+    <tr><td>Meta Graph API</td><td>REST · system-user token + encrypted page tokens · HMAC webhooks</td><td>IN: campaigns, adsets, ads, insights, forms, leads. OUT: page subscribe/unsubscribe. Real-time leadgen webhooks.</td></tr>
+    <tr><td>Google Ads API</td><td>gRPC/REST client · OAuth refresh + dev token + MCC</td><td>IN: campaigns, daily metrics (incl. impression share, click types), keyword metrics.</td></tr>
+    <tr><td>Google Gemini</td><td>REST · API key</td><td>OUT: performance snapshot. IN: strict-JSON insight (grade, strengths, strategies).</td></tr>
+    <tr><td>Companion "Main API" &amp; Meta-sync API</td><td>REST (Azure-hosted)</td><td>Daily-Entry module: clients/leads/funds lookups + trigger meta-sync (cached 5 min).</td></tr>
+  </table>
+  <h3>40.1 Integration resilience</h3>
+  <ul>
+    <li>Typed errors (auth/permission/rate-limit/transient/validation) drive stop/skip/backoff/retry decisions.</li>
+    <li>Exponential backoff (2s/8s/32s) for transient failures; cursor pagination capped (≤10k/edge).</li>
+    <li>Rate-limit header parsing (≥80% usage → throttle); sequential per-client processing.</li>
+    <li>Webhook retry dead-letter queue + independent poller safety-net.</li>
+    <li>AI truncated-JSON repair; graceful 503 when the AI key is absent.</li>
+  </ul>
+</section>
+
+<!-- ===================== 41. SEQUENCE DIAGRAMS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">41</span>Sequence Diagrams</h2>
+  <h3>41.1 Meta lead ingestion (webhook)</h3>
+  <div class="seq">Meta        API(/meta/webhook)   Signature   MetaLeadRaw   LeadFormↆClient   Graph   Lead   RetryQ
+ │ POST event │                    │           │             │              │      │      │
+ │───────────▶│ verify HMAC ──────▶│ ok        │             │              │      │      │
+ │  200 ACK   │◀───────────────────│           │             │              │      │      │
+ │            │ upsert raw ───────────────────▶│             │              │      │      │
+ │            │ resolve client ────────────────────────────▶ │              │      │      │
+ │            │ fetch full lead ───────────────────────────────────────────▶│      │      │
+ │            │ map + upsert (idempotent leadgen_id) ───────────────────────────▶  │      │
+ │            │ on failure ────────────────────────────────────────────────────────────▶ │ enqueue backoff</div>
+
+  <h3>41.2 Telecaller save with automation</h3>
+  <div class="seq">Portal   PUT /meta/client/:id/leads/:leadId   Controller   Automation   Lead(save)
+  │ edit cell (blur)  │                          │            │           │
+  │──────────────────▶│ tenant + enum validate ─▶│            │           │
+  │                   │ runTelecallerAutomation ───────────▶  │ stamp/history/reminder/DARMANT
+  │                   │ lead.save() ───────────────────────────────────▶ │
+  │  200 updated lead │◀──────────────────────────────────────────────── │</div>
+
+  <h3>41.3 Billing reconciliation (per campaign/day)</h3>
+  <div class="seq">Scheduler  Sync   Insights/Metric   Snapshot   Ledger(BillingTransaction)   Client.balance
+   │ tick   │       │                 │          │                            │
+   │───────▶│ read spend ───────────▶ │          │                            │
+   │        │ delta vs snapshot ─────────────────▶                            │
+   │        │ write debit/refund (idempotency key) ─────────────────────────▶ │
+   │        │ update balance / total_spend ─────────────────────────────────────────────▶</div>
+</section>
+
+<!-- ===================== 42. DATA FLOW DIAGRAMS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">42</span>Data Flow Diagrams</h2>
+  <h3>42.1 Ad-spend → lead → conversion → billing</h3>
+  <div class="flow">
+    <span class="step">Ad platforms (Meta/Google)</span><span class="arw">▶</span>
+    <span class="step">Sync/webhook ingest</span><span class="arw">▶</span>
+    <span class="step">Insights + Leads (Mongo)</span><span class="arw">▶</span>
+    <span class="step">Metrics service (KPIs)</span><span class="arw">▶</span>
+    <span class="step">Telecalling &amp; reports</span>
+  </div>
+  <div class="flow">
+    <span class="step">Spend</span><span class="arw">▶</span><span class="step">Delta reconcile</span><span class="arw">▶</span>
+    <span class="step">Ledger debit</span><span class="arw">▶</span><span class="step">Balance</span><span class="arw">▶</span>
+    <span class="step">Low-balance alert</span>
+  </div>
+
+  <h3>42.2 Level-0 context</h3>
+  <div class="diagram">
+    <div class="row-boxes">
+      <div class="node gold">Agency staff</div>
+      <div class="node gold">Client / telecaller</div>
+      <div class="node" style="min-width:150px;background:#fff;border:1.5px solid var(--navy)"><strong>Lead Matrix CRM</strong></div>
+      <div class="node ext">Meta / Google / Gemini</div>
+      <div class="node db">MongoDB</div>
+    </div>
+    <p class="small" style="margin-top:6px">Actors read/write via the SPA → API; the CRM syncs with ad platforms and persists to MongoDB; leads flow in from Meta (push) and both platforms (pull).</p>
+  </div>
+
+  <h3>42.3 Excel round-trip</h3>
+  <div class="flow">
+    <span class="step">Operator xlsx</span><span class="arw">▶</span><span class="step">Import (clean+upsert by contact)</span><span class="arw">▶</span>
+    <span class="step">Lead + automation</span><span class="arw">▶</span><span class="step">Export (26-col workbook)</span>
+  </div>
+</section>
+
+<!-- ===================== 43. COMPONENT DIAGRAMS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">43</span>Component Diagrams</h2>
+  <div class="diagram">
+    <div class="cap">Backend components &amp; dependencies</div>
+    <div class="tier"><div class="tt">HTTP surface</div>
+      <div class="row-boxes"><div class="node">Routers</div><div class="node">Middleware (auth/permissions/validation/error)</div></div>
+    </div>
+    <div class="vbar">▼</div>
+    <div class="tier"><div class="tt">Controllers</div>
+      <div class="row-boxes"><div class="node">auth</div><div class="node">client</div><div class="node">lead/telecaller</div><div class="node">meta</div><div class="node">reports/ai</div></div>
+    </div>
+    <div class="vbar">▼ use</div>
+    <div class="tier"><div class="tt">Services</div>
+      <div class="row-boxes"><div class="node">metaAds/metaLead/metaBilling/metaForm/metaMetrics</div><div class="node">googleAds/analytics</div><div class="node">leadXlsx</div><div class="node">telecallerAutomation</div></div>
+    </div>
+    <div class="vbar">▼ persist</div>
+    <div class="tier v"><div class="tt">Models (Mongoose)</div><div class="row-boxes"><div class="node db">24 schemas</div></div></div>
+    <div class="vbar">▼ trigger</div>
+    <div class="tier g"><div class="tt">Jobs</div><div class="row-boxes"><div class="node gold">scheduler → syncService / metaSyncService / retry worker</div></div></div>
+  </div>
+</section>
+
+<!-- ===================== 44. CLASS DIAGRAMS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">44</span>Class Diagrams (Schema Model)</h2>
+  <div class="seq">┌────────────────────────┐        ┌──────────────────────────┐
+│ Client                 │1      *│ Lead                     │
+├────────────────────────┤────────├──────────────────────────┤
+│ _id: ObjectId          │        │ _id: ObjectId            │
+│ clientName: String     │        │ client: ObjectId ─────────┐
+│ status: enum           │        │ name,email,contact       │ │
+│ google_ads_customer_id │        │ source,status: enum      │ │
+│ meta_ad_account_id     │        │ meta_leadgen_id (uniq)   │ │
+│ billing{...}           │        │ follow_ups[]: SubDoc     │ │
+│ telecalling_targets{}  │        │ status_sheet: enum       │ │
+│ meta_pages[]: SubDoc   │        │ +virtual follow_up_number│ │
+├────────────────────────┤        │ +virtual reminder_date   │ │
+│ +matchPortalPassword() │        ├──────────────────────────┤ │
+│ +pre(save): hashPortal │        │ +pre(save): mirror h/s   │ │
+└────────────────────────┘        └──────────────────────────┘ │
+        │1                                                      │
+        │*                                    assignedTo/createdBy
+┌────────────────────┐        ┌──────────────────────┐   ┌─────▼───────┐
+│ ClientPortalUser   │        │ BillingTransaction   │   │ User        │
+├────────────────────┤        ├──────────────────────┤   ├─────────────┤
+│ clientId: ObjectId │        │ client_id: ObjectId  │   │ userID(uniq)│
+│ username(uniq/clnt)│        │ type: enum           │   │ email(uniq) │
+│ role: admin|telec. │        │ amount, balance_after│   │ role,perms[]│
+│ +matchPassword()   │        │ idempotency_key(uniq)│   │ +compare()  │
+└────────────────────┘        └──────────────────────┘   └─────────────┘</div>
+  <p class="small">Mongoose "classes" = schemas with instance methods (comparePassword, matchPortalPassword), statics/hooks (pre-save bcrypt/mirror), and virtuals (follow_up_number, reminder_date, month). Sub-documents: follow_ups[], meta_pages[], drop_history[], question_schema[].</p>
+</section>
+
+<!-- ===================== 45. PACKAGE DIAGRAMS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">45</span>Package Diagrams</h2>
+  <div class="seq">backend (package)
+ ├─ config ──────────▶ models (import for index sync)
+ ├─ routes ──────────▶ middleware, controllers
+ ├─ controllers ─────▶ services, models, lib, utils
+ ├─ services ────────▶ models, utils
+ ├─ sync ────────────▶ services, models
+ ├─ lib ─────────────▶ models (enums only)
+ └─ utils ───────────▶ (leaf: crypto, jwt, mappers)
+
+crm-frontend (package)
+ ├─ pages ───────────▶ components, api, store, contexts
+ ├─ components ──────▶ api, constants, utils
+ ├─ store/slices ────▶ api
+ ├─ api ─────────────▶ (axios base: interceptors)
+ └─ constants ───────▶ (leaf: enum lockstep w/ backend)</div>
+  <p class="small">Package dependencies are acyclic and point toward leaf utilities/models. The frontend <code>constants/telecallerSheet</code> intentionally mirrors backend <code>models/Lead</code> enums (kept in lockstep).</p>
+</section>
+
+<!-- ===================== 46. DEPLOYMENT DIAGRAMS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">46</span>Deployment Diagram</h2>
+  <div class="seq">        Internet (HTTPS 443)
+              │
+      ┌───────▼─────────────────────────────────┐
+      │  Linux VM                                │
+      │  ┌─────────────┐   proxy    ┌──────────┐ │
+      │  │ Nginx        │──────────▶│ Node     │ │
+      │  │ static SPA   │  :5000    │ Express  │ │
+      │  │ /var/www/... │◀──────────│ (systemd │ │
+      │  │ TLS          │  API      │  ara-crm)│ │
+      │  └─────────────┘            │ + cron   │ │
+      │                             └────┬─────┘ │
+      └──────────────────────────────────┼───────┘
+             TLS (SCRAM)                  │  HTTPS
+        ┌────────────▼─────────┐   ┌──────▼─────────────────┐
+        │ Azure Cosmos DB      │   │ Meta / Google / Gemini │
+        │ (MongoDB vCore)      │   │ (external APIs)        │
+        └──────────────────────┘   └────────────────────────┘</div>
+  <table class="tight">
+    <tr><th style="width:24%">Artifact</th><th>Deployed to</th></tr>
+    <tr><td>SPA build (obfuscated)</td><td>Nginx web root <code>/var/www/leadmatrix</code>.</td></tr>
+    <tr><td>Node API + scheduler</td><td>systemd service <code>ara-crm</code> :5000.</td></tr>
+    <tr><td>Database</td><td>Managed Cosmos DB (external, replicated).</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 47. MODULE DEPENDENCIES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">47</span>Module Dependencies</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Module</th><th>Depends on</th></tr>
+    <tr><td>server.js</td><td>config/db, all routes, sync/scheduler, middleware.</td></tr>
+    <tr><td>routes/*</td><td>middleware (auth/permissions/validation), controllers.</td></tr>
+    <tr><td>controllers/metaController</td><td>metaLeadService, metaAdsService, metaBillingService, metaMetricsService, telecallerAutomation, leadXlsxService, Meta* models.</td></tr>
+    <tr><td>sync/scheduler</td><td>syncService (Google), metaSyncService, metaLeadService (retry worker).</td></tr>
+    <tr><td>services/metaMetricsService</td><td>MetaInsights, Lead (shared KPI authority; consumed by dashboard, leads, analytics).</td></tr>
+    <tr><td>services/*billing*</td><td>BillingTransaction, DailyDebitSnapshot, Client, utils.</td></tr>
+    <tr><td>lib/telecallerAutomation</td><td>models/Lead enums only (no DB calls — pure functions).</td></tr>
+    <tr><td>utils/*</td><td>Leaf modules (crypto, jwt, field mapper, rate-limit, signature).</td></tr>
+  </table>
+  <div class="callout"><strong>Coupling note.</strong> <code>metaController.js</code> is the largest unit (~2,700 LOC) and the highest-fan-out module; a candidate for decomposition into smaller controllers/services (§53).</div>
+</section>
+
+<!-- ===================== 48. CODING STANDARDS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">48</span>Coding Standards</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Area</th><th>Observed convention</th></tr>
+    <tr><td>Language / modules</td><td>Modern JS, ES modules (backend <code>"type":"module"</code>); async/await throughout.</td></tr>
+    <tr><td>Error propagation</td><td><code>asyncHandler</code> wrapper + centralised handler; custom <code>ErrorResponse</code>.</td></tr>
+    <tr><td>Naming</td><td>camelCase JS; snake_case for ad-platform-sourced fields (mirror external shapes); PascalCase models.</td></tr>
+    <tr><td>Structure</td><td>Strict routes→controllers→services→models layering; framework-free domain logic in <code>lib/</code>.</td></tr>
+    <tr><td>Documentation</td><td>Extensive intent-explaining comments (esp. schemas, billing, automation, self-heal) — a strong maintainability asset.</td></tr>
+    <tr><td>Consistency</td><td>Shared enum constants across front/back; single metrics service to prevent KPI drift.</td></tr>
+    <tr><td>Linting</td><td>Frontend: CRA ESLint (react-app + jest). Backend: no enforced linter configured.</td></tr>
+    <tr><td>Config</td><td>Env-driven with sensible defaults; secrets never committed.</td></tr>
+  </table>
+  <div class="callout info"><strong>Recommendation.</strong> Add a shared linter/formatter (ESLint + Prettier) and pre-commit hooks across both packages for uniform style enforcement (§53).</div>
+</section>
+
+<!-- ===================== 49. TESTING STRATEGY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">49</span>Testing Strategy</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Test type</th><th>Current state</th></tr>
+    <tr><td>Unit tests</td><td><strong>Minimal</strong> — only the default CRA <code>App.test.js</code>; no backend unit suite.</td></tr>
+    <tr><td>Integration tests</td><td>None automated.</td></tr>
+    <tr><td>Operational smoke tests</td><td>Manual scripts under <code>backend/scripts</code> (metaSmokeTest, metaSyncSmokeTest, metaWebhookSmokeTest, metaBillingSmokeTest, metaPhase6SmokeTest, testGoogleAds) — run by hand against live integrations.</td></tr>
+    <tr><td>Test tooling present</td><td>@testing-library/react + jest-dom (frontend) available but under-used.</td></tr>
+  </table>
+  <h3>49.1 Recommended test pyramid</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Layer</th><th>Target</th></tr>
+    <tr><td>Unit</td><td>Pure logic first: <code>telecallerAutomation</code> (reminder/DARMANT/history), metrics computations, validators, encryption.</td></tr>
+    <tr><td>Integration</td><td>API + in-memory Mongo: auth/RBAC, tenant isolation, idempotent ingest, billing reconcile.</td></tr>
+    <tr><td>Contract</td><td>Mock Meta/Google/Gemini responses to test error typing &amp; mapping.</td></tr>
+    <tr><td>E2E</td><td>Critical journeys (login, connect client, work a lead, view report) via Playwright/Cypress.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 50. SECURITY CONSIDERATIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">50</span>Security Considerations</h2>
+  <table class="tight">
+    <tr><th style="width:8%">Ref</th><th style="width:30%">Consideration</th><th>Status / action</th></tr>
+    <tr><td class="fid">SC-01</td><td>Vault authorization gap</td><td><span class="pill hi">Open</span> — add role/permission gate + access audit to <code>/api/vault</code>.</td></tr>
+    <tr><td class="fid">SC-02</td><td>Secret management</td><td><span class="pill med">Improve</span> — move keys/tokens from <code>.env</code> to a managed secret vault; rotate.</td></tr>
+    <tr><td class="fid">SC-03</td><td>Token lifetime &amp; rotation</td><td><span class="pill med">Improve</span> — long-lived access token; wire refresh-exchange &amp; shorten access TTL.</td></tr>
+    <tr><td class="fid">SC-04</td><td>Encryption mode</td><td><span class="pill lo">Note</span> — AES-256-CBC (no auth tag); consider AES-GCM for integrity.</td></tr>
+    <tr><td class="fid">SC-05</td><td>Distributed rate limiting</td><td><span class="pill lo">Note</span> — move to shared store before multi-instance.</td></tr>
+    <tr><td class="fid">SC-06</td><td>Tenant isolation</td><td><span class="pill lo">Strong</span> — token-derived, per-route enforced.</td></tr>
+    <tr><td class="fid">SC-07</td><td>Webhook integrity</td><td><span class="pill lo">Strong</span> — HMAC verified.</td></tr>
+    <tr><td class="fid">SC-08</td><td>Dependency hygiene</td><td><span class="pill med">Improve</span> — add automated dependency/vuln scanning in CI.</td></tr>
+    <tr><td class="fid">SC-09</td><td>Audit trail (end-user actions)</td><td><span class="pill med">Improve</span> — add per-field change history beyond financial/lead audit.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 51. TECHNICAL RISKS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">51</span>Technical Risks</h2>
+  <table class="tight">
+    <tr><th style="width:8%">Ref</th><th style="width:28%">Risk</th><th style="width:9%">Lik.</th><th style="width:9%">Imp.</th><th>Mitigation</th></tr>
+    <tr><td class="fid">TR-01</td><td>Single-VM SPOF (app + scheduler)</td><td><span class="pill med">Med</span></td><td><span class="pill hi">High</span></td><td>Multi-instance API + dedicated worker; systemd restart interim.</td></tr>
+    <tr><td class="fid">TR-02</td><td>No CI/CD &amp; minimal tests</td><td><span class="pill hi">High</span></td><td><span class="pill med">Med</span></td><td>Introduce CI (lint/test/build) + automated deploy; build test pyramid.</td></tr>
+    <tr><td class="fid">TR-03</td><td>API token expiry halts sync/billing</td><td><span class="pill med">Med</span></td><td><span class="pill hi">High</span></td><td>Typed errors, alerts, token-refresh runbook, graceful UI.</td></tr>
+    <tr><td class="fid">TR-04</td><td>Meta API version deprecation</td><td><span class="pill med">Med</span></td><td><span class="pill med">Med</span></td><td>Centralised version/field config; planned upgrades.</td></tr>
+    <tr><td class="fid">TR-05</td><td>Cosmos connection-ceiling exhaustion</td><td><span class="pill lo">Low</span></td><td><span class="pill hi">High</span></td><td>Small pools; budget pools per instance when scaling.</td></tr>
+    <tr><td class="fid">TR-06</td><td>Vault credential exposure</td><td><span class="pill med">Med</span></td><td><span class="pill hi">High</span></td><td>Add authorization + auditing (SC-01).</td></tr>
+    <tr><td class="fid">TR-07</td><td>metaController monolith (~2.7k LOC)</td><td><span class="pill med">Med</span></td><td><span class="pill lo">Low</span></td><td>Refactor into focused controllers/services.</td></tr>
+    <tr><td class="fid">TR-08</td><td>In-memory cache/rate-limit under scale-out</td><td><span class="pill lo">Low</span></td><td><span class="pill med">Med</span></td><td>Shared Redis cache/limiter store.</td></tr>
+    <tr><td class="fid">TR-09</td><td>Manual deploy human error</td><td><span class="pill med">Med</span></td><td><span class="pill med">Med</span></td><td>Automate build/deploy with rollback.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 52. FUTURE SCALABILITY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">52</span>Future Scalability</h2>
+  <table class="tight">
+    <tr><th style="width:30%">Initiative</th><th>Benefit</th></tr>
+    <tr><td>Extract job/worker service</td><td>Decouple sync/webhook processing from the API; enables API scale-out and isolates load.</td></tr>
+    <tr><td>Message queue for ingestion</td><td>Buffer webhook/lead spikes; smooth Graph API pressure; durable retries.</td></tr>
+    <tr><td>Shared cache (Redis)</td><td>Consistent caching + distributed rate limiting across instances.</td></tr>
+    <tr><td>Bounded-concurrency sync</td><td>Parallelise per-client sync with a concurrency cap as the roster grows.</td></tr>
+    <tr><td>Read replicas / sharding</td><td>Scale read-heavy analytics; shard by client for very large datasets.</td></tr>
+    <tr><td>Containerisation + orchestration</td><td>Repeatable deploys, autoscaling, rolling updates.</td></tr>
+    <tr><td>CDN for SPA</td><td>Global static delivery + edge caching.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 53. TECHNICAL RECOMMENDATIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">53</span>Technical Recommendations</h2>
+  <table class="tight">
+    <tr><th style="width:8%">Ref</th><th style="width:34%">Recommendation</th><th style="width:12%">Priority</th><th>Outcome</th></tr>
+    <tr><td class="fid">RC-01</td><td>Gate &amp; audit the credential vault</td><td><span class="pill hi">P1</span></td><td>Closes the key authorization gap.</td></tr>
+    <tr><td class="fid">RC-02</td><td>Add CI (lint+test+build) &amp; automated CD with rollback</td><td><span class="pill hi">P1</span></td><td>Safer, repeatable releases.</td></tr>
+    <tr><td class="fid">RC-03</td><td>Build the test pyramid (start with pure logic)</td><td><span class="pill hi">P1</span></td><td>Regression safety on billing &amp; automation.</td></tr>
+    <tr><td class="fid">RC-04</td><td>Run ≥2 API instances + extract the scheduler worker</td><td><span class="pill med">P2</span></td><td>Removes the SPOF; enables scale-out.</td></tr>
+    <tr><td class="fid">RC-05</td><td>Managed secret vault + key rotation + AES-GCM</td><td><span class="pill med">P2</span></td><td>Stronger secret handling &amp; integrity.</td></tr>
+    <tr><td class="fid">RC-06</td><td>Refresh-token rotation + shorter access TTL</td><td><span class="pill med">P2</span></td><td>Reduced token-theft blast radius.</td></tr>
+    <tr><td class="fid">RC-07</td><td>Centralised structured logging + monitoring/alerting</td><td><span class="pill med">P2</span></td><td>Faster incident detection &amp; resolution.</td></tr>
+    <tr><td class="fid">RC-08</td><td>Standardise API error envelope &amp; status codes</td><td><span class="pill lo">P3</span></td><td>Predictable client integration.</td></tr>
+    <tr><td class="fid">RC-09</td><td>Decompose metaController; introduce Redis cache/limiter</td><td><span class="pill lo">P3</span></td><td>Maintainability &amp; multi-instance readiness.</td></tr>
+    <tr><td class="fid">RC-10</td><td>Formalise RTO/RPO, IaC, and a restore drill</td><td><span class="pill med">P2</span></td><td>Proven disaster recovery.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 54. APPENDIX ===================== -->
+<section class="page">
+  <h2><span class="sec-num">54</span>Appendix</h2>
+  <h3>A · Backend script inventory (operational)</h3>
+  <table class="tight">
+    <tr><th style="width:34%">Category</th><th>Scripts</th></tr>
+    <tr><td>Migrations</td><td>migrations/2026-04-meta-schema-init, migrateLeadTelecallerFields, fixDailyEntryIndexes, backfillBillingLedger, metaBackfillCreatedTime.</td></tr>
+    <tr><td>Meta onboarding/backfill</td><td>bulkFetchAdAccountMeta, bulkFetchPageTokens, bulkSubscribePages, metaAssignPagesToSystemUser, metaPagesManualLink, metaMappingApply/Report, seedMetaClients.</td></tr>
+    <tr><td>OAuth / tokens</td><td>getRefreshToken, simpleRefreshToken.</td></tr>
+    <tr><td>Smoke tests</td><td>metaSmokeTest, metaSyncSmokeTest, metaWebhookSmokeTest, metaBillingSmokeTest, metaPhase6SmokeTest, testGoogleAds, metaVerifyAccess, inspectMetaActions.</td></tr>
+    <tr><td>Seed</td><td>seedAdmin, seedTeams.</td></tr>
+  </table>
+
+  <h3>B · Key npm scripts</h3>
+  <table class="tight">
+    <tr><th style="width:30%">Script</th><th>Action</th></tr>
+    <tr><td>backend: start / dev</td><td><code>node server.js</code> / <code>nodemon</code>.</td></tr>
+    <tr><td>backend: seed:admin / fix:indexes</td><td>Seed first admin / repair daily-entry indexes.</td></tr>
+    <tr><td>backend: get-refresh-token / oauth-setup</td><td>Google OAuth token acquisition.</td></tr>
+    <tr><td>frontend: build</td><td><code>react-scripts build</code> + <code>obfuscate.js</code>.</td></tr>
+    <tr><td>frontend: build:raw / start / test</td><td>Un-obfuscated build / dev server / CRA tests.</td></tr>
+  </table>
+
+  <h3>C · Technology versions (selected)</h3>
+  <table class="tight">
+    <tr><th style="width:40%">Component</th><th>Version</th></tr>
+    <tr><td>Express</td><td>5.x</td></tr>
+    <tr><td>Mongoose</td><td>9.x</td></tr>
+    <tr><td>React / react-router</td><td>19.x / 6.x</td></tr>
+    <tr><td>MUI</td><td>7.x</td></tr>
+    <tr><td>Meta Graph API</td><td>v19.0 (pinned)</td></tr>
+    <tr><td>Gemini model</td><td>gemini-1.5-flash (default)</td></tr>
+  </table>
+
+  <h3>D · Related documents</h3>
+  <ul>
+    <li>Business Requirements Document — ARA-BRD-CRM-2026-001</li>
+    <li>Functional Specification Document — ARA-FSD-CRM-2026-001</li>
+    <li>Meta Ads Integration Plan &amp; API Reference; Google Ads Analytics API reference (docs/).</li>
+  </ul>
+
+  <div class="callout info" style="margin-top:14px"><strong>End of Document.</strong> This Technical Solution Document describes the ARA Lead Matrix CRM as built and in production as of 17 July 2026. Version 1.0 (baseline); companion to the BRD and FSD; classified Confidential.</div>
+</section>

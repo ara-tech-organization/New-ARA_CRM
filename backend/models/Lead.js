@@ -303,11 +303,15 @@ leadSchema.set('toObject', { virtuals: true });
 // the enum-validated `hair_or_skin`. Legacy readers of `lead_category`
 // (older admin pages) keep working; the new sheet writes go through
 // `hair_or_skin` and the mirror propagates.
-leadSchema.pre('save', function (next) {
+//
+// Sync-no-next signature — Mongoose 9 detects arity 0 and treats the
+// function as a plain sync mutation. Older `function (next) { ... next(); }`
+// syntax throws "next is not a function" in Mongoose 9 because next
+// isn't reliably passed any more.
+leadSchema.pre('save', function () {
   if (this.isModified('hair_or_skin') && this.hair_or_skin) {
     this.lead_category = this.hair_or_skin;
   }
-  next();
 });
 
 const Lead = mongoose.model('Lead', leadSchema);

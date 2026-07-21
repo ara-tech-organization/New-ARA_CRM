@@ -38,6 +38,7 @@ import {
   createClientLead,
   deleteClientLead,
   listClientLeads,
+  getActiveEntities,
   getClientsAdsComparison,
   getMetaDashboardOverview,
   getMetaSpendOverview,
@@ -118,6 +119,10 @@ router.get("/client/:clientId/spend-overview", getMetaSpendOverview);
 // Multi-client comparison — sibling to /api/analytics/clients for Google.
 // Powers the Meta tab on the AdsDashboard ("Ads Comparison") page.
 router.get("/clients", getClientsAdsComparison);
+
+// Active campaigns / ad sets / ads — powers the three new tabs on
+// /daily-lead-data. Optional ?clientId= narrows to a single client.
+router.get("/active-entities", getActiveEntities);
 
 // Bulk dashboard summary — one row per Meta-enabled client with just the
 // fields the home Dashboard's per-client cards need. Replaces an N+1 that

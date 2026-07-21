@@ -1,0 +1,1157 @@
+<meta charset="utf-8">
+<title>ARA Lead Matrix CRM — Functional Specification Document</title>
+<style>
+  :root{
+    --navy:#1F3966; --navy-2:#16294a; --gold:#F4B929;
+    --ink:#20242c; --muted:#5b6472; --line:#d8dee8;
+    --soft:#f4f7fb; --soft-2:#eef2f8;
+    --ok:#1c7c54; --warn:#b7791f; --bad:#b3261e; --teal:#0f6e6e;
+  }
+  @page{ size:A4; margin:20mm 15mm 18mm 15mm; }
+  @page:first{ margin:0; }
+  *{ box-sizing:border-box; }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{ font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; color:var(--ink); font-size:10.3pt; line-height:1.48; margin:0; }
+  h1,h2,h3,h4{ color:var(--navy); font-weight:700; line-height:1.25; }
+  h2{ font-size:16pt; margin:0 0 10px; padding-bottom:7px; border-bottom:3px solid var(--gold); }
+  h3{ font-size:12pt; margin:16px 0 5px; }
+  h4{ font-size:10.6pt; margin:12px 0 3px; color:var(--navy-2); }
+  p{ margin:0 0 8px; }
+  ul,ol{ margin:0 0 9px; padding-left:19px; }
+  li{ margin:2px 0; }
+  strong{ color:var(--navy-2); }
+  code{ font-family:"Consolas",monospace; background:var(--soft-2); padding:0 4px; border-radius:3px; font-size:8.9pt; color:var(--navy-2); }
+
+  /* Cover */
+  .cover{ height:297mm; background:linear-gradient(155deg,var(--navy) 0%,var(--navy-2) 55%,#0c1a33 100%); color:#fff; padding:32mm 24mm 20mm; position:relative; page-break-after:always; }
+  .cover .brandmark{ display:flex; align-items:center; gap:14px; margin-bottom:54mm; }
+  .cover .logo-badge{ width:56px;height:56px;border-radius:14px; background:var(--gold); color:var(--navy); display:flex;align-items:center;justify-content:center; font-weight:800;font-size:24px; box-shadow:0 8px 26px rgba(0,0,0,.35); }
+  .cover .brandmark .bt{ font-size:14pt;font-weight:700;letter-spacing:.5px; }
+  .cover .brandmark .bs{ font-size:9pt;color:#b9c6de;letter-spacing:3px;text-transform:uppercase; }
+  .cover .doc-kicker{ color:var(--gold);font-weight:700;letter-spacing:4px;font-size:11pt;text-transform:uppercase;margin-bottom:10px; }
+  .cover h1.doc-title{ color:#fff;font-size:38pt;line-height:1.08;margin:0 0 8px;letter-spacing:-.5px; }
+  .cover .doc-sub{ font-size:14.5pt;color:#d7e0f0;font-weight:400;margin-bottom:24px; }
+  .cover .rule{ width:120px;height:4px;background:var(--gold);border-radius:3px;margin:0 0 24px; }
+  .cover .prod{ font-size:11.5pt;color:#eaf0fb;max-width:120mm; }
+  .cover .meta-grid{ position:absolute;left:24mm;right:24mm;bottom:22mm; display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 22px; border-top:1px solid rgba(255,255,255,.22);padding-top:16px; }
+  .cover .meta-grid .k{ font-size:7.6pt;letter-spacing:2px;text-transform:uppercase;color:var(--gold); }
+  .cover .meta-grid .v{ font-size:10pt;color:#fff;font-weight:600;margin-top:2px; }
+  .cover .confidential{ position:absolute;top:32mm;right:24mm; border:1px solid var(--gold);color:var(--gold); font-size:8pt;letter-spacing:2px;text-transform:uppercase;padding:5px 11px;border-radius:20px;font-weight:700; }
+
+  section.page{ page-break-before:always; padding-top:2mm; }
+  .lead{ font-size:10.6pt;color:var(--muted);margin-bottom:12px; }
+
+  table{ width:100%; border-collapse:collapse; margin:7px 0 13px; font-size:9pt; }
+  th,td{ border:1px solid var(--line); padding:5px 7px; text-align:left; vertical-align:top; }
+  th{ background:var(--navy); color:#fff; font-weight:600; font-size:8.7pt; }
+  tbody tr:nth-child(even){ background:var(--soft); }
+  table.tight th, table.tight td{ padding:4px 6px; font-size:8.5pt; }
+  .center{ text-align:center; }
+
+  .callout{ border-left:4px solid var(--gold); background:var(--soft); padding:9px 13px; border-radius:0 8px 8px 0; margin:11px 0; }
+  .callout.warn{ border-left-color:var(--warn); background:#fdf6ea; }
+  .callout.info{ border-left-color:var(--navy); }
+
+  .pill{ display:inline-block;padding:1px 8px;border-radius:20px;font-size:7.7pt;font-weight:700; }
+  .pill.hi{ background:#fdeceb;color:var(--bad); }
+  .pill.med{ background:#fdf3e2;color:var(--warn); }
+  .pill.lo{ background:#e7f4ee;color:var(--ok); }
+  .pill.navy{ background:var(--soft-2);color:var(--navy); }
+  .pill.teal{ background:#e2f1f1;color:var(--teal); }
+
+  .sec-num{ display:inline-block;background:var(--gold);color:var(--navy); font-size:10.5pt;font-weight:800;border-radius:6px;padding:0 8px;margin-right:8px; }
+  .fid{ font-family:"Consolas",monospace;font-weight:700;color:var(--navy);white-space:nowrap;font-size:8.5pt; }
+
+  .toc-list{ font-size:10pt; }
+  .toc-list .row{ display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dotted var(--line); }
+  .toc-list .row .t b{ color:var(--navy);display:inline-block;width:24px; }
+  .toc-list .grp{ margin-top:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:2px;font-size:8.3pt; }
+
+  .flow{ margin:9px 0; line-height:2.1; }
+  .flow .step{ display:inline-block;background:var(--soft-2);border:1px solid var(--line); border-radius:6px;padding:4px 9px;font-size:8.4pt;font-weight:600;color:var(--navy-2); }
+  .flow .dec{ background:#fdf3e2;border-color:#f0d39a; }
+  .flow .end{ background:#e7f4ee;border-color:#b6e0cd; }
+  .flow .arw{ color:var(--gold);font-weight:800;margin:0 3px; }
+
+  .kpi-row{ display:flex; gap:10px; margin:11px 0; }
+  .kpi{ flex:1;border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:8px;padding:9px 11px;background:#fff; }
+  .kpi .n{ font-size:16pt;font-weight:800;color:var(--navy); }
+  .kpi .l{ font-size:8pt;color:var(--muted);text-transform:uppercase;letter-spacing:.5px; }
+
+  .small{ font-size:8.3pt;color:var(--muted); }
+  .footer{ position:fixed;bottom:-12mm;left:0;right:0;font-size:7.4pt;color:var(--muted); display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:3px; }
+  .footer .c{ color:var(--bad);font-weight:700;letter-spacing:1px; }
+  .cols2{ column-count:2; column-gap:20px; }
+</style>
+
+<div class="footer">
+  <span>ARA Lead Matrix CRM — Functional Specification Document · v1.0</span>
+  <span class="c">CONFIDENTIAL</span>
+  <span>ARA Discoveries Technologies</span>
+</div>
+
+<!-- ===================== COVER ===================== -->
+<div class="cover">
+  <div class="confidential">Confidential</div>
+  <div class="brandmark">
+    <div class="logo-badge">LM</div>
+    <div><div class="bt">LEAD MATRIX</div><div class="bs">By ARA Discoveries</div></div>
+  </div>
+  <div class="doc-kicker">Functional Specification Document</div>
+  <h1 class="doc-title">ARA Lead Matrix<br>CRM Platform</h1>
+  <div class="doc-sub">Functional Behaviour, Screen &amp; API Specification — Full System</div>
+  <div class="rule"></div>
+  <p class="prod">A complete functional specification covering every module, screen, field, validation, workflow, state transition, business rule, API behaviour, message, error path and integration across the agency console and the client self-service portal.</p>
+  <div class="meta-grid">
+    <div><div class="k">Prepared For</div><div class="v">Product, Engineering &amp; QA</div></div>
+    <div><div class="k">Prepared By</div><div class="v">Functional Consulting Office</div></div>
+    <div><div class="k">Version</div><div class="v">1.0 (Baseline)</div></div>
+    <div><div class="k">Date of Issue</div><div class="v">17 July 2026</div></div>
+    <div><div class="k">Classification</div><div class="v">Confidential</div></div>
+    <div><div class="k">Companion To</div><div class="v">ARA-BRD-CRM-2026-001</div></div>
+  </div>
+</div>
+
+<!-- ===================== 2. DOC CONTROL ===================== -->
+<section class="page">
+  <h2>Document Control</h2>
+  <p class="lead">Ownership, governance and distribution controls for this Functional Specification Document (FSD).</p>
+  <table>
+    <tr><th style="width:32%">Attribute</th><th>Detail</th></tr>
+    <tr><td>Document Title</td><td>ARA Lead Matrix CRM — Functional Specification Document</td></tr>
+    <tr><td>Document Reference</td><td>ARA-FSD-CRM-2026-001</td></tr>
+    <tr><td>System Name</td><td>ARA Lead Matrix CRM (internally "New Ara CRM")</td></tr>
+    <tr><td>Companion Document</td><td>Business Requirements Document — ARA-BRD-CRM-2026-001</td></tr>
+    <tr><td>Version / Status</td><td>1.0 — Baseline — Approved for Review</td></tr>
+    <tr><td>Classification</td><td>Confidential</td></tr>
+    <tr><td>Date of Issue</td><td>17 July 2026</td></tr>
+    <tr><td>Technology Baseline</td><td>Node.js/Express (ES modules), MongoDB (Azure Cosmos DB), React SPA + Redux Toolkit + MUI, JWT auth</td></tr>
+  </table>
+
+  <h3>Purpose &amp; Audience</h3>
+  <p>This FSD translates the business requirements into precise, testable functional behaviour. It is written for the product owner, engineering and QA teams, and technical stakeholders who need to understand exactly how each screen, field, workflow, API and integration behaves — including validations, messages, error paths and edge cases.</p>
+
+  <h3>Approval &amp; Sign-Off</h3>
+  <table>
+    <tr><th>Role</th><th>Responsibility</th><th>Signature</th><th>Date</th></tr>
+    <tr><td>Product Owner</td><td>Confirm functional completeness</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>Engineering Lead</td><td>Confirm technical accuracy</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>QA Lead</td><td>Confirm testability of criteria</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>Business Analyst</td><td>Confirm alignment with the BRD</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+  </table>
+  <div class="callout info"><strong>Basis.</strong> This specification was produced through a complete source-level review of the delivered system — data models, API routes and controllers, middleware, background jobs, integrations, and the React front-end — and reflects the system <em>as built and in production</em>.</div>
+</section>
+
+<!-- ===================== 3. REVISION HISTORY ===================== -->
+<section class="page">
+  <h2>Revision History</h2>
+  <table>
+    <tr><th style="width:10%">Version</th><th style="width:14%">Date</th><th style="width:22%">Author</th><th>Summary</th></tr>
+    <tr><td>0.1</td><td>11 Jul 2026</td><td>Functional Consulting Office</td><td>Section outline and screen-inventory skeleton.</td></tr>
+    <tr><td>0.6</td><td>15 Jul 2026</td><td>Functional Consulting Office</td><td>Screen specifications, field definitions, validations and API behaviour drafted from source.</td></tr>
+    <tr><td>0.9</td><td>16 Jul 2026</td><td>Functional Consulting Office</td><td>Workflows, state transitions, messages, error/edge cases and acceptance criteria added.</td></tr>
+    <tr><td><strong>1.0</strong></td><td>17 Jul 2026</td><td>Functional Consulting Office</td><td>Baseline release — full 36-section FSD approved for circulation.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 4. TOC ===================== -->
+<section class="page">
+  <h2>Table of Contents</h2>
+  <div class="toc-list" style="column-count:2;column-gap:26px;">
+    <div class="grp">Governance</div>
+    <div class="row"><span class="t"><b>1</b> Cover Page</span></div>
+    <div class="row"><span class="t"><b>2</b> Document Control</span></div>
+    <div class="row"><span class="t"><b>3</b> Revision History</span></div>
+    <div class="row"><span class="t"><b>4</b> Table of Contents</span></div>
+    <div class="grp">System Context</div>
+    <div class="row"><span class="t"><b>5</b> Functional Overview</span></div>
+    <div class="row"><span class="t"><b>6</b> Application Overview</span></div>
+    <div class="row"><span class="t"><b>7</b> Module Overview</span></div>
+    <div class="row"><span class="t"><b>8</b> Screen Inventory</span></div>
+    <div class="row"><span class="t"><b>9</b> Navigation Flow</span></div>
+    <div class="row"><span class="t"><b>10</b> User Journey</span></div>
+    <div class="grp">Access</div>
+    <div class="row"><span class="t"><b>11</b> User Roles</span></div>
+    <div class="row"><span class="t"><b>12</b> Permission Matrix</span></div>
+    <div class="grp">Functional Detail</div>
+    <div class="row"><span class="t"><b>13</b> Functional Requirements</span></div>
+    <div class="row"><span class="t"><b>14</b> Screen Specifications</span></div>
+    <div class="row"><span class="t"><b>15</b> Field Definitions</span></div>
+    <div class="row"><span class="t"><b>16</b> Field Validations</span></div>
+    <div class="row"><span class="t"><b>17</b> Workflow Definitions</span></div>
+    <div class="row"><span class="t"><b>18</b> State Transitions</span></div>
+    <div class="row"><span class="t"><b>19</b> Business Rules</span></div>
+    <div class="grp">Behaviour</div>
+    <div class="row"><span class="t"><b>20</b> Notification Behaviour</span></div>
+    <div class="row"><span class="t"><b>21</b> Search Behaviour</span></div>
+    <div class="row"><span class="t"><b>22</b> Filtering Behaviour</span></div>
+    <div class="row"><span class="t"><b>23</b> Sorting Behaviour</span></div>
+    <div class="row"><span class="t"><b>24</b> Report Behaviour</span></div>
+    <div class="row"><span class="t"><b>25</b> Dashboard Behaviour</span></div>
+    <div class="row"><span class="t"><b>26</b> API Functional Behaviour</span></div>
+    <div class="grp">Resilience</div>
+    <div class="row"><span class="t"><b>27</b> Error Handling</span></div>
+    <div class="row"><span class="t"><b>28</b> Exception Handling</span></div>
+    <div class="row"><span class="t"><b>29</b> Edge Cases</span></div>
+    <div class="row"><span class="t"><b>30</b> System Messages</span></div>
+    <div class="row"><span class="t"><b>31</b> User Messages</span></div>
+    <div class="row"><span class="t"><b>32</b> Integration Behaviour</span></div>
+    <div class="row"><span class="t"><b>33</b> Audit Logging Behaviour</span></div>
+    <div class="grp">Closure</div>
+    <div class="row"><span class="t"><b>34</b> Dependencies</span></div>
+    <div class="row"><span class="t"><b>35</b> Acceptance Criteria</span></div>
+    <div class="row"><span class="t"><b>36</b> Future Functional Enhancements</span></div>
+  </div>
+</section>
+
+<!-- ===================== 5. FUNCTIONAL OVERVIEW ===================== -->
+<section class="page">
+  <h2><span class="sec-num">5</span>Functional Overview</h2>
+  <p class="lead">ARA Lead Matrix is a multi-tenant performance-marketing CRM that connects ad spend, lead generation, telecalling and results into one live system, exposed through two authenticated experiences.</p>
+
+  <p>Functionally, the platform performs five continuous jobs:</p>
+  <table class="tight">
+    <tr><th style="width:24%">Function</th><th>Behaviour</th></tr>
+    <tr><td>Acquire</td><td>Automatically ingests campaigns, ad sets, ads, daily insights, lead forms and leads from Meta and Google Ads on a recurring schedule; Meta leads additionally arrive in real time via signed webhooks.</td></tr>
+    <tr><td>Attribute &amp; Reconcile</td><td>Normalises each lead to a source/platform, keeps counts consistent via a single metrics service, and reconciles every ad-spend rupee into an immutable billing ledger.</td></tr>
+    <tr><td>Work</td><td>Presents leads on a validated 26-column telecalling sheet where users log calls, responses, appointments and follow-ups, with automation for reminders, history and dormancy.</td></tr>
+    <tr><td>Report</td><td>Renders live dashboards, EOD and Monthly Abstract reports, comparisons and analytics — auto-refreshing and identical across every surface.</td></tr>
+    <tr><td>Govern</td><td>Enforces two role systems, strict tenant isolation, encrypted secrets, and full audit/observability of syncs, raw leads and financial entries.</td></tr>
+  </table>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="n">25</div><div class="l">Functional modules</div></div>
+    <div class="kpi"><div class="n">2</div><div class="l">Auth realms</div></div>
+    <div class="kpi"><div class="n">18</div><div class="l">API route groups</div></div>
+    <div class="kpi"><div class="n">24</div><div class="l">Data entities</div></div>
+    <div class="kpi"><div class="n">~30s</div><div class="l">Live refresh</div></div>
+  </div>
+
+  <h3>5.1 Functional principles enforced by the system</h3>
+  <ul>
+    <li><strong>Single source of truth</strong> — all KPIs are computed by one metrics service, so every screen and export agrees.</li>
+    <li><strong>Idempotency</strong> — lead ingestion and billing writes are safe to repeat; duplicates are impossible.</li>
+    <li><strong>Tenant isolation</strong> — a portal user's client is derived from their token, never the request.</li>
+    <li><strong>Automation over manual effort</strong> — reminders, history and dormancy flags are computed server-side before every save.</li>
+    <li><strong>Graceful degradation</strong> — when an integration (Meta billing, AI) is unavailable, the affected panel degrades without breaking the page.</li>
+  </ul>
+</section>
+
+<!-- ===================== 6. APPLICATION OVERVIEW ===================== -->
+<section class="page">
+  <h2><span class="sec-num">6</span>Application Overview</h2>
+
+  <h3>6.1 Architecture (functional view)</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Layer</th><th>Responsibility</th></tr>
+    <tr><td>Front-end SPA</td><td>React single-page app; two shells (agency console, client portal); Redux state; lazy-loaded routes; offline curtain; auto-refresh timers.</td></tr>
+    <tr><td>API layer</td><td>Express REST API under <code>/api</code>; JWT auth (header or cookie); per-route role/permission &amp; tenant guards; centralised error handler; two-tier rate limiting.</td></tr>
+    <tr><td>Service layer</td><td>Meta &amp; Google ad services, single metrics service, billing reconcilers, telecaller automation, Excel engine, AI client.</td></tr>
+    <tr><td>Background jobs</td><td>Cron scheduler (Google + Meta sync, staggered), webhook receiver, retry worker, zombie-run cleanup.</td></tr>
+    <tr><td>Data store</td><td>MongoDB (Cosmos DB) — 24 collections; unique/compound indexes enforce idempotency and integrity.</td></tr>
+    <tr><td>External systems</td><td>Meta Graph API, Google Ads API, Google Gemini.</td></tr>
+  </table>
+
+  <h3>6.2 The two experiences</h3>
+  <table class="tight">
+    <tr><th style="width:18%">Experience</th><th style="width:20%">Entry &amp; token</th><th>Scope</th></tr>
+    <tr><td>Agency Console</td><td><code>/login</code> · <code>token</code>/<code>user</code></td><td>All clients; capabilities gated by staff role + permissions.</td></tr>
+    <tr><td>Client Portal</td><td><code>/client-login</code> · <code>clientToken</code></td><td>One client only; capabilities gated by portal role (admin / telecaller) + strict tenant scope.</td></tr>
+  </table>
+
+  <h3>6.3 Environment &amp; conventions</h3>
+  <ul>
+    <li><strong>Currency:</strong> INR (₹). <strong>Business day:</strong> IST (Asia/Kolkata) for all daily roll-ups.</li>
+    <li><strong>Response shape:</strong> JSON <code>{ success: boolean, data|error|message }</code>.</li>
+    <li><strong>Auth transport:</strong> <code>Authorization: Bearer &lt;jwt&gt;</code> or secure httpOnly <code>token</code> cookie (<code>SameSite=None; Secure</code>).</li>
+    <li><strong>Session default:</strong> access token 30 days; refresh token 90 days (issued; used long-lived access token in practice).</li>
+  </ul>
+</section>
+
+<!-- ===================== 7. MODULE OVERVIEW ===================== -->
+<section class="page">
+  <h2><span class="sec-num">7</span>Module Overview</h2>
+  <p class="lead">Twenty-five functional modules span the two experiences. Detailed behaviour follows in Sections 13–26.</p>
+  <table class="tight">
+    <tr><th style="width:6%">ID</th><th style="width:24%">Module</th><th style="width:12%">Realm</th><th>Functional summary</th></tr>
+    <tr><td>M01</td><td>Authentication &amp; Session</td><td>Both</td><td>Login, token issue/verify, logout, profile &amp; password self-service, rate limiting, 401 grace handling.</td></tr>
+    <tr><td>M02</td><td>Access Management</td><td>Agency</td><td>Staff CRUD, role assignment, page/API permission grants, activate/deactivate, password reset.</td></tr>
+    <tr><td>M03</td><td>Client Management</td><td>Agency</td><td>Client CRUD, onboard, drop/re-onboard, cascade delete, search, staffing.</td></tr>
+    <tr><td>M04</td><td>Client Portal Provisioning</td><td>Agency</td><td>Enable portal, seed admin login, reveal/reset password, copy login URL.</td></tr>
+    <tr><td>M05</td><td>Google Ads Integration</td><td>Agency</td><td>Connect customer ID, validate, sync campaigns/metrics/keywords, associate/bulk-associate.</td></tr>
+    <tr><td>M06</td><td>Meta Ads Integration</td><td>Agency</td><td>Connect ad account &amp; page, sync entities/insights/forms, webhooks, retry queue, form assignment.</td></tr>
+    <tr><td>M07</td><td>Lead Management</td><td>Both</td><td>Capture, attribute, assign, status, inline edit, manual create, delete-guard.</td></tr>
+    <tr><td>M08</td><td>Telecalling Sheet &amp; Automation</td><td>Both</td><td>26-column sheet, auto-save, follow-ups, reminder/history/DARMANT automation, Excel import/export.</td></tr>
+    <tr><td>M09</td><td>Daily Lead Data / Daily Entry</td><td>Agency</td><td>Per-day per-client capture, auto totals/CPL, By-Client &amp; Lead-Check views.</td></tr>
+    <tr><td>M10</td><td>Billing &amp; Payments</td><td>Agency</td><td>Record payment (credit), spend debit, reconcile, adjust, reset, ledger.</td></tr>
+    <tr><td>M11</td><td>Balance Monitoring &amp; Alerts</td><td>Both</td><td>Live balances, low-balance bell, Balance Watch buckets.</td></tr>
+    <tr><td>M12</td><td>Agency Dashboard</td><td>Agency</td><td>Cross-client spend/leads/CPL/balance, smart alerts, ranking, drill-through.</td></tr>
+    <tr><td>M13</td><td>Client Ad Details</td><td>Agency</td><td>Per-client Google/Meta/EOD tabs, KPIs, charts, leads, resync, AI insights.</td></tr>
+    <tr><td>M14</td><td>Ads Comparison</td><td>Agency</td><td>Multi-client side-by-side Google &amp; Meta tables, rankings.</td></tr>
+    <tr><td>M15</td><td>Analytics &amp; Reports</td><td>Both</td><td>Trends, per-client report, billing ledger, spend overview, staff/campaign/lead reports.</td></tr>
+    <tr><td>M16</td><td>Total Leads Pivot</td><td>Agency</td><td>Month-tabbed leads-by-client-by-day pivot, export.</td></tr>
+    <tr><td>M17</td><td>EOD Telecalling Report</td><td>Both</td><td>Day/month target-vs-achieved, appointment pipeline, day summary, editable targets.</td></tr>
+    <tr><td>M18</td><td>Monthly Abstract</td><td>Both</td><td>Per-day grid, banded columns, editable override cells.</td></tr>
+    <tr><td>M19</td><td>Client Portal — Today</td><td>Portal</td><td>Live KPI tiles + source cards, clickable drill-through, 30s refresh.</td></tr>
+    <tr><td>M20</td><td>Portal User Management</td><td>Portal</td><td>Create/edit/deactivate portal users, last-admin &amp; self guards.</td></tr>
+    <tr><td>M21</td><td>AI Campaign Insights</td><td>Agency</td><td>Gemini analysis: summary, A–F grade, strengths, strategies, red-flags.</td></tr>
+    <tr><td>M22</td><td>Client Credential Vault</td><td>Agency</td><td>Encrypted client platform credentials, reveal/copy.</td></tr>
+    <tr><td>M23</td><td>Personal Vault</td><td>Agency</td><td>Personal encrypted credentials with sharing &amp; auto-permission grant.</td></tr>
+    <tr><td>M24</td><td>Content Calendar</td><td>Agency</td><td>Plan/track social posts, calendar &amp; list views, approval status.</td></tr>
+    <tr><td>M25</td><td>Sync Observability</td><td>Agency</td><td>Sync-run history, retry queue, raw-lead audit, health.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 8. SCREEN INVENTORY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">8</span>Screen Inventory</h2>
+  <p class="lead">Every routed screen, its path, realm, access, and primary function.</p>
+
+  <h4>Agency Console</h4>
+  <table class="tight">
+    <tr><th style="width:22%">Screen</th><th style="width:18%">Route</th><th style="width:16%">Access</th><th>Function</th></tr>
+    <tr><td>Login</td><td><code>/login</code></td><td>Public</td><td>Staff email/password sign-in.</td></tr>
+    <tr><td>Dashboard</td><td><code>/dashboard</code></td><td><code>dashboard</code></td><td>Performance command centre across all clients.</td></tr>
+    <tr><td>Leads Check (Daily Lead Data)</td><td><code>/daily-lead-data</code></td><td><code>daily-lead-data</code></td><td>Day-by-day per-client lead &amp; spend; By-Client / Lead-Check views.</td></tr>
+    <tr><td>Clients</td><td><code>/clients</code></td><td><code>clients</code></td><td>Client master; add/edit, connect ads, drop/delete.</td></tr>
+    <tr><td>Total Leads</td><td><code>/leads</code></td><td><code>leads</code></td><td>Month-tabbed leads pivot by client &amp; day.</td></tr>
+    <tr><td>Ads Comparison</td><td><code>/ads-dashboard</code></td><td><code>ads-dashboard</code></td><td>Multi-client Google/Meta comparison.</td></tr>
+    <tr><td>Client Ad Details</td><td><code>/client-ads/:clientId</code></td><td><code>clients</code>/<code>ads-dashboard</code></td><td>Single-client deep dive (Google, Meta, EOD).</td></tr>
+    <tr><td>Analytics / Reports</td><td><code>/reports</code>, <code>/analytics</code></td><td><code>reports</code></td><td>Trends, per-client analytics, exports.</td></tr>
+    <tr><td>Settings</td><td><code>/settings</code></td><td>Authenticated</td><td>Profile, avatar, password change.</td></tr>
+    <tr><td>Access Management</td><td><code>/access-management</code></td><td>admin/superadmin</td><td>Staff &amp; permission administration.</td></tr>
+    <tr><td>Client Portal Access</td><td><code>/client-portal-access</code></td><td>admin/superadmin</td><td>Portal provisioning per client.</td></tr>
+    <tr><td>Daily Entry</td><td><code>/daily-entry</code></td><td><code>daily-entry</code></td><td>Manual daily marketing entry (secondary).</td></tr>
+    <tr><td>Content Management</td><td><code>/content-management</code></td><td><code>content-management</code></td><td>Social content calendar (hidden from nav).</td></tr>
+    <tr><td>Client / Personal Vault</td><td><code>/client-vault</code>, <code>/personal-vault</code></td><td><code>client-vault</code> / <code>personal-vault</code></td><td>Credential vaults (hidden from nav).</td></tr>
+    <tr><td>Campaign builders (mock)</td><td><code>/campaigns/*</code></td><td>Authenticated</td><td>Meta/Google/Email builder scaffolding — non-live.</td></tr>
+  </table>
+
+  <h4>Client Portal</h4>
+  <table class="tight">
+    <tr><th style="width:22%">Screen</th><th style="width:18%">Route</th><th style="width:16%">Access</th><th>Function</th></tr>
+    <tr><td>Client Login</td><td><code>/client-login</code></td><td>Public</td><td>Username/email + password sign-in.</td></tr>
+    <tr><td>Portal Dashboard (shell)</td><td><code>/client-portal</code></td><td>All portal users</td><td>Role-gated tabs: Home, Leads, EOD, Google, Meta, Users.</td></tr>
+    <tr><td>Portal — Today</td><td><code>/client-portal</code> (Home)</td><td>All portal users</td><td>Live today KPIs + source cards.</td></tr>
+    <tr><td>Portal — Leads (telecalling sheet)</td><td><code>/client-portal/leads</code></td><td>All portal users</td><td>26-column telecalling worksheet.</td></tr>
+    <tr><td>Portal — Google Ads</td><td>tab</td><td>Client admin</td><td>Own Google performance.</td></tr>
+    <tr><td>Portal — Meta Ads</td><td>tab</td><td>Client admin</td><td>Own Meta billing + leads.</td></tr>
+    <tr><td>Portal — Users</td><td>tab</td><td>Client admin</td><td>Manage portal users.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 9. NAVIGATION FLOW ===================== -->
+<section class="page">
+  <h2><span class="sec-num">9</span>Navigation Flow</h2>
+
+  <h3>9.1 Agency console navigation</h3>
+  <div class="flow">
+    <span class="step">/login</span><span class="arw">▶</span>
+    <span class="step dec">Authenticated?</span><span class="arw">▶</span>
+    <span class="step">First permitted page (default Dashboard)</span><span class="arw">▶</span>
+    <span class="step">Sidebar: Dashboard · Leads Check · Clients · Total Leads · Ads Comparison · Analytics · Settings · [Client Portal · Access Mgmt]</span>
+  </div>
+  <p class="small">The sidebar renders only pages the user's permissions allow. <code>ProtectedRoute</code> validates the session and page permission on every navigation; unauthorised access redirects to the first permitted page. Deep links (Dashboard client card, Clients row) route to <code>/client-ads/:clientId</code>.</p>
+
+  <h3>9.2 Client portal navigation</h3>
+  <div class="flow">
+    <span class="step">/client-login</span><span class="arw">▶</span>
+    <span class="step dec">Role?</span><span class="arw">▶</span>
+    <span class="step end">admin → Home · Leads · EOD · Google · Meta · Users</span>
+    <span class="arw">/</span>
+    <span class="step end">telecaller → Home · Leads · EOD</span>
+  </div>
+  <p class="small">Telecaller-restricted tabs are both hidden and defended by redirect if reached directly. The portal shell carries a collapsible sidebar, client name and Logout.</p>
+
+  <h3>9.3 Cross-cutting navigation behaviour</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Behaviour</th><th>Detail</th></tr>
+    <tr><td>Lazy loading</td><td>Every page is code-split and prefetched after boot for instant subsequent navigation.</td></tr>
+    <tr><td>Offline curtain</td><td>Loss of connectivity shows a full-screen OfflineScreen; restores automatically.</td></tr>
+    <tr><td>Deep-link filters</td><td>Date range, client and month selections are URL-encoded so views are shareable/bookmarkable.</td></tr>
+    <tr><td>Drill-through</td><td>Dashboard tiles &amp; source cards, and report figures, link to the Leads view pre-filtered by the clicked dimension.</td></tr>
+    <tr><td>Session expiry</td><td>A clearly token-related 401 (outside auth endpoints), after an 800 ms grace window with no intervening success, clears the session and returns to <code>/login</code>.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 10. USER JOURNEY ===================== -->
+<section class="page">
+  <h2><span class="sec-num">10</span>User Journey</h2>
+
+  <h3>10.1 Account Manager — onboard a client</h3>
+  <div class="flow">
+    <span class="step">Login</span><span class="arw">▶</span><span class="step">Clients → Add Client</span><span class="arw">▶</span>
+    <span class="step">Connect Google (10-digit ID)</span><span class="arw">▶</span><span class="step">Connect Meta (act_ + page)</span><span class="arw">▶</span>
+    <span class="step">Historical backfill runs</span><span class="arw">▶</span><span class="step">Portal Access → enable + seed admin</span><span class="arw">▶</span>
+    <span class="step end">Client live &amp; billing tracked</span>
+  </div>
+
+  <h3>10.2 Telecaller — work the daily queue</h3>
+  <div class="flow">
+    <span class="step">Client login</span><span class="arw">▶</span><span class="step">Leads sheet (Due Today chip)</span><span class="arw">▶</span>
+    <span class="step">Call lead</span><span class="arw">▶</span><span class="step">Set Call Label + Response</span><span class="arw">▶</span>
+    <span class="step">Auto-save on blur → reminder auto-set</span><span class="arw">▶</span><span class="step">Book appointment / add follow-up</span><span class="arw">▶</span>
+    <span class="step end">Mark Consulted / Treatment Booked</span>
+  </div>
+
+  <h3>10.3 Client Admin — verify results</h3>
+  <div class="flow">
+    <span class="step">Client login</span><span class="arw">▶</span><span class="step">Today dashboard</span><span class="arw">▶</span>
+    <span class="step">EOD report (targets vs achieved)</span><span class="arw">▶</span><span class="step">Google/Meta spend &amp; CPL</span><span class="arw">▶</span>
+    <span class="step">Users → add telecaller</span>
+  </div>
+
+  <h3>10.4 Performance Manager — optimise</h3>
+  <div class="flow">
+    <span class="step">Login</span><span class="arw">▶</span><span class="step">Ads Comparison</span><span class="arw">▶</span>
+    <span class="step">Spot high-CPL client</span><span class="arw">▶</span><span class="step">Client Ad Details → Analytics</span><span class="arw">▶</span>
+    <span class="step">Request AI insights</span><span class="arw">▶</span><span class="step end">Act on recommendations</span>
+  </div>
+</section>
+
+<!-- ===================== 11. USER ROLES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">11</span>User Roles</h2>
+  <p class="lead">Two independent role systems across two authentication realms.</p>
+
+  <h3>11.1 Agency staff roles</h3>
+  <p><code>User.role</code> is free-form; only <code>superadmin</code> and <code>admin</code> are hard-coded full-access. All other roles are permission-driven.</p>
+  <table class="tight">
+    <tr><th style="width:14%">Role</th><th style="width:24%">Nature</th><th>Default functional capability</th></tr>
+    <tr><td>superadmin</td><td>Root (protected)</td><td>All permissions; only role that can manage superadmins; cannot be deleted or assigned from UI.</td></tr>
+    <tr><td>admin</td><td>Full access</td><td>All pages &amp; permissions; user admin, billing, all clients.</td></tr>
+    <tr><td>PMM</td><td>Performance marketing</td><td>Lead C/R/U, client C/R/U, fund C/R/U, entries, reports view+export.</td></tr>
+    <tr><td>SMM (default)</td><td>Servicing &amp; content</td><td>Lead C/R/U, client R, fund R, entries, content C/R/U, report view.</td></tr>
+    <tr><td>staff (legacy)</td><td>Limited</td><td>Lead C/R/U, client R, fund R, entry R, report view.</td></tr>
+    <tr><td>Custom</td><td>As granted</td><td>Any mix of page + API permissions.</td></tr>
+  </table>
+
+  <h3>11.2 Client-portal roles</h3>
+  <table class="tight">
+    <tr><th style="width:14%">Role</th><th style="width:24%">Nature</th><th>Functional capability</th></tr>
+    <tr><td>admin</td><td>Full portal (own client)</td><td>Google, Meta, billing, leads/telecalling, EOD/Monthly, Users tab.</td></tr>
+    <tr><td>telecaller (default)</td><td>Lead handling</td><td>Today, Leads sheet, EOD. Ad spend/billing hidden.</td></tr>
+  </table>
+  <div class="callout info"><strong>Least-privilege default.</strong> Legacy portal tokens lacking a user identity are degraded to <code>telecaller</code> on protected portal routes (closing a prior escalation gap); on shared admin/portal routes the effective default is treated as <code>admin</code> for backward compatibility — both derive the client strictly from the token.</div>
+</section>
+
+<!-- ===================== 12. PERMISSION MATRIX ===================== -->
+<section class="page">
+  <h2><span class="sec-num">12</span>Permission Matrix</h2>
+
+  <h3>12.1 Agency API permissions by role (defaults)</h3>
+  <table class="tight">
+    <tr><th style="width:20%">Permission</th><th class="center">superadmin</th><th class="center">admin</th><th class="center">PMM</th><th class="center">SMM</th><th class="center">staff</th></tr>
+    <tr><td>user:* (create/read/update/delete)</td><td class="center">✔</td><td class="center">✔</td><td class="center">—</td><td class="center">—</td><td class="center">—</td></tr>
+    <tr><td>client:create</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">—</td><td class="center">—</td></tr>
+    <tr><td>client:read</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td></tr>
+    <tr><td>client:update</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">—</td><td class="center">—</td></tr>
+    <tr><td>client:delete</td><td class="center">✔</td><td class="center">✔</td><td class="center">—</td><td class="center">—</td><td class="center">—</td></tr>
+    <tr><td>lead:create / read / update</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td></tr>
+    <tr><td>lead:delete</td><td class="center">✔</td><td class="center">✔</td><td class="center">—</td><td class="center">—</td><td class="center">—</td></tr>
+    <tr><td>entry:create / read / update</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">R only</td></tr>
+    <tr><td>fund:* (create/read/update)</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">R only</td><td class="center">R only</td></tr>
+    <tr><td>content:create / read / update</td><td class="center">✔</td><td class="center">✔</td><td class="center">R only</td><td class="center">✔</td><td class="center">—</td></tr>
+    <tr><td>report:view</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td></tr>
+    <tr><td>report:export</td><td class="center">✔</td><td class="center">✔</td><td class="center">✔</td><td class="center">—</td><td class="center">—</td></tr>
+    <tr><td>vault:read / update</td><td class="center">✔</td><td class="center">✔</td><td class="center">—</td><td class="center">—</td><td class="center">—</td></tr>
+    <tr><td>settings:update</td><td class="center">✔</td><td class="center">✔</td><td class="center">self</td><td class="center">self</td><td class="center">self</td></tr>
+  </table>
+  <p class="small">Enforcement order: (1) superadmin/admin bypass → allow; (2) explicit API permission present → allow; (3) holds a sidebar-page permission that maps to the API permission → allow; else <span class="pill hi">403</span>. Page↔API mapping example: holding page <code>daily-entry</code> or <code>daily-lead-data</code> grants <code>entry:create</code>.</p>
+
+  <h3>12.2 Portal role capability matrix</h3>
+  <table class="tight">
+    <tr><th style="width:34%">Capability</th><th class="center">Client Admin</th><th class="center">Telecaller</th></tr>
+    <tr><td>Today dashboard</td><td class="center">✔</td><td class="center">✔</td></tr>
+    <tr><td>Leads / telecalling sheet</td><td class="center">✔</td><td class="center">✔</td></tr>
+    <tr><td>EOD &amp; Monthly reports</td><td class="center">✔</td><td class="center">✔</td></tr>
+    <tr><td>Google Ads / Meta Ads / billing</td><td class="center">✔</td><td class="center">✖ hidden</td></tr>
+    <tr><td>Manage portal users</td><td class="center">✔</td><td class="center">✖</td></tr>
+    <tr><td>Cross-client data</td><td class="center">✖ blocked</td><td class="center">✖ blocked</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 13. FUNCTIONAL REQUIREMENTS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">13</span>Functional Requirements</h2>
+  <p class="lead">Numbered functional requirements (FR) describing what the system does. Priority: <span class="pill hi">Must</span> <span class="pill med">Should</span> <span class="pill lo">Could</span>.</p>
+  <table class="tight">
+    <tr><th style="width:10%">ID</th><th>Functional Requirement</th><th style="width:10%">Pri.</th></tr>
+    <tr><td class="fid">FR-01</td><td>Authenticate agency staff (email+password) and portal users (username/email+password), issuing a scoped JWT.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-02</td><td>Enforce agency RBAC (role bypass → API permission → page-permission mapping) and portal RBAC (admin/telecaller) with tenant scope.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-03</td><td>Administer staff users: create (auto <code>USRnnn</code>), edit, toggle active, reset password, grant permissions; protect superadmin.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-04</td><td>Manage clients: create, update (billing fields stripped), list (drop-hidden by default), soft-drop, re-onboard, cascade delete, text search.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-05</td><td>Provision the client portal: enable, seed admin email/password, reveal saved password, copy login URL.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-06</td><td>Connect &amp; sync Google Ads: validate 10-digit customer ID, associate, sync campaigns/metrics/keywords, background &amp; manual sync.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-07</td><td>Connect &amp; sync Meta: attach ad account + page(s), sync campaigns/adsets/ads/insights/forms; assign unmapped forms.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-08</td><td>Ingest Meta leads via signed webhook (ack ≤ seconds), poll safety-net, and retry queue with exponential backoff; idempotent on lead id.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-09</td><td>Present a 26-column telecalling sheet with inline edit, auto-save, follow-ups, filters and queue chips.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-10</td><td>Run telecaller automation on every save: reminder auto-suggest, history append, auto-stamps, DARMANT flip.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-11</td><td>Import/export the telecalling workbook (xlsx) with value cleaning, contact upsert, and history preservation.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-12</td><td>Create manual leads (WhatsApp/walk-in) and block deletion of synced Meta-form leads.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-13</td><td>Maintain an immutable, idempotent billing ledger: payment credit, spend debit (delta), reconcile, adjust, reset.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-14</td><td>Track live ad-account balances and raise low-balance alerts (bell + Balance Watch).</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-15</td><td>Render the agency dashboard, Ads Comparison, per-client analytics, Total Leads pivot and Daily Lead Data views.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-16</td><td>Render the EOD report (day/month targets, appointment pipeline) with editable per-client targets, and the Monthly Abstract with override cells.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-17</td><td>Serve the client portal Today dashboard with clickable drill-through and 30 s auto-refresh.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-18</td><td>Compute all KPIs via one metrics service; expose an ingestion-gap diagnostic.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-19</td><td>Export reports &amp; leads to Excel and PDF.</td><td><span class="pill hi">Must</span></td></tr>
+    <tr><td class="fid">FR-20</td><td>Generate AI campaign insights on demand with graceful degradation.</td><td><span class="pill lo">Could</span></td></tr>
+    <tr><td class="fid">FR-21</td><td>Store client &amp; personal credentials encrypted; support personal-vault sharing with auto page-permission grant.</td><td><span class="pill med">Should</span></td></tr>
+    <tr><td class="fid">FR-22</td><td>Record sync-run history, retry queue and raw-lead audit for observability.</td><td><span class="pill med">Should</span></td></tr>
+  </table>
+</section>
+
+<!-- ===================== 14. SCREEN SPECIFICATIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">14</span>Screen Specifications</h2>
+  <p class="lead">Behavioural specification of the principal screens (layout, controls, actions, states).</p>
+
+  <h3>14.1 Login (staff) &amp; Client Login</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Specification</th></tr>
+    <tr><td>Layout</td><td>Split-screen: brand poster + credential card.</td></tr>
+    <tr><td>Fields</td><td>Staff: Email, Password. Portal: Username or Email, Password (with show/hide toggle).</td></tr>
+    <tr><td>Actions</td><td>Sign In (submit). On success: persist token/user (or clientToken/clientData), route to first permitted page / portal home.</td></tr>
+    <tr><td>Failure</td><td>Invalid credentials → inline error; account inactive → blocked with message; login endpoints never force-redirect on 401. Login is rate-limited (10 / 15 min, successful attempts reset the counter).</td></tr>
+    <tr><td>States</td><td>Idle · Submitting (button spinner) · Error · Success.</td></tr>
+  </table>
+
+  <h3>14.2 Clients</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Specification</th></tr>
+    <tr><td>List</td><td>Paginated table; count tiles (Total/Active/Inactive); full-text search (name, place, industry, account ID). Dropped clients hidden unless <code>includeDropped=true</code>.</td></tr>
+    <tr><td>Row actions</td><td>View · Edit · Google-connect (G) · Meta-connect (f) · Drop/Delete. Integration icons turn green when linked.</td></tr>
+    <tr><td>Add/Edit dialog</td><td>Client Name (required) + Place, Industry, Address, GST, Onboard date, assigned SMM/SME, Team.</td></tr>
+    <tr><td>Google connect</td><td>Enter 10-digit Customer ID (+ optional name) → Connect &amp; Launch → validates, associates, kicks background sync.</td></tr>
+    <tr><td>Meta connect</td><td>Step 1: Ad Account ID (<code>act_…</code>) → Save &amp; Continue. Step 2: pick Facebook Page → Attach &amp; Launch → begins ≤90-day backfill.</td></tr>
+    <tr><td>Drop</td><td>Requires reason; sets status <code>dropped</code>, records who/when, reversible via re-onboard.</td></tr>
+    <tr><td>Delete</td><td>Hard delete with confirmation; cascades across ~10 collections; reports per-collection outcome.</td></tr>
+  </table>
+
+  <h3>14.3 Telecalling Sheet (agency &amp; portal)</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Specification</th></tr>
+    <tr><td>Grid</td><td>26 columns grouped: Lead Details · Initial Call · Reminder · Appointment · Follow-up · Action. Date-scoped (defaults today).</td></tr>
+    <tr><td>Queue chips</td><td>Due Today, Fresh, Call Back, etc., derived from reminder date &amp; status.</td></tr>
+    <tr><td>Filter bar</td><td>Source, Call Label, Response, Hair/Skin, Appointment, Telecaller, free-text search; same-dropdown values OR, different dropdowns AND.</td></tr>
+    <tr><td>Inline edit</td><td>Cell edit → auto-save on blur (portal) / row Save button (agency); button shows Saving → Saved.</td></tr>
+    <tr><td>Row colour</td><td>Response tinting: green=Treatment Booked, sky=Consulted, purple=Duplicate; status chip palette per Section 15.</td></tr>
+    <tr><td>Follow-up</td><td>"+" adds a follow-up row (number, date, call label, remarks); FU number auto-increments; removable.</td></tr>
+    <tr><td>Manual lead</td><td>Add WhatsApp/Walk-in dialog: Name + Phone required; call/appointment fields optional.</td></tr>
+    <tr><td>Delete</td><td>Trash icon on manual leads only; confirmation dialog; synced Meta-form leads have no delete.</td></tr>
+    <tr><td>Import/Export</td><td>Excel import (upsert by contact, cleans values, preserves history, reports dirty/skipped); Excel &amp; PDF export.</td></tr>
+  </table>
+
+  <h3>14.4 Access Management</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Specification</th></tr>
+    <tr><td>Create/Edit user</td><td>Name, Email, Role, Password; permission picker mirroring the sidebar with role presets; admin-only page markers.</td></tr>
+    <tr><td>Actions</td><td>Toggle active, reset password, delete; superadmin cannot be assigned/deleted; only superadmin edits superadmin.</td></tr>
+  </table>
+
+  <h3>14.5 EOD Report &amp; Monthly Abstract</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Specification</th></tr>
+    <tr><td>EOD sections</td><td>Header · Day Target-vs-Achieved · Month Target-vs-Achieved (+Projection) · Appointment Status (yesterday→+5d) · Day Summary (Leads Abstract, Total Calls, Connected, Appointments, Consultation/Conversion).</td></tr>
+    <tr><td>Editable targets</td><td>Click a Target cell → type → Enter; saved per client; percentages recompute live.</td></tr>
+    <tr><td>Monthly Abstract</td><td>One row per date + month TOTAL; banded columns (Source, Status, Calls, Appointments/Conversion); editable override cells auto-save per cell.</td></tr>
+    <tr><td>Refresh</td><td>Both silently re-fetch every ~30 s with a small loading indicator.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 15. FIELD DEFINITIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">15</span>Field Definitions</h2>
+  <p class="lead">Definitions for the principal data fields. Enumerations reflect the exact system vocabulary.</p>
+
+  <h3>15.1 Client (key fields)</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Field</th><th style="width:16%">Type</th><th>Definition</th></tr>
+    <tr><td>clientName</td><td>String (req)</td><td>Client business name.</td></tr>
+    <tr><td>place / organisationType / address / gstNumber</td><td>String</td><td>Location, industry, address, GST number.</td></tr>
+    <tr><td>status</td><td>Enum</td><td><code>active · inactive · pending · suspended · dropped</code> (dropped = soft-delete).</td></tr>
+    <tr><td>google_ads_customer_id</td><td>String (unique, sparse)</td><td>Exactly 10 digits.</td></tr>
+    <tr><td>meta_ad_account_id</td><td>String (unique, sparse)</td><td>Pattern <code>act_&lt;digits&gt;</code>.</td></tr>
+    <tr><td>billing.*</td><td>Object</td><td>billing_type (monthly/quarterly), total_added_funds, total_spend, available_balance, low_balance_threshold (default 100).</td></tr>
+    <tr><td>telecalling_targets.*</td><td>Object</td><td>day_consult (10), day_calls (100), month_consult (310), month_calls (3100).</td></tr>
+    <tr><td>portalEmail / portalEnabled</td><td>String / Bool</td><td>Seed portal login &amp; enable flag.</td></tr>
+  </table>
+
+  <h3>15.2 Lead — telecalling sheet columns (26)</h3>
+  <table class="tight">
+    <tr><th style="width:6%">Col</th><th style="width:22%">Field</th><th>Definition / values</th></tr>
+    <tr><td>1</td><td>date</td><td>Sheet DATE (lead day).</td></tr>
+    <tr><td>2</td><td>source_sheet</td><td><code>WHATS APP, INSTAGRAM, FACEBOOK, GOOGLE LEAD, JUSTDIAL, WALK-IN, REFFERAL, PHYSICAL MARKETING, INCALL GOOGLE/FB/INSTA/SELF</code>.</td></tr>
+    <tr><td>4</td><td>contact</td><td>10-digit phone (unique within client).</td></tr>
+    <tr><td>5</td><td>lead_location</td><td>Location free-text.</td></tr>
+    <tr><td>6</td><td>hair_or_skin</td><td><code>HAIR · SKIN</code>.</td></tr>
+    <tr><td>7</td><td>telecaller_name</td><td>Assigned telecaller.</td></tr>
+    <tr><td>8</td><td>first_call_date</td><td>Auto-stamped on first call-label set.</td></tr>
+    <tr><td>9</td><td>first_call_label</td><td><code>CONNECTED, INVALID, BUSY, SWITCH OFF, WRONG NUMBER, RNA, DUPLICATE, DISCONNECTED, NOT CONNECTED</code>.</td></tr>
+    <tr><td>10</td><td>response_label</td><td><code>HOT, WARM, COLD, DARMANT, CLOSED, APPOINTMENT BOOKED, REPEAT, INVALID</code>.</td></tr>
+    <tr><td>11</td><td>remarks</td><td>Call remarks.</td></tr>
+    <tr><td>12</td><td>reminder_date</td><td>Virtual alias of next_followup_date.</td></tr>
+    <tr><td>13</td><td>appointment_status</td><td><code>APPOINTMENT BOOKED, …-VISITED, …-NOT VISITED, APPOINTMENT RESCHEDULED</code>.</td></tr>
+    <tr><td>14/15</td><td>appointment_date / appointment_booked_date</td><td>Appointment day; booked-on auto-stamped.</td></tr>
+    <tr><td>16</td><td>follow_up_number</td><td>Virtual = follow_ups.length.</td></tr>
+    <tr><td>17–19</td><td>follow_ups[]</td><td>Each: number, date, call_label (<code>CONNECTED, BUSY, SWITCH OFF, RNA, DISCONNECTED, NOT CONNECTED</code>), remarks, connected.</td></tr>
+    <tr><td>20/21</td><td>history_not_connected / history_connected</td><td>Auto-appended, read-only: <code>Attempt {n}: {YYYY-MM-DD} {LABEL} — {remarks}</code>.</td></tr>
+    <tr><td>22</td><td>status_sheet</td><td><code>HOT, WARM, COLD, DARMANT, CLOSED, Follow-up</code>.</td></tr>
+    <tr><td>23/24/25</td><td>consulted_date / treatment_booked_date / treatment_value</td><td>Consultation, treatment-booking dates &amp; value (₹).</td></tr>
+    <tr><td>26</td><td>month</td><td>Virtual month name from date.</td></tr>
+  </table>
+
+  <h3>15.3 Status chip palette (col 22 / queue)</h3>
+  <table class="tight">
+    <tr><th>Status</th><th>Colour intent</th></tr>
+    <tr><td>HOT</td><td>Red</td></tr><tr><td>WARM</td><td>Amber</td></tr><tr><td>COLD</td><td>Blue</td></tr>
+    <tr><td>CLOSED</td><td>Slate</td></tr><tr><td>DARMANT</td><td>Grey</td></tr><tr><td>Follow-up</td><td>Indigo</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 16. FIELD VALIDATIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">16</span>Field Validations</h2>
+  <p class="lead">Validation rules enforced at the UI, API and schema layers. Enum fields are validated against the exact vocabulary in Section 15.</p>
+  <table class="tight">
+    <tr><th style="width:20%">Field</th><th style="width:16%">Layer</th><th>Rule / on-failure behaviour</th></tr>
+    <tr><td>User.email</td><td>Schema</td><td>Required, unique, lowercase, must match email regex → "Please add a valid email".</td></tr>
+    <tr><td>User.password</td><td>Schema</td><td>Required, min length 6; bcrypt-hashed on save; never returned.</td></tr>
+    <tr><td>User.userID</td><td>Schema/hook</td><td>Auto-generated sequential <code>USRnnn</code>; unique.</td></tr>
+    <tr><td>Client.clientName</td><td>Schema</td><td>Required → "Please add a client name".</td></tr>
+    <tr><td>Client.google_ads_customer_id</td><td>Schema</td><td>Optional; if present must be exactly 10 digits → "Google Ads Customer ID must be exactly 10 digits"; unique/sparse.</td></tr>
+    <tr><td>Client.meta_ad_account_id</td><td>Schema</td><td>Optional; must match <code>act_\d+</code> → "Meta Ad Account ID must start with \"act_\" followed by digits"; unique/sparse.</td></tr>
+    <tr><td>Client.billing.*</td><td>API</td><td>Stripped from generic client update — ledger-owned; cannot be set via update.</td></tr>
+    <tr><td>ClientPortalUser.username</td><td>Schema</td><td>Required, lowercase, 3–60 chars, pattern <code>^[a-z0-9._-]+$</code> → "Username may only contain lowercase letters, digits, dot, underscore, hyphen"; unique per client.</td></tr>
+    <tr><td>ClientPortalUser.password</td><td>Schema</td><td>Required, min 6; bcrypt.</td></tr>
+    <tr><td>ClientPortalUser.role</td><td>Schema</td><td>Enum <code>admin · telecaller</code>.</td></tr>
+    <tr><td>ClientPortalUser.email</td><td>Schema</td><td>Optional; unique per client when non-empty (partial index).</td></tr>
+    <tr><td>Lead.contact</td><td>Schema/index</td><td>Unique within a client (partial, non-empty); duplicate → 400 "&lt;field&gt; already exists".</td></tr>
+    <tr><td>Lead.name / email</td><td>Schema</td><td>Required (email lowercased); manual create synthesises a placeholder email if absent for schema compliance.</td></tr>
+    <tr><td>Lead enum fields</td><td>API + Schema</td><td>call/response/status validated against enums by the controller (nice field-level error) before save; out-of-enum rejected.</td></tr>
+    <tr><td>AbstractEntry.date</td><td>Schema</td><td>Must match <code>^\d{4}-\d{2}-\d{2}$</code>; unique per (client, date).</td></tr>
+    <tr><td>Payment.amount</td><td>Schema</td><td>Required; ledger min 0.</td></tr>
+    <tr><td>Manual lead dialog</td><td>UI</td><td>Name and Phone mandatory before submit.</td></tr>
+  </table>
+  <h3>16.1 Request-layer validation messages (exact)</h3>
+  <p class="small">Enforced by the <code>validate</code> middleware; failure returns <span class="pill hi">400</span> <code>{ success:false, errors:[{field, message}] }</code>.</p>
+  <table class="tight">
+    <tr><th style="width:20%">Field</th><th style="width:26%">Constraint</th><th>Exact message</th></tr>
+    <tr><td>name (register)</td><td>Required, 2–50 chars</td><td>"Name is required" / "Name must be between 2 and 50 characters"</td></tr>
+    <tr><td>email</td><td>Required, valid email</td><td>"Email is required" / "Please provide a valid email"</td></tr>
+    <tr><td>password</td><td>Required, min 6</td><td>"Password is required" / "Password must be at least 6 characters"</td></tr>
+    <tr><td>clientName</td><td>Required, 2–200 chars</td><td>"Client name is required" / "Client name must be between 2 and 200 characters"</td></tr>
+    <tr><td>lead.phone</td><td>Optional, mobile</td><td>"Please provide a valid phone number"</td></tr>
+    <tr><td>lead.source / status</td><td>Enum</td><td>"Invalid source" / "Invalid status"</td></tr>
+    <tr><td>dailyLeadData.date</td><td>Required, ISO8601</td><td>"Date is required" / "Invalid date format"</td></tr>
+    <tr><td>metaData.spend</td><td>Float ≥ 0</td><td>"Meta spend must be a non-negative number"</td></tr>
+    <tr><td>id (param)</td><td>MongoId</td><td>"ID is required" / "Invalid ID format"</td></tr>
+    <tr><td>pagination.limit</td><td>Int 1–10000</td><td>"Limit must be between 1 and 10000"</td></tr>
+  </table>
+
+  <h3>16.2 Client-side (UI) validation — exact messages</h3>
+  <table class="tight">
+    <tr><th style="width:24%">Screen · field</th><th style="width:28%">Rule</th><th>Exact message</th></tr>
+    <tr><td>Login · email/password</td><td>Yup email + min 6</td><td>"Invalid email address" · "Password must be at least 6 characters"</td></tr>
+    <tr><td>Clients · required set</td><td>Name, Place, Industry, Address required</td><td>"Client name is required" · "Place is required" · "Industry is required" · "Address is required"</td></tr>
+    <tr><td>Clients · Account ID</td><td><code>/^\d+$/</code></td><td>"Account ID must contain only numbers"</td></tr>
+    <tr><td>Clients · Google Customer ID</td><td><code>/^\d{8,12}$/</code> (UI) — schema requires exactly 10</td><td>"Customer ID must be 8–12 digits (e.g. 1234567890 or 123-456-7890)."</td></tr>
+    <tr><td>Clients · Meta Ad Account</td><td><code>/^act_\d+$/</code></td><td>"Ad Account ID must be in the format act_1234567890"</td></tr>
+    <tr><td>Portal user · username</td><td><code>/^[a-z0-9._-]{3,60}$/</code></td><td>"Username: 3–60 chars, lowercase letters/digits/dot/underscore/hyphen only"</td></tr>
+    <tr><td>Manual lead · name/phone</td><td>Required</td><td>"Name is required" · "Phone is required"</td></tr>
+    <tr><td>Settings · password change</td><td>Current req · new ≥ 6 · confirm match</td><td>"New password must be at least 6 characters" · "New password and confirmation do not match"</td></tr>
+    <tr><td>Import · file type</td><td><code>/\.xlsx$/i</code></td><td>"Please select an .xlsx file (Excel workbook)."</td></tr>
+  </table>
+
+  <div class="callout"><strong>Layering:</strong> client-side checks give immediate feedback; the API re-validates (express-validator + controller enum checks); the schema is the final guard. Mongoose validation errors are flattened to a single 400 message joined by ", " (see Section 27). Note the deliberate looseness of the UI Google-ID rule (8–12 digits) versus the schema's strict 10-digit rule — the server is authoritative.</div>
+</section>
+
+<!-- ===================== 17. WORKFLOW DEFINITIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">17</span>Workflow Definitions</h2>
+
+  <h3>17.1 Meta lead ingestion (UML activity — textual)</h3>
+  <div class="flow">
+    <span class="step">Webhook received</span><span class="arw">▶</span>
+    <span class="step dec">Signature valid?</span><span class="arw">▶</span>
+    <span class="step">ACK 200 immediately</span><span class="arw">▶</span>
+    <span class="step">Write MetaLeadRaw (audit)</span><span class="arw">▶</span>
+    <span class="step dec">Form mapped to client?</span>
+  </div>
+  <div class="flow">
+    <span class="arw">└ yes →</span><span class="step">Decrypt page token → fetch lead → map fields</span><span class="arw">▶</span>
+    <span class="step dec">leadgen_id exists?</span><span class="arw">▶</span>
+    <span class="step end">Upsert Lead · mark raw processed</span>
+  </div>
+  <div class="flow">
+    <span class="arw">└ no / fail →</span><span class="step dec">unmapped</span><span class="arw">▶</span><span class="step">Admin form-assign queue</span>
+    <span class="arw">|</span><span class="step">Enqueue MetaWebhookRetry (backoff 1m→5m→15m→1h→6h→abandon)</span>
+  </div>
+  <p class="small">Invalid signature → 401, no processing. A poller independently re-checks each form for missed leads; the ingestion-gap diagnostic reports any shortfall vs Meta's reported counts.</p>
+
+  <h3>17.2 Telecaller save automation (runs before persist)</h3>
+  <div class="flow">
+    <span class="step">Save lead</span><span class="arw">▶</span>
+    <span class="step">Auto-stamp first_call_date / appointment_booked_date</span><span class="arw">▶</span>
+    <span class="step">Append history for new follow-ups</span><span class="arw">▶</span>
+    <span class="step dec">Reminder set manually?</span><span class="arw">▶</span>
+    <span class="step">If not, auto-suggest reminder by outcome</span><span class="arw">▶</span>
+    <span class="step dec">5 not-connected &amp; no connect?</span><span class="arw">▶</span>
+    <span class="step end">Flip status_sheet → DARMANT · persist</span>
+  </div>
+
+  <h3>17.3 Billing reconciliation (per client/campaign/day)</h3>
+  <div class="flow">
+    <span class="step">Read reported spend</span><span class="arw">▶</span>
+    <span class="step">Compare to DailyDebitSnapshot</span><span class="arw">▶</span>
+    <span class="step dec">Delta sign?</span><span class="arw">▶</span>
+    <span class="step">+ve → debit · −ve → refund credit</span><span class="arw">▶</span>
+    <span class="step">Write BillingTransaction (idempotency key)</span><span class="arw">▶</span>
+    <span class="step end">Update available_balance / total_spend</span>
+  </div>
+
+  <h3>17.4 Client onboarding</h3>
+  <div class="flow">
+    <span class="step">Create client</span><span class="arw">▶</span><span class="step">Validate &amp; connect Google</span><span class="arw">▶</span>
+    <span class="step">Connect Meta + page subscribe</span><span class="arw">▶</span><span class="step">Historical backfill</span><span class="arw">▶</span>
+    <span class="step">Enable portal + seed admin</span><span class="arw">▶</span><span class="step end">Live</span>
+  </div>
+</section>
+
+<!-- ===================== 18. STATE TRANSITIONS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">18</span>State Transitions</h2>
+
+  <h3>18.1 Lead state machine</h3>
+  <table class="tight">
+    <tr><th>From</th><th>Trigger</th><th>To</th></tr>
+    <tr><td>New / Fresh</td><td>First call logged</td><td>Contacted</td></tr>
+    <tr><td>Contacted</td><td>Response HOT/WARM/COLD</td><td>HOT / WARM / COLD (reminder +2/+7/+30d)</td></tr>
+    <tr><td>Any active</td><td>Response = APPOINTMENT BOOKED + date</td><td>Appointment Booked (reminder = day before appt)</td></tr>
+    <tr><td>Appointment Booked</td><td>Appointment status update</td><td>Visited / Not Visited / Rescheduled</td></tr>
+    <tr><td>Any</td><td>Response = CONSULTED (consulted_date)</td><td>Consulted</td></tr>
+    <tr><td>Consulted</td><td>Response = TREATMENT BOOKED / CLOSED</td><td>Converted / Closed (reminder cleared)</td></tr>
+    <tr><td>Any</td><td>5 consecutive not-connected, no connect</td><td>DARMANT (auto, darmant_flagged=true)</td></tr>
+    <tr><td>DARMANT</td><td>Manual status change</td><td>Re-engaged (flag preserved unless un-flagged)</td></tr>
+    <tr><td>Any</td><td>CLOSED / INVALID / DUPLICATE / WRONG NUMBER</td><td>Terminal (reminder cleared)</td></tr>
+  </table>
+
+  <h3>18.2 Client lifecycle states</h3>
+  <table class="tight">
+    <tr><th>From</th><th>Trigger</th><th>To</th></tr>
+    <tr><td>—</td><td>Create</td><td>active</td></tr>
+    <tr><td>active</td><td>Status change</td><td>inactive / pending / suspended</td></tr>
+    <tr><td>active/any</td><td>Drop (with reason)</td><td>dropped (hidden, history retained)</td></tr>
+    <tr><td>dropped</td><td>Re-onboard</td><td>active (visibility restored)</td></tr>
+    <tr><td>any</td><td>Hard delete</td><td>Removed (cascade)</td></tr>
+  </table>
+
+  <h3>18.3 Meta sync-run states</h3>
+  <table class="tight">
+    <tr><th>State</th><th>Meaning</th></tr>
+    <tr><td>running</td><td>In progress (overlap-guarded; zombie if untouched 30+ min after crash).</td></tr>
+    <tr><td>success / partial / failed</td><td>Completed cleanly / with per-client errors / aborted.</td></tr>
+  </table>
+
+  <h3>18.4 Webhook-retry states</h3>
+  <table class="tight">
+    <tr><th>State</th><th>Meaning</th></tr>
+    <tr><td>pending</td><td>Awaiting next attempt (backoff schedule).</td></tr>
+    <tr><td>resolved</td><td>Lead successfully processed on retry.</td></tr>
+    <tr><td>abandoned</td><td>Exhausted retries (after 6h tier).</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 19. BUSINESS RULES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">19</span>Business Rules</h2>
+  <table class="tight">
+    <tr><th style="width:12%">Rule</th><th>Definition</th></tr>
+    <tr><td class="fid">BR-01</td><td>Superadmin/admin bypass all agency permission checks.</td></tr>
+    <tr><td class="fid">BR-02</td><td>Portal user's client is derived from the token, never the request (tenant isolation).</td></tr>
+    <tr><td class="fid">BR-03</td><td>Meta lead processing is idempotent on <code>meta_leadgen_id</code>.</td></tr>
+    <tr><td class="fid">BR-04</td><td>Contact number unique within a client; may repeat across clients.</td></tr>
+    <tr><td class="fid">BR-05</td><td>Synced Meta-form leads cannot be deleted; manual leads can.</td></tr>
+    <tr><td class="fid">BR-06</td><td>DARMANT flips after 5 consecutive not-connected attempts with no connection.</td></tr>
+    <tr><td class="fid">BR-07</td><td>Reminder auto-set: BUSY→+1h; RNA→other half-day (AM→15:00, PM→next 10:00); SWITCH OFF/NOT CONNECTED/DISCONNECTED→tomorrow 10:00; HOT/WARM/COLD→+2/+7/+30d; APPOINTMENT BOOKED→day before appt; CLOSED/INVALID/DUPLICATE/WRONG NUMBER→clear.</td></tr>
+    <tr><td class="fid">BR-08</td><td>WhatsApp leads counted only on CONVERSATIONS-optimised ad sets.</td></tr>
+    <tr><td class="fid">BR-09</td><td>Reported lead counts come from Meta insights, not CRM records alone.</td></tr>
+    <tr><td class="fid">BR-10</td><td>Every ledger entry carries an idempotency key; duplicates roll back.</td></tr>
+    <tr><td class="fid">BR-11</td><td>Billing balances are ledger-owned; never editable via client update.</td></tr>
+    <tr><td class="fid">BR-12</td><td>Sync windows floored at client onboardDate.</td></tr>
+    <tr><td class="fid">BR-13</td><td>Meta billing runs dry-run by default until explicitly enabled.</td></tr>
+    <tr><td class="fid">BR-14</td><td>Dropped clients excluded from live lists; drop history retained.</td></tr>
+    <tr><td class="fid">BR-15</td><td>Last active portal admin cannot be deleted/demoted/deactivated; users cannot delete themselves.</td></tr>
+    <tr><td class="fid">BR-16</td><td>History line format is fixed: <code>Attempt {n}: {YYYY-MM-DD} {LABEL} — {remarks}</code>; connected vs not-connected routed to separate columns.</td></tr>
+    <tr><td class="fid">BR-17</td><td>first_call_date stamped on first call label; appointment_booked_date stamped when appointment_date first set.</td></tr>
+    <tr><td class="fid">BR-18</td><td>All money INR; business day IST.</td></tr>
+    <tr><td class="fid">BR-19</td><td>Telecalling values validated against the exact spreadsheet vocabulary for clean Excel round-trip.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 20. NOTIFICATION BEHAVIOUR ===================== -->
+<section class="page">
+  <h2><span class="sec-num">20</span>Notification Behaviour</h2>
+  <p class="lead">The platform uses in-app alerts and live indicators rather than external push/email (see Section 36 for planned channels).</p>
+  <table class="tight">
+    <tr><th style="width:26%">Notification</th><th style="width:18%">Trigger</th><th>Behaviour</th></tr>
+    <tr><td>Low-balance bell</td><td>Meta ad-account balance below threshold (e.g. under ₹2,000)</td><td>Header bell (admins) badges affected accounts; auto-refreshes ~90 s.</td></tr>
+    <tr><td>Balance Watch board</td><td>Balance buckets</td><td>Clients grouped Critical / Warning / Healthy on the dashboard.</td></tr>
+    <tr><td>Smart dashboard alerts</td><td>Heuristics</td><td>"Low balance — ads may auto-pause", "Spending but zero leads", etc.</td></tr>
+    <tr><td>Live-view dot</td><td>Auto-refresh cycle</td><td>Small green/loading dot indicates a live view refreshing (~30 s).</td></tr>
+    <tr><td>Save feedback</td><td>Row/cell save</td><td>Inline "Saving…" → "Saved" transient state.</td></tr>
+    <tr><td>Toasts / snackbars</td><td>CRUD success/failure</td><td>Success/error toast per action (create, update, delete, import).</td></tr>
+    <tr><td>Confirmation dialogs</td><td>Destructive actions</td><td>Delete client/user/lead, drop client, reset billing require explicit confirmation.</td></tr>
+    <tr><td>Meta billing unavailable</td><td>Token/permission error</td><td>Yellow inline notice ("Live billing not available — contact account manager"); rest of page functions.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 21-23 SEARCH / FILTER / SORT ===================== -->
+<section class="page">
+  <h2><span class="sec-num">21</span>Search Behaviour</h2>
+  <table class="tight">
+    <tr><th style="width:22%">Context</th><th>Behaviour</th></tr>
+    <tr><td>Clients</td><td>Server-side full-text index over clientName, place, organisationType, accountID; instant filter as you type.</td></tr>
+    <tr><td>Leads / telecalling sheet</td><td>Free-text search matches name, email, phone, location, remarks, telecaller and every form answer.</td></tr>
+    <tr><td>Access Management</td><td>Search staff by name, email, userID.</td></tr>
+    <tr><td>Dashboard / Ads Comparison</td><td>Client-name search filters cards/rows client-side.</td></tr>
+    <tr><td>Content calendar</td><td>Filter by clientName, status, assignedSME.</td></tr>
+  </table>
+
+  <h2 style="margin-top:20px"><span class="sec-num">22</span>Filtering Behaviour</h2>
+  <table class="tight">
+    <tr><th style="width:22%">Context</th><th>Behaviour</th></tr>
+    <tr><td>Telecalling filter bar</td><td>Multi-select Call Label, Response, plus Source, Hair/Skin, Appointment, Telecaller. <strong>Same dropdown = OR; different dropdowns = AND.</strong> "Showing X of Y" counter; Clear-all when any filter active.</td></tr>
+    <tr><td>Queue chips</td><td>One-click buckets (Due Today, Fresh, Call Back…) derived from reminder date &amp; status.</td></tr>
+    <tr><td>Date range</td><td>Quick buttons (Today, 7, 14, 30 days) or custom From/To; URL-encoded; Daily/Weekly/Monthly toggles on Lead Check.</td></tr>
+    <tr><td>Client filter</td><td>Daily Lead Data, Analytics and reports filter to one client or All Clients.</td></tr>
+    <tr><td>Dropped clients</td><td>Hidden by default; management view opts in via <code>includeDropped</code>.</td></tr>
+    <tr><td>Range guard</td><td>Server caps certain pivots at ≤90 days to protect performance.</td></tr>
+  </table>
+
+  <h2 style="margin-top:20px"><span class="sec-num">23</span>Sorting Behaviour</h2>
+  <table class="tight">
+    <tr><th style="width:22%">Context</th><th>Behaviour</th></tr>
+    <tr><td>Leads</td><td>Newest first by Meta form-submission time (meta_created_time) / createdAt; manual entries appear at top on add.</td></tr>
+    <tr><td>Clients</td><td>Default by name / creation; count tiles summarise status.</td></tr>
+    <tr><td>Dashboard rankings</td><td>Top Performing Clients ranked by today's leads; Performance Insights rank Top / Best-Value / Needs-Review.</td></tr>
+    <tr><td>Reports/pivots</td><td>Chronological by date; TOTAL row pinned (Monthly Abstract top row).</td></tr>
+    <tr><td>Data grids (MUI)</td><td>Column sort where the data grid is used (e.g. analytics tables).</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 24. REPORT BEHAVIOUR ===================== -->
+<section class="page">
+  <h2><span class="sec-num">24</span>Report Behaviour</h2>
+  <table class="tight">
+    <tr><th style="width:22%">Report</th><th>Behaviour</th></tr>
+    <tr><td>EOD Telecalling Report</td><td>Per-day + month-to-date roll-up: source buckets, connected/not-connected/invalid-duplicate, fresh vs callback calls, appointment pipeline (yesterday→+5d), editable day/month targets with live projection %. Achieved cells highlight red on a miss. Auto-refresh ~30 s.</td></tr>
+    <tr><td>Monthly Abstract</td><td>One row per calendar date + month TOTAL; banded Source / Status / Calls / Appointments-Conversion columns; manual-override cells (allow-listed) auto-save per cell; spreadsheet-faithful styling.</td></tr>
+    <tr><td>Daily Lead Data</td><td>By-Client (one row per client/day: Meta form/WhatsApp/fund, Google call/website, spend) and Lead-Check rollup with Daily/Weekly/Monthly toggles; totals row; PDF export.</td></tr>
+    <tr><td>Total Leads pivot</td><td>Month-tabbed; one column per day; cell = total lead count (Meta form + WhatsApp + Google call + website); Excel/PDF export.</td></tr>
+    <tr><td>Per-client Analytics</td><td>Daily metrics, per-campaign rollups (KPIs from totals, not day-averages), impression-share averaging, top-N keywords, billing ledger with balance timeline; 5-min cache; first-ever call triggers a one-time blocking sync.</td></tr>
+    <tr><td>Reports module</td><td>Dashboard overview (client/user counts), campaign-performance (Meta vs Google ROI/CPL), lead-performance (by status/source, conversion rate); user-performance &amp; financial reports gated to admin/superadmin (financial currently stubbed).</td></tr>
+    <tr><td>Exports</td><td>Excel (ExcelJS — full columns, form answers, split follow-up history; styled headers, frozen panes, duplicate tinting) and PDF (landscape A3 for leads).</td></tr>
+    <tr><td>Consistency</td><td>All lead/spend KPIs computed by the single metrics service; every report agrees.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 25. DASHBOARD BEHAVIOUR ===================== -->
+<section class="page">
+  <h2><span class="sec-num">25</span>Dashboard Behaviour</h2>
+
+  <h3>25.1 Agency dashboard</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Element</th><th>Behaviour</th></tr>
+    <tr><td>Summary cards</td><td>Total Clients, Active, Total Leads today, Total Spend today, Average CPL — date-scoped (defaults today, date picker top-right).</td></tr>
+    <tr><td>Client summary</td><td>Meta/Google/both-connected breakdown; cumulative Meta balance.</td></tr>
+    <tr><td>Overview tab</td><td>Balance Watch, Performance Insights, Alerts, Recent Activity.</td></tr>
+    <tr><td>Clients tab</td><td>Searchable client list with merged Meta+Google metrics; per-client card: META (Form, WhatsApp, Spend, CPL) + GOOGLE (CTR, CPC, Clicks, Impressions).</td></tr>
+    <tr><td>Ranking</td><td>Top Performing Clients by today's leads.</td></tr>
+    <tr><td>Drill-through</td><td>Click a client → <code>/client-ads/:clientId</code>.</td></tr>
+    <tr><td>Data source</td><td>Bulk dashboard-overview endpoint (replaced N+1); falls back to Meta insights leads when CRM records are absent.</td></tr>
+  </table>
+
+  <h3>25.2 Client portal — Today</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Element</th><th>Behaviour</th></tr>
+    <tr><td>Six KPI tiles</td><td>Total Leads today, Connected, Total Calls, Appointments, Consulted, Conversions.</td></tr>
+    <tr><td>Six source cards</td><td>WhatsApp, Instagram, Facebook, Google Lead, Walk-in/Referral, Incall.</td></tr>
+    <tr><td>Activity boxes</td><td>Call Activity (fresh, callbacks, connected, not-connected, connect-rate bar); Appointments (today, booked today, upcoming 5 days).</td></tr>
+    <tr><td>Interactivity</td><td>Every tile/card clickable → Leads page filtered by that dimension.</td></tr>
+    <tr><td>Live</td><td>Auto-refresh ~30 s with a live indicator dot.</td></tr>
+  </table>
+
+  <h3>25.3 Client Ad Details (per client)</h3>
+  <p>Tabs: <strong>Google Ads</strong> (account info, billing/utilisation, KPI cards, spend-trend chart, campaigns with expandable keywords), <strong>Meta Ads</strong> (billing, KPI grid — Spend, Total/Form/WhatsApp Leads, CPL, Reach, Impressions, Clicks, CTR, CPC, CPM — campaigns, lead forms, leads table, AI insights), <strong>EOD Report</strong>. Live Resync-from-Meta, 5-min caching, Excel/PDF lead export.</p>
+</section>
+
+<!-- ===================== 26. API FUNCTIONAL BEHAVIOUR ===================== -->
+<section class="page">
+  <h2><span class="sec-num">26</span>API Functional Behaviour</h2>
+  <p class="lead">REST API under <code>/api</code>; JSON <code>{success, data|error|message}</code>; JWT-guarded. Representative behaviour by group.</p>
+  <table class="tight">
+    <tr><th style="width:20%">Group</th><th style="width:16%">Guard</th><th>Key behaviour</th></tr>
+    <tr><td><code>/auth</code></td><td>Public / protect</td><td>login, client-login, register (admin), me, client-me, logout, update-details, update-password (re-issues token).</td></tr>
+    <tr><td><code>/users</code></td><td>admin/superadmin</td><td>Staff CRUD, stats, roles, teams, toggle-status, change-password, permissions; superadmin protections.</td></tr>
+    <tr><td><code>/clients</code></td><td>checkPermission</td><td>list (drop-hidden), create, update (billing stripped), delete (cascade), status, drop, reonboard, portal-credentials reveal.</td></tr>
+    <tr><td><code>/leads</code></td><td>checkPermission</td><td>CRUD, stats/summary, monthly-meta-by-client (60s cache), daily-by-client (≤90d, ingestion-gap diagnostic).</td></tr>
+    <tr><td><code>/meta</code></td><td>protectAdminOrClient</td><td>webhook (public, HMAC), sync (+historical), form assign/reprocess, per-client config/analytics/spend-overview, leads CRUD + import/export, telecalling-report, targets, monthly-abstract + cell; agency-only observability.</td></tr>
+    <tr><td><code>/google-ads</code></td><td>admin/superadmin</td><td>sync (all/one), campaigns, associate/bulk-associate, validate-customer-id, sync-status.</td></tr>
+    <tr><td><code>/metrics · /analytics</code></td><td>protectAdminOrClient</td><td>Google aggregates &amp; per-client report + billing ledger; tenant-scoped; caches.</td></tr>
+    <tr><td><code>/daily-entries · /daily-lead-data</code></td><td>checkPermission</td><td>Daily capture, stats, date lookups; unique per (client,date); pre-save CPL calc.</td></tr>
+    <tr><td><code>/payments · /billing</code></td><td>admin/superadmin</td><td>record payment (credit + rollback), reconcile, deep-sync, reset (confirm-guarded, destructive).</td></tr>
+    <tr><td><code>/client-portal</code></td><td>protectClient</td><td>own analytics (empty shell for Meta-only, never 400), portal user CRUD (admin, last-admin guard).</td></tr>
+    <tr><td><code>/reports</code></td><td>report:view</td><td>dashboard, campaign, lead reports; user/financial gated admin.</td></tr>
+    <tr><td><code>/content-entries · /vault · /personal-vault · /ai</code></td><td>varies</td><td>Content CRUD; vault CRUD (decrypt on read); personal-vault with sharing; AI analyze-campaign.</td></tr>
+  </table>
+  <div class="callout warn"><strong>Known control gap.</strong> <code>/api/vault</code> is guarded by authentication only (no role/permission gate) and returns decrypted client credentials to any authenticated staff user — flagged for remediation (Sections 29 &amp; 36).</div>
+</section>
+
+<!-- ===================== 27. ERROR HANDLING ===================== -->
+<section class="page">
+  <h2><span class="sec-num">27</span>Error Handling</h2>
+  <p class="lead">A centralised error middleware normalises all failures to <code>{ success:false, error:&lt;message&gt; }</code> with an appropriate status.</p>
+  <table class="tight">
+    <tr><th style="width:26%">Condition</th><th style="width:10%">Status</th><th>Message / behaviour</th></tr>
+    <tr><td>Invalid Mongo ObjectId (CastError)</td><td>404</td><td>"Resource not found".</td></tr>
+    <tr><td>Duplicate key (11000)</td><td>400</td><td>"&lt;field&gt; already exists" (e.g. duplicate email, contact, customer/ad-account ID).</td></tr>
+    <tr><td>Schema ValidationError</td><td>400</td><td>All field messages joined by ", " (e.g. "Google Ads Customer ID must be exactly 10 digits").</td></tr>
+    <tr><td>Invalid JWT</td><td>401</td><td>"Invalid token".</td></tr>
+    <tr><td>Expired JWT</td><td>401</td><td>"Token expired".</td></tr>
+    <tr><td>Permission denied</td><td>403</td><td>"Access denied. Required permission: &lt;perm&gt;" / "Required role: …".</td></tr>
+    <tr><td>Cross-tenant portal access</td><td>403</td><td>"Portal token cannot access another client".</td></tr>
+    <tr><td>Unknown route</td><td>404</td><td>"Not Found - &lt;url&gt;".</td></tr>
+    <tr><td>Rate limit exceeded</td><td>429</td><td>Login: "Too many login attempts, please try again later." · API: "Too many requests from this IP, please try again later."</td></tr>
+    <tr><td>Unhandled server error</td><td>500</td><td>"Server Error" (stack included only in development).</td></tr>
+    <tr><td>Meta webhook bad signature</td><td>401</td><td>Rejected before processing.</td></tr>
+  </table>
+  <p class="small">Async handlers are wrapped so rejected promises route to the middleware rather than crashing the request. Development mode includes the stack trace; production suppresses it.</p>
+</section>
+
+<!-- ===================== 28. EXCEPTION HANDLING ===================== -->
+<section class="page">
+  <h2><span class="sec-num">28</span>Exception Handling</h2>
+  <table class="tight">
+    <tr><th style="width:28%">Scenario</th><th>Handling</th></tr>
+    <tr><td>Integration auth/permission failure</td><td>Typed errors (MetaAuthError, MetaPermissionError…) let callers stop or skip a client; UI shows a graceful "billing unavailable" notice; sync continues for other clients.</td></tr>
+    <tr><td>Rate limiting (Meta/Google)</td><td>Header parsing detects ≥80% usage; sequential sync, staggered cadence, exponential backoff (2s/8s/32s); overlap guard skips a tick if the prior run is active.</td></tr>
+    <tr><td>Transient network error</td><td>Retried with backoff; cursor pagination capped (≤10,000/edge).</td></tr>
+    <tr><td>Webhook processing failure</td><td>Enqueued to MetaWebhookRetry with backoff; poller safety-net; abandoned after final tier.</td></tr>
+    <tr><td>Process crash mid-sync</td><td>Zombie "running" sync-runs (untouched 30+ min) auto-marked failed at boot before the scheduler restarts.</td></tr>
+    <tr><td>Concurrent ledger writes</td><td>Idempotency-key duplicate is caught; the cached balance change rolls back so the net effect is one entry.</td></tr>
+    <tr><td>Payment recording failure</td><td>Full rollback of balance + ledger on error (idempotency key <code>payment:&lt;id&gt;</code>).</td></tr>
+    <tr><td>AI service down / key missing</td><td>Graceful 503; feature degrades; truncated-JSON responses are repaired before use.</td></tr>
+    <tr><td>Encryption key missing</td><td>Portal password login still works (bcrypt); recoverable-copy feature disabled with a logged warning.</td></tr>
+    <tr><td>Unhandled rejection / uncaught exception</td><td>Logged; server closes gracefully / exits so the orchestrator restarts a clean process.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 29. EDGE CASES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">29</span>Edge Cases</h2>
+  <table class="tight">
+    <tr><th style="width:30%">Edge case</th><th>Defined behaviour</th></tr>
+    <tr><td>Same lead via webhook + poll</td><td>Idempotent upsert on leadgen_id → exactly one Lead.</td></tr>
+    <tr><td>Same phone across two clients</td><td>Allowed (unique only within a client via partial index).</td></tr>
+    <tr><td>Blank contact numbers</td><td>Partial unique index excludes empty strings — no false duplicate collisions.</td></tr>
+    <tr><td>Lead form not yet mapped to a client</td><td>Lead deferred as "unmapped"; surfaces in admin form-assign queue.</td></tr>
+    <tr><td>Meta reports leads but CRM has none</td><td>Dashboard falls back to Meta-insights counts; ingestion-gap diagnostic flags the shortfall.</td></tr>
+    <tr><td>Page-only client (no ad account)</td><td>Ad-account sections hidden; form/lead sync still runs.</td></tr>
+    <tr><td>Client never synced opens analytics</td><td>First call triggers a one-time blocking sync before returning data.</td></tr>
+    <tr><td>Meta-only client opens portal Google analytics</td><td>Returns an empty shell (never 400).</td></tr>
+    <tr><td>Legacy portal login (no ClientPortalUser)</td><td>Falls back to legacy portalEmail/Password and auto-seeds an admin user.</td></tr>
+    <tr><td>Legacy portal token (no userId)</td><td>Degraded to least-privilege telecaller on protected portal routes.</td></tr>
+    <tr><td>Delete last portal admin</td><td>Blocked with guard message.</td></tr>
+    <tr><td>Delete synced Meta lead</td><td>Prevented (no delete affordance / API refusal).</td></tr>
+    <tr><td>Re-onboard a dropped client</td><td>Restores to active with full prior history.</td></tr>
+    <tr><td>Reminder rule conflict (multiple labels)</td><td>Precedence: appointment-with-date &gt; response bucket &gt; call-label bucket; terminal clears win.</td></tr>
+    <tr><td>Idempotent PUT resending unchanged follow-ups</td><td>History not re-appended (guarded by prev-length comparison).</td></tr>
+    <tr><td>Dirty Excel import values (RNR, DARMONT, WRONG NO)</td><td>Cleaned to canonical values; per-row "dirty fixes" and "skipped" reported.</td></tr>
+    <tr><td>Transient single 401 amid healthy traffic</td><td>800 ms grace window; cancelled by any intervening 200 — no session kill.</td></tr>
+    <tr><td>Meta ad-account balance unreachable</td><td>Yellow "live billing not available" notice; rest of page works.</td></tr>
+    <tr><td>Billing reset</td><td>Requires <code>confirm:true</code>; wipes ledger/snapshots and sets a new opening balance.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 30. SYSTEM MESSAGES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">30</span>System Messages</h2>
+  <p class="lead">Representative machine/system-level messages returned by the API and infrastructure.</p>
+  <table class="tight">
+    <tr><th style="width:40%">Message</th><th>Context</th></tr>
+    <tr><td>"Resource not found"</td><td>Bad ObjectId (404).</td></tr>
+    <tr><td>"&lt;field&gt; already exists"</td><td>Duplicate-key on unique field (400).</td></tr>
+    <tr><td>"Invalid token" / "Token expired"</td><td>JWT verification failure (401).</td></tr>
+    <tr><td>"Access denied. Required permission: &lt;perm&gt;"</td><td>Missing agency permission (403).</td></tr>
+    <tr><td>"Access denied. Required role: &lt;roles&gt;"</td><td>Role gate failure (403).</td></tr>
+    <tr><td>"Portal token cannot access another client"</td><td>Tenant-scope violation (403).</td></tr>
+    <tr><td>"Not Found - &lt;url&gt;"</td><td>Unknown route (404).</td></tr>
+    <tr><td>"Too many login attempts, please try again later."</td><td>Auth rate limit (429).</td></tr>
+    <tr><td>"Too many requests from this IP, please try again later."</td><td>API rate limit (429).</td></tr>
+    <tr><td>"Server Error"</td><td>Unhandled 500 (stack in dev only).</td></tr>
+    <tr><td>Response envelope</td><td>Success: <code>{ success:true, data|message }</code>; failure: <code>{ success:false, error }</code>.</td></tr>
+    <tr><td>Boot log: "cleaned up N orphaned MetaSyncRun records"</td><td>Zombie sync-run cleanup at startup.</td></tr>
+    <tr><td>Health: <code>GET /health</code></td><td>Returns <code>{ success, uptime, timestamp }</code>.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 31. USER MESSAGES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">31</span>User Messages</h2>
+  <p class="lead">User-facing messages by interaction type (exact wording may be refined in the UI copy).</p>
+  <table class="tight">
+    <tr><th style="width:22%">Type</th><th>Examples / behaviour</th></tr>
+    <tr><td>Login errors</td><td>Invalid credentials, inactive account → inline error under the form; no forced redirect on login 401.</td></tr>
+    <tr><td>Save feedback</td><td>Row/cell: "Saving…" → "Saved" (green); toast on create/update success and on failure.</td></tr>
+    <tr><td>Create/Update success</td><td>Client / user / lead / payment created or updated → success toast; list refreshes.</td></tr>
+    <tr><td>Delete confirmations</td><td>Client delete (shows cascade impact), user delete, manual lead delete (shows name/phone/location/category), billing reset — all require explicit confirm.</td></tr>
+    <tr><td>Portal user guards</td><td>Cannot delete/deactivate self; cannot remove the last active admin — blocked with an explanatory message.</td></tr>
+    <tr><td>Import result</td><td>Summary of rows imported, per-row dirty fixes applied, and rows skipped.</td></tr>
+    <tr><td>Integration notices</td><td>"Live billing not available — contact the account manager" (Meta token issue); "First sync may take a few minutes" guidance after connecting.</td></tr>
+    <tr><td>Empty states</td><td>No leads / no clients / not-linked banners with a call-to-action (e.g. "Link from the Clients page").</td></tr>
+    <tr><td>Offline</td><td>Full-screen offline curtain until connectivity returns.</td></tr>
+    <tr><td>Validation hints</td><td>Required-field markers; username rule hint; 10-digit / act_ format hints on connect dialogs.</td></tr>
+  </table>
+
+  <h3>31.1 Representative exact strings</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Screen</th><th>Verbatim message</th></tr>
+    <tr><td>Clients (success)</td><td>"Client added successfully!" · "Client updated successfully!" · "{name} dropped — record kept for re-onboarding." · "{name} re-onboarded — back on the active list." · "{name} deleted permanently."</td></tr>
+    <tr><td>Clients (Meta connect)</td><td>"{name} connected. Meta is fetching up to 90 days of campaign, insights, and lead data in the background — this can take several minutes…"</td></tr>
+    <tr><td>Clients (delete confirm)</td><td>"This cannot be undone. Every lead, daily entry, fund entry, content entry, and vault record linked to this client will be deleted… Use Drop instead if there's any chance you'll re-onboard them later."</td></tr>
+    <tr><td>Access Management</td><td>"User created successfully" · "User deleted successfully" · "Admin users automatically get access to every page. No selection needed."</td></tr>
+    <tr><td>Portal Users</td><td>"Cannot demote or deactivate the last active admin. Promote another user first." · "You cannot delete your own account"</td></tr>
+    <tr><td>Import result</td><td>"{n} inserted" · "{n} updated" · "{n} value fixes" · "{n} skipped" · "Row {r} skipped — {reason}"</td></tr>
+    <tr><td>Settings</td><td>"Profile saved." · "Password updated." · strength meter: Too short / Weak / Fair / Good / Strong</td></tr>
+    <tr><td>Offline</td><td>"You're offline" · "Leadmatrix couldn't reach the internet. We'll retry automatically the moment your connection is back."</td></tr>
+    <tr><td>Login progress</td><td>"Signing in…" → "Sign in"</td></tr>
+  </table>
+  <div class="callout warn"><strong>Consistency note for engineering.</strong> Failure payload keys vary across the codebase: most controllers return <code>{ success:false, message }</code>; express-validator returns <code>{ success:false, errors:[…] }</code>; the central handler and the payments/billing routes return <code>{ …, error }</code>. Duplicate-key conflicts return 409 in portal-user creation but 400 in staff-user creation. 422 is never emitted. Standardising these is a recommended enhancement.</div>
+</section>
+
+<!-- ===================== 32. INTEGRATION BEHAVIOUR ===================== -->
+<section class="page">
+  <h2><span class="sec-num">32</span>Integration Behaviour</h2>
+
+  <h3>32.1 Meta Graph API</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Behaviour</th></tr>
+    <tr><td>Auth</td><td>Agency system-user token for ad reads; per-page tokens (encrypted at rest) for form/lead reads.</td></tr>
+    <tr><td>Sync</td><td>Cron every ~15 min (offset +5 from Google); startup run; overlap guard; sequential per client; version-pinned; explicit field sets (never <code>fields=*</code>).</td></tr>
+    <tr><td>Entities</td><td>Campaigns, ad sets, ads, insights (campaign/adset/ad, per day, rolling ~90d), lead forms, leads.</td></tr>
+    <tr><td>Webhooks</td><td><code>GET</code> verify (hub.challenge); <code>POST</code> HMAC-SHA256 verified against raw body; ACK 200 then async process.</td></tr>
+    <tr><td>Billing</td><td>Spend pass-through; delta reconcile per campaign/day; idempotency key <code>meta:&lt;client&gt;:&lt;campaign&gt;:&lt;date&gt;:&lt;cost&gt;</code>; dry-run default.</td></tr>
+    <tr><td>Balance</td><td>Live available balance scraped from funding-source details; cached for fast dashboard reads.</td></tr>
+  </table>
+
+  <h3>32.2 Google Ads API</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Behaviour</th></tr>
+    <tr><td>Auth</td><td>OAuth refresh token + developer token + MCC login-customer-id.</td></tr>
+    <tr><td>Sync</td><td>Cron every ~15 min; campaigns, per-day metrics (incl. impression-share, click-type breakdown), keyword metrics; window floored at onboardDate (regular 30d, deep = onboardDate→today).</td></tr>
+    <tr><td>Billing</td><td>Same delta-reconcile model; ledger sources <code>google_ads_daily_spend/refund</code>.</td></tr>
+    <tr><td>On-demand</td><td>Analytics first-open triggers a one-time blocking sync; new customer-ID association kicks a background sync.</td></tr>
+  </table>
+
+  <h3>32.3 Google Gemini (AI)</h3>
+  <table class="tight">
+    <tr><th style="width:22%">Aspect</th><th>Behaviour</th></tr>
+    <tr><td>Endpoint</td><td><code>POST /api/ai/analyze-campaign</code> (agency auth). Sends platform, client, date range, summary, top campaigns.</td></tr>
+    <tr><td>Output</td><td>Strict JSON: summary, A–F grade, strengths, improvements, 5 strategies, red-flags, KPIs to watch.</td></tr>
+    <tr><td>Robustness</td><td>Low temperature, token cap, 30s timeout, truncated-JSON repair, normalised output; missing key → 503.</td></tr>
+  </table>
+
+  <h3>32.4 Companion services</h3>
+  <p class="small">The Daily-Entry module additionally calls an external "Main API" (Azure-hosted) for clients/leads/funds and a separate Meta-sync API, with short-TTL caching — indicating a companion/legacy microservice topology alongside the in-process sync.</p>
+</section>
+
+<!-- ===================== 33. AUDIT LOGGING BEHAVIOUR ===================== -->
+<section class="page">
+  <h2><span class="sec-num">33</span>Audit Logging Behaviour</h2>
+  <table class="tight">
+    <tr><th style="width:26%">Audit surface</th><th>What is captured</th></tr>
+    <tr><td>MetaLeadRaw</td><td>Immutable record of every raw Meta lead payload (source: webhook/poll/manual), received time, processed flag, resulting lead id, error — enables replay &amp; idempotency.</td></tr>
+    <tr><td>MetaSyncRun</td><td>Each sync execution: scope, timing, per-entity counts (campaigns/adsets/ads/insights/forms/leads), per-stage errors, rate-limit usage, status.</td></tr>
+    <tr><td>MetaWebhookRetry</td><td>Dead-letter queue with attempts, next_attempt_at, last_error, status.</td></tr>
+    <tr><td>BillingTransaction</td><td>Immutable ledger of every credit/debit/adjustment/refund with balance_after, source, reference (payment/campaign/date), idempotency key, occurred_at/recorded_at.</td></tr>
+    <tr><td>DailyDebitSnapshot</td><td>Per client/platform/campaign/day debited vs reported amounts and last_synced_at.</td></tr>
+    <tr><td>Client drop history</td><td>drop_history[] of drop/reonboard actions with reason, timestamp and actor.</td></tr>
+    <tr><td>User activity</td><td>lastLogin stamp; createdBy/recordedBy/assignedTo attribution on leads, entries, content, payments.</td></tr>
+    <tr><td>Request logging</td><td>HTTP access logs (morgan) — combined in production, dev format otherwise.</td></tr>
+    <tr><td>Diagnostic logs</td><td>Tagged, password-free login diagnostics (<code>[client-login]</code>), sync stage logs, orphan-cleanup logs.</td></tr>
+  </table>
+  <div class="callout"><strong>Note.</strong> Financial and lead-ingestion audit trails are immutable and idempotency-keyed by design; the system favours append-only records for anything money- or lead-related. A general end-user action audit log (per-field change history) is a candidate enhancement (Section 36).</div>
+</section>
+
+<!-- ===================== 34. DEPENDENCIES ===================== -->
+<section class="page">
+  <h2><span class="sec-num">34</span>Dependencies</h2>
+  <h3>34.1 External</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Dependency</th><th>Reliance</th></tr>
+    <tr><td>Meta Graph API</td><td>Ad data, webhooks, page tokens; rate limits &amp; version currency.</td></tr>
+    <tr><td>Google Ads API</td><td>Campaign/metric/keyword data via OAuth + developer token + MCC.</td></tr>
+    <tr><td>Google Gemini</td><td>AI insights (advisory).</td></tr>
+    <tr><td>MongoDB (Azure Cosmos DB)</td><td>Primary datastore.</td></tr>
+    <tr><td>Facebook Business Manager access</td><td>Client must grant agency access before Meta setup succeeds.</td></tr>
+    <tr><td>Azure hosting</td><td>App + scheduler runtime, HTTPS.</td></tr>
+  </table>
+  <h3>34.2 Internal / technical</h3>
+  <table class="tight">
+    <tr><th style="width:26%">Component</th><th>Role</th></tr>
+    <tr><td>Node.js + Express</td><td>API &amp; scheduler.</td></tr>
+    <tr><td>React + Redux Toolkit + MUI</td><td>Front-end (both realms).</td></tr>
+    <tr><td>Cron scheduler + retry worker</td><td>Background sync &amp; resilience.</td></tr>
+    <tr><td>Single metrics service</td><td>Canonical KPI definitions.</td></tr>
+    <tr><td>bcrypt + AES encryption utility</td><td>Password &amp; secret protection.</td></tr>
+    <tr><td>ExcelJS</td><td>Telecalling workbook import/export.</td></tr>
+    <tr><td>Shared enum constants</td><td>Frontend/back-end vocabulary lockstep for clean round-trip.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 35. ACCEPTANCE CRITERIA ===================== -->
+<section class="page">
+  <h2><span class="sec-num">35</span>Acceptance Criteria</h2>
+  <p class="lead">Given–When–Then acceptance criteria mapped to functional requirements.</p>
+  <table class="tight">
+    <tr><th style="width:12%">Maps to</th><th>Criterion</th></tr>
+    <tr><td class="fid">FR-02</td><td><strong>Given</strong> a portal user, <strong>when</strong> they request another client's data, <strong>then</strong> the API returns 403 "Portal token cannot access another client" and no data.</td></tr>
+    <tr><td class="fid">FR-03</td><td><strong>Given</strong> a new staff user, <strong>when</strong> created, <strong>then</strong> a unique <code>USRnnn</code> is assigned and the password is stored hashed and never returned.</td></tr>
+    <tr><td class="fid">FR-04</td><td><strong>Given</strong> a client update including billing fields, <strong>when</strong> submitted, <strong>then</strong> billing fields are ignored and only permitted fields change.</td></tr>
+    <tr><td class="fid">FR-06</td><td><strong>Given</strong> a customer ID that is not 10 digits, <strong>when</strong> saved, <strong>then</strong> the system rejects it with "Google Ads Customer ID must be exactly 10 digits".</td></tr>
+    <tr><td class="fid">FR-08</td><td><strong>Given</strong> the same Meta lead delivered twice, <strong>when</strong> processed, <strong>then</strong> exactly one Lead exists and the raw payloads are both audited.</td></tr>
+    <tr><td class="fid">FR-10</td><td><strong>Given</strong> a fifth consecutive not-connected attempt with no prior connection, <strong>when</strong> saved, <strong>then</strong> status_sheet becomes DARMANT and darmant_flagged is true.</td></tr>
+    <tr><td class="fid">FR-10</td><td><strong>Given</strong> a response of WARM, <strong>when</strong> saved without a manual reminder, <strong>then</strong> next_followup_date is set to +7 days.</td></tr>
+    <tr><td class="fid">FR-11</td><td><strong>Given</strong> an Excel import with "RNR" and "DARMONT", <strong>when</strong> imported, <strong>then</strong> values normalise to "RNA"/"DARMANT", rows upsert by contact, history is preserved, and fixes are reported.</td></tr>
+    <tr><td class="fid">FR-12</td><td><strong>Given</strong> a synced Meta-form lead, <strong>when</strong> deletion is attempted, <strong>then</strong> it is blocked; a manual lead deletes after confirmation.</td></tr>
+    <tr><td class="fid">FR-13</td><td><strong>Given</strong> a day's campaign spend, <strong>when</strong> reconciliation runs multiple times, <strong>then</strong> the balance is debited exactly once for that amount.</td></tr>
+    <tr><td class="fid">FR-14</td><td><strong>Given</strong> a balance below threshold, <strong>when</strong> staff view the console, <strong>then</strong> the bell and Balance Watch flag it.</td></tr>
+    <tr><td class="fid">FR-18</td><td><strong>Given</strong> a client's lead count, <strong>when</strong> viewed on dashboard, analytics and export, <strong>then</strong> all three agree.</td></tr>
+    <tr><td class="fid">FR-20</td><td><strong>Given</strong> the AI key is absent, <strong>when</strong> insights are requested, <strong>then</strong> the system returns 503 and the page remains usable.</td></tr>
+    <tr><td class="fid">FR-01</td><td><strong>Given</strong> 10 failed logins in 15 minutes, <strong>when</strong> another is attempted, <strong>then</strong> a 429 rate-limit message is returned.</td></tr>
+  </table>
+</section>
+
+<!-- ===================== 36. FUTURE ENHANCEMENTS ===================== -->
+<section class="page">
+  <h2><span class="sec-num">36</span>Future Functional Enhancements</h2>
+  <table class="tight">
+    <tr><th style="width:28%">Enhancement</th><th>Functional description</th></tr>
+    <tr><td>Vault access control</td><td>Add role/permission gating and access auditing to the client credential vault (closes the control gap in Section 26).</td></tr>
+    <tr><td>End-user change audit log</td><td>Per-field change history for leads and clients (who changed what, when) beyond the current financial/lead audit surfaces.</td></tr>
+    <tr><td>External notifications</td><td>Email/WhatsApp/SMS for low balance, appointment reminders, dormant-lead nudges and daily summaries.</td></tr>
+    <tr><td>Refresh-token rotation</td><td>Wire a refresh-exchange endpoint for shorter access tokens with seamless renewal.</td></tr>
+    <tr><td>Live Meta billing</td><td>Graduate Meta billing from dry-run to live after validation.</td></tr>
+    <tr><td>Restore financial reports</td><td>Reconnect stubbed financial/sales reports to a replacement fund data source.</td></tr>
+    <tr><td>Payment gateway</td><td>Optional online payment intake that auto-credits the ledger.</td></tr>
+    <tr><td>Telephony integration</td><td>Click-to-call and automatic call-outcome capture into the sheet.</td></tr>
+    <tr><td>Content &amp; campaign modules</td><td>Promote the content calendar and campaign builders from scaffolding to live, data-backed features.</td></tr>
+    <tr><td>Deeper AI advisory</td><td>Cross-client, trend-aware recommendations and anomaly detection.</td></tr>
+    <tr><td>Additional channels</td><td>Extend integration to further ad platforms (YouTube, LinkedIn).</td></tr>
+    <tr><td>Native mobile app</td><td>Telecaller-focused mobile experience.</td></tr>
+  </table>
+
+  <div class="callout info" style="margin-top:16px"><strong>End of Document.</strong> This Functional Specification Document describes the ARA Lead Matrix CRM as built and in production as of 17 July 2026. It is issued as version 1.0 (baseline), companion to the Business Requirements Document ARA-BRD-CRM-2026-001, and is classified Confidential.</div>
+</section>
