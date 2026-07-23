@@ -978,15 +978,18 @@ const ActiveEntitiesPanel = ({ kind, state, onRefresh, primaryColor, selectedCli
                         );
                       }
                       if (c.num) {
-                        // Daily / lifetime budgets are stored in the
-                        // account currency's minor unit (paise for INR).
-                        // Round-to-nearest-rupee is close enough for a
-                        // list view; the client-ads page has the exact
-                        // amount if the operator wants precision.
-                        const asRupees = v ? Math.round(Number(v) / 100) : 0;
+                        // Meta returns INR budgets in WHOLE rupees, not
+                        // paise — unlike USD (cents) and most other
+                        // currencies. Since every ad account in this
+                        // CRM is INR-denominated we can display the
+                        // raw value as-is; earlier version divided by
+                        // 100 and dropped the last two digits.
+                        // If we ever onboard a non-INR account we'll
+                        // need a currency-aware conversion here.
+                        const rupees = v ? Math.round(Number(v)) : 0;
                         return (
                           <TableCell key={c.key} align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {asRupees ? `₹${asRupees.toLocaleString('en-IN')}` : '—'}
+                            {rupees ? `₹${rupees.toLocaleString('en-IN')}` : '—'}
                           </TableCell>
                         );
                       }
